@@ -22,6 +22,7 @@ public class CardManager : Singleton<CardManager>
     readonly CardCollection _cards = new();
     readonly HashSet<CardView> _trackedViews = new();
     readonly List<CardData> _generatedDefinitions = new();
+    int _nextCardId = 1;
 
     public IReadOnlyList<CardInstance> ownedCards => _cards.OwnedCards;
     public IReadOnlyList<CardInstance> deck => _cards.Deck;
@@ -58,15 +59,14 @@ public class CardManager : Singleton<CardManager>
     {
         ClearCardState();
 
-        var initialCards = new List<CardInstance>(52);
-        int nextId = 1;
+        var initialCards = new List<CardInstance>(40);
         foreach (CardData.Suit suit in Enum.GetValues(typeof(CardData.Suit)))
         {
-            foreach (CardData.Rank rank in Enum.GetValues(typeof(CardData.Rank)))
+            for (int rankValue = (int)CardData.Rank.Ace; rankValue <= (int)CardData.Rank.Ten; rankValue++)
             {
-                var definition = CardData.Create(suit, rank);
+                var definition = CardData.Create(suit, (CardData.Rank)rankValue);
                 _generatedDefinitions.Add(definition);
-                initialCards.Add(new CardInstance(definition, nextId++));
+                initialCards.Add(new CardInstance(definition, _nextCardId++));
             }
         }
 
@@ -74,6 +74,32 @@ public class CardManager : Singleton<CardManager>
         _cards.ShuffleDeck();
         OnDeckChanged?.Invoke();
         OnCardSelected?.Invoke(null);
+    }
+
+    public CardInstance AddBossReward(CardData sourceCard)
+    {
+        if (sourceCard == null || !sourceCard.IsFaceCard)
+            return null;
+
+        foreach (var ownedCard in _cards.OwnedCards)
+        {
+            if (ownedCard.Suit == sourceCard.suit && ownedCard.Rank == sourceCard.rank)
+                return null;
+        }
+
+        var definition = CardData.Create(sourceCard.suit, sourceCard.rank);
+        var reward = new CardInstance(definition, _nextCardId);
+        if (!_cards.AddOwnedToDeck(reward))
+        {
+            DestroyRuntimeObject(definition);
+            return null;
+        }
+
+        _generatedDefinitions.Add(definition);
+        _nextCardId++;
+        _cards.ShuffleDeck();
+        OnDeckChanged?.Invoke();
+        return reward;
     }
 
     public void ShuffleDeck()
@@ -205,6 +231,7 @@ public class CardManager : Singleton<CardManager>
 
         _cards.Clear();
         DestroyGeneratedDefinitions();
+        _nextCardId = 1;
     }
 
     void DetachAndDestroyView(CardView view)

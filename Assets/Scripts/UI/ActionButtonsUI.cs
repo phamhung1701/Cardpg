@@ -29,6 +29,8 @@ public class ActionButtonsUI : MonoBehaviour
             CardManager.Instance.OnCardSelected += HandleSelectionChanged;
             CardManager.Instance.OnDeckChanged += HandleDeckChanged;
         }
+        if (RunManager.Instance != null)
+            RunManager.Instance.OnBossRewardGranted += HandleBossRewardGranted;
 
         if (playButton) playButton.onClick.AddListener(OnPlayClicked);
         if (discardButton) discardButton.onClick.AddListener(OnDiscardClicked);
@@ -51,6 +53,8 @@ public class ActionButtonsUI : MonoBehaviour
             CardManager.Instance.OnCardSelected -= HandleSelectionChanged;
             CardManager.Instance.OnDeckChanged -= HandleDeckChanged;
         }
+        if (RunManager.Instance != null)
+            RunManager.Instance.OnBossRewardGranted -= HandleBossRewardGranted;
 
         if (playButton) playButton.onClick.RemoveListener(OnPlayClicked);
         if (discardButton) discardButton.onClick.RemoveListener(OnDiscardClicked);
@@ -82,6 +86,12 @@ public class ActionButtonsUI : MonoBehaviour
     {
         if (playerHealthLabel) playerHealthLabel.text = $"Player HP: {current}/{max}";
         UpdateButtons();
+    }
+
+    void HandleBossRewardGranted(CardInstance reward)
+    {
+        if (statusLabel && reward != null)
+            statusLabel.text = $"Boss defeated! Gained {reward.DisplayName}.";
     }
 
     void HandleCombatLog(string msg)

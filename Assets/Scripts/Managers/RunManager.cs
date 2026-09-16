@@ -28,9 +28,32 @@ public class RunManager : Singleton<RunManager>
     public event Action OnHidePathScreen;
     public event Action OnRunCompleted;
     public event Action<string> OnCycleStarted;
+    public event Action<CardInstance> OnBossRewardGranted;
 
-    public int CurrentCycle => bossIndex + 1;
+    PathNode _activeNode;
+    CombatManager _subscribedCombatManager;
+
+    public int CurrentCycle => BossTotal > 0 ? Mathf.Min(bossIndex + 1, BossTotal) : 0;
     public int BossTotal => bossDeck.Count;
+    public bool IsRunCompleted { get; private set; }
+    public PathNode ActiveNode => _activeNode;
+    public EnemyTypeData CurrentBoss => bossIndex >= 0 && bossIndex < bossDeck.Count
+        ? bossDeck[bossIndex]
+        : null;
+
+    protected override void Awake()
+    {
+        base.Awake();
+        if (Instance != this) return;
+        SubscribeToCombatResults();
+    }
+
+    protected override void OnDestroy()
+    {
+        UnsubscribeFromCombatResults();
+        Reset();
+        base.OnDestroy();
+    }
 
     public void StartRun()
     {
@@ -41,6 +64,7 @@ public class RunManager : Singleton<RunManager>
             return;
         }
 
+        SubscribeToCombatResults();
         CombatManager.Instance.Reset();
         CardManager.Instance.Reset();
         Reset();
@@ -61,7 +85,6 @@ public class RunManager : Singleton<RunManager>
             {
                 var card = CardData.Create(suit, rank);
                 rankBosses.Add(CreateBossType(card));
-                Destroy(card);
             }
             rankBosses.Shuffle();
             bossDeck.AddRange(rankBosses);
@@ -76,14 +99,21 @@ public class RunManager : Singleton<RunManager>
             CardData.Rank.Queen => (30, 15, 15),
             _                    => (40, 20, 20),
         };
-        return EnemyTypeData.Create($"{card.RankName} of {card.SuitName}", hp, atk, gold);
+        var boss = EnemyTypeData.Create($"{card.RankName} of {card.SuitName}", hp, atk, gold);
+        boss.sourceCard = card;
+        return boss;
     }
 
     void NextCycle()
     {
+        GenerateAndAnnounceCycle();
+        OnShowPathScreen?.Invoke();
+    }
+
+    void GenerateAndAnnounceCycle()
+    {
         GeneratePath();
         OnCycleStarted?.Invoke($"Boss {CurrentCycle} / {BossTotal}");
-        OnShowPathScreen?.Invoke();
     }
 
     void GeneratePath()
@@ -136,10 +166,11 @@ public class RunManager : Singleton<RunManager>
 
     public void OnPathChosen(int id)
     {
-        var node = FindNode(id);
-        if (node == null || !node.accessible) return;
+        if (_activeNode != null || IsRunCompleted) return;
 
-        node.completed = true;
+        var node = FindNode(id);
+        if (node == null || !node.accessible || node.completed) return;
+
         node.accessible = false;
         node.revealed = true;
 
@@ -147,22 +178,22 @@ public class RunManager : Singleton<RunManager>
             if (n.col == node.col && n.id != node.id)
                 n.accessible = false;
 
-        foreach (var nextId in node.next)
-        {
-            var next = FindNode(nextId);
-            if (next != null) next.accessible = true;
-        }
-
+        _activeNode = node;
         OnHidePathScreen?.Invoke();
         StartEncounter(node);
     }
 
     void StartEncounter(PathNode node)
     {
-        var enemy = node.type == "boss"
-            ? new EnemyRuntime(bossDeck[bossIndex])
-            : new EnemyRuntime(GetEnemyType(node.type));
-        CombatManager.Instance.StartEnemy(enemy);
+        var enemyType = node.type == "boss" ? CurrentBoss : GetEnemyType(node.type);
+        if (enemyType == null)
+        {
+            Debug.LogError("RunManager: cannot start encounter without an enemy definition.", this);
+            _activeNode = null;
+            return;
+        }
+
+        CombatManager.Instance.StartEnemy(new EnemyRuntime(enemyType));
     }
 
     EnemyTypeData GetEnemyType(string type) => type switch
@@ -184,7 +215,7 @@ public class RunManager : Singleton<RunManager>
         "thief"  => "Thief",
         "goblin" => "Goblin",
         "knight" => "Knight",
-        "boss"   => $"Boss: {bossDeck[bossIndex].enemyName}",
+        "boss"   => CurrentBoss != null ? $"Boss: {CurrentBoss.enemyName}" : "Boss",
         _        => "???"
     };
 
@@ -199,30 +230,99 @@ public class RunManager : Singleton<RunManager>
 
     public void OnShopDone()
     {
-        foreach (var n in currentPath)
+        if (!IsRunCompleted)
+            OnShowPathScreen?.Invoke();
+    }
+
+    void HandleEncounterResult(EncounterResult result)
+    {
+        if (_activeNode == null) return;
+
+        var resolvedNode = _activeNode;
+        _activeNode = null;
+
+        if (result != EncounterResult.Victory || resolvedNode.completed)
+            return;
+
+        resolvedNode.completed = true;
+        foreach (var nextId in resolvedNode.next)
         {
-            if (n.type == "boss" && n.completed)
-            {
-                bossIndex++;
-                if (bossIndex >= bossDeck.Count)
-                {
-                    OnRunCompleted?.Invoke();
-                    return;
-                }
-                NextCycle();
-                return;
-            }
+            var next = FindNode(nextId);
+            if (next != null)
+                next.accessible = true;
         }
-        OnShowPathScreen?.Invoke();
+
+        if (resolvedNode.type == "boss")
+            HandleBossVictory();
+    }
+
+    void HandleBossVictory()
+    {
+        var defeatedBoss = CurrentBoss;
+        if (defeatedBoss == null)
+        {
+            Debug.LogError("RunManager: boss victory has no matching boss definition.", this);
+            return;
+        }
+
+        var reward = CardManager.Instance.AddBossReward(defeatedBoss.sourceCard);
+        OnBossRewardGranted?.Invoke(reward);
+
+        bossIndex++;
+        if (bossIndex >= bossDeck.Count)
+        {
+            IsRunCompleted = true;
+            OnRunCompleted?.Invoke();
+            return;
+        }
+
+        GenerateAndAnnounceCycle();
+    }
+
+    void SubscribeToCombatResults()
+    {
+        var combatManager = CombatManager.Instance;
+        if (_subscribedCombatManager == combatManager) return;
+
+        UnsubscribeFromCombatResults();
+        _subscribedCombatManager = combatManager;
+        if (_subscribedCombatManager != null)
+            _subscribedCombatManager.OnEncounterResult += HandleEncounterResult;
+    }
+
+    void UnsubscribeFromCombatResults()
+    {
+        if (_subscribedCombatManager != null)
+            _subscribedCombatManager.OnEncounterResult -= HandleEncounterResult;
+        _subscribedCombatManager = null;
     }
 
     public void Reset()
     {
+        _activeNode = null;
+        IsRunCompleted = false;
+
         foreach (var boss in bossDeck)
-            if (boss != null)
-                Destroy(boss);
+        {
+            if (boss == null) continue;
+
+            var sourceCard = boss.sourceCard;
+            boss.sourceCard = null;
+            DestroyRuntimeObject(boss);
+            if (sourceCard != null)
+                DestroyRuntimeObject(sourceCard);
+        }
+
         bossDeck.Clear();
         bossIndex = 0;
         currentPath.Clear();
+    }
+
+    static void DestroyRuntimeObject(UnityEngine.Object target)
+    {
+        if (Application.isPlaying)
+            Destroy(target);
+        else
+            DestroyImmediate(target);
     }
 }

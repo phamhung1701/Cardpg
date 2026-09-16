@@ -40,6 +40,24 @@ public sealed class CardCollection
         _deck.AddRange(validatedCards);
     }
 
+    public bool AddOwnedToDeck(CardInstance card)
+    {
+        if (card == null) return false;
+
+        foreach (var ownedCard in _ownedCards)
+        {
+            if (ReferenceEquals(ownedCard, card) || ownedCard.Id == card.Id)
+                return false;
+        }
+
+        if (_deck.Contains(card) || _hand.Contains(card) || _discardPile.Contains(card))
+            return false;
+
+        _ownedCards.Add(card);
+        _deck.Add(card);
+        return true;
+    }
+
     public void Clear()
     {
         _ownedCards.Clear();
