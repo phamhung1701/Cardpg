@@ -14,7 +14,7 @@ public class ShopUI : MonoBehaviour
     void OnEnable()
     {
         if (CombatManager.Instance != null)
-            CombatManager.Instance.OnStateChanged += HandleStateChanged;
+            CombatManager.Instance.OnEncounterResult += HandleEncounterResult;
         if (CardManager.Instance != null)
             CardManager.Instance.OnGoldChanged += HandleGoldChanged;
         if (continueButton) continueButton.onClick.AddListener(OnContinue);
@@ -23,22 +23,18 @@ public class ShopUI : MonoBehaviour
     void OnDisable()
     {
         if (CombatManager.Instance != null)
-            CombatManager.Instance.OnStateChanged -= HandleStateChanged;
+            CombatManager.Instance.OnEncounterResult -= HandleEncounterResult;
         if (CardManager.Instance != null)
             CardManager.Instance.OnGoldChanged -= HandleGoldChanged;
         if (continueButton) continueButton.onClick.RemoveListener(OnContinue);
     }
 
-    void HandleStateChanged(GameState state)
+    void HandleEncounterResult(EncounterResult result)
     {
-        if (state == GameState.GameWon)
-        {
+        if (result == EncounterResult.Victory)
             Open();
-        }
         else
-        {
             Close();
-        }
     }
 
     void HandleGoldChanged(int gold)

@@ -10,6 +10,9 @@ public class GameController : MonoBehaviour
     public CardView cardPrefab;
     public RelicData[] relicCatalog;
 
+    [Header("Player Prototype Balance")]
+    [Min(1)] public int playerMaxHealth = 30;
+
     [Header("Enemy Definitions")]
     public EnemyTypeData thiefType;
     public EnemyTypeData goblinType;
@@ -20,17 +23,18 @@ public class GameController : MonoBehaviour
     void Awake()
     {
         if (handField == null || handField.cardsHolder == null ||
-            dragCanvas == null || cardPrefab == null ||
+            dragCanvas == null || cardPrefab == null || playerMaxHealth <= 0 ||
             thiefType == null || goblinType == null || knightType == null)
         {
-            Debug.LogError("GameController: assign hand, card, canvas, and all enemy references before starting a run.", this);
+            Debug.LogError("GameController: assign hand, card, canvas, positive player health, and all enemy references before starting a run.", this);
             return;
         }
 
         var cards = GetOrCreate<CardManager>();
-        GetOrCreate<CombatManager>();
+        var combat = GetOrCreate<CombatManager>();
         var run = GetOrCreate<RunManager>();
         cards.Configure(handField, dragCanvas, cardPrefab, relicCatalog);
+        combat.ConfigurePlayer(playerMaxHealth);
         run.thiefType = thiefType;
         run.goblinType = goblinType;
         run.knightType = knightType;
