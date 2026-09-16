@@ -44,7 +44,7 @@ public class DeckViewerUI : MonoBehaviour
         if (discardText) discardText.text = FormatPile(cm.discardPile, "Discard");
     }
 
-    string FormatPile(List<CardData> pile, string label)
+    string FormatPile(IReadOnlyList<CardInstance> pile, string label)
     {
         var counts = new Dictionary<string, int>();
         foreach (var card in pile)

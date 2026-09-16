@@ -34,7 +34,13 @@ public class EnemyDisplayUI : MonoBehaviour
     void RefreshDisplay()
     {
         var enemy = CombatManager.Instance.currentEnemy;
-        if (enemy == null) return;
+        if (enemy == null)
+        {
+            if (nameText) nameText.text = string.Empty;
+            if (hpText) hpText.text = string.Empty;
+            if (atkText) atkText.text = string.Empty;
+            return;
+        }
         if (nameText) nameText.text = enemy.DisplayName;
         RefreshHp();
     }

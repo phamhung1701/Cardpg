@@ -4,25 +4,21 @@ public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
 {
     private static T _instance;
 
+    // Discovery must never create an unconfigured manager, especially during teardown.
     public static T Instance
     {
         get
         {
-            lock (typeof(Singleton<T>))
-            {
-                if (_instance == null)
-                {
-                    _instance = FindFirstObjectByType<T>();
-                    if (_instance == null)
-                    {
-                        var go = new GameObject($"[{typeof(T).Name}]");
-                        DontDestroyOnLoad(go);
-                        _instance = go.AddComponent<T>();
-                    }
-                }
-                return _instance;
-            }
+            if (_instance == null)
+                _instance = FindFirstObjectByType<T>();
+            return _instance;
         }
+    }
+
+    public static bool TryGetInstance(out T instance)
+    {
+        instance = _instance;
+        return instance != null;
     }
 
     protected virtual void Awake()
@@ -33,7 +29,8 @@ public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
             return;
         }
         _instance = this as T;
-        DontDestroyOnLoad(gameObject);
+        if (Application.isPlaying)
+            DontDestroyOnLoad(gameObject);
     }
 
     protected virtual void OnDestroy()

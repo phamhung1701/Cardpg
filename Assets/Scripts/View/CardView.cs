@@ -1,7 +1,9 @@
+using System;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using TMPro;
 
 [RequireComponent(typeof(Image))]
 public class CardView : MonoBehaviour,
@@ -18,43 +20,70 @@ public class CardView : MonoBehaviour,
     public CanvasGroup canvasGroup;
 
     [Header("State")]
-    public CardData data;
+    [NonSerialized] public CardInstance data;
     public Field homeField;
     public int index;
 
     State _state = State.Idle;
+    bool _isSelected;
+    bool _isPointerOver;
+    bool _isDragging;
     Vector3 _originalPosition;
     Transform _originalParent;
 
     public State CurrentState => _state;
+    public bool IsSelected => _isSelected;
 
     static readonly Color _idleColor = new Color(0.85f, 0.92f, 0.85f);
     static readonly Color _hoverColor = new Color(0.95f, 0.95f, 1f);
     static readonly Color _clickColor = new Color(1f, 0.85f, 0.6f);
     static readonly Color _dragColor = new Color(0.7f, 0.85f, 1f);
 
-    public void Setup(CardData cardData)
+    public void Setup(CardInstance cardData)
     {
         data = cardData;
-        if (nameLabel) nameLabel.text = data.DisplayName;
-        if (face) face.color = _idleColor;
+        if (nameLabel) nameLabel.text = data != null ? data.DisplayName : string.Empty;
+        RefreshState();
+    }
+
+    public void SetSelected(bool selected)
+    {
+        _isSelected = selected;
+        RefreshState();
+    }
+
+    void RefreshState()
+    {
+        State next = _isDragging
+            ? State.Drag
+            : _isSelected
+                ? State.Click
+                : _isPointerOver
+                    ? State.Hover
+                    : State.Idle;
+
+        ChangeState(next);
     }
 
     void ChangeState(State next)
     {
-        if (_state == next) return;
-        ExitState(_state);
+        if (_state == next)
+        {
+            ApplyState(next);
+            return;
+        }
+
         _state = next;
-        EnterState(next);
+        ApplyState(next);
     }
 
-    void EnterState(State s)
+    void ApplyState(State state)
     {
-        switch (s)
+        switch (state)
         {
             case State.Idle:
                 if (face) face.color = _idleColor;
-                if (stateLabel) stateLabel.text = "";
+                if (stateLabel) stateLabel.text = string.Empty;
                 break;
             case State.Hover:
                 if (face) face.color = _hoverColor;
@@ -63,123 +92,135 @@ public class CardView : MonoBehaviour,
             case State.Click:
                 if (face) face.color = _clickColor;
                 if (stateLabel) stateLabel.text = "Selected";
-                CardManager.Instance.SelectCard(this);
                 break;
             case State.Drag:
                 if (face) face.color = _dragColor;
                 if (stateLabel) stateLabel.text = "Drag";
-                index = transform.GetSiblingIndex();
-                _originalPosition = transform.position;
-                _originalParent = transform.parent;
-                var dragCanvas = CardManager.Instance.dragCanvas;
-                if (dragCanvas != null)
-                {
-                    transform.SetParent(dragCanvas.transform);
-                    transform.SetAsLastSibling();
-                }
-                if (canvasGroup) canvasGroup.blocksRaycasts = false;
                 break;
             case State.Release:
                 break;
         }
     }
 
-    void ExitState(State s)
+    public void OnPointerEnter(PointerEventData eventData)
     {
-        switch (s)
+        _isPointerOver = true;
+        RefreshState();
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        _isPointerOver = false;
+        RefreshState();
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (eventData.button != PointerEventData.InputButton.Left) return;
+        if (Singleton<CardManager>.TryGetInstance(out var manager))
+            manager.SelectCard(this);
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        // Selection is persistent and is owned by CardManager. A normal release does not deselect.
+    }
+
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        if (eventData.button != PointerEventData.InputButton.Left || _isDragging) return;
+
+        _originalParent = transform.parent;
+        _originalPosition = transform.position;
+        index = transform.GetSiblingIndex();
+        _isDragging = true;
+
+        if (Singleton<CardManager>.TryGetInstance(out var manager) && manager.dragCanvas != null)
         {
-            case State.Drag:
-                if (canvasGroup) canvasGroup.blocksRaycasts = true;
-                break;
+            transform.SetParent(manager.dragCanvas.transform, true);
+            transform.SetAsLastSibling();
         }
+
+        if (canvasGroup) canvasGroup.blocksRaycasts = false;
+        RefreshState();
     }
 
-    public void OnPointerEnter(PointerEventData e)
+    public void OnDrag(PointerEventData eventData)
     {
-        if (_state == State.Idle) ChangeState(State.Hover);
+        if (_isDragging)
+            transform.position = eventData.position;
     }
 
-    public void OnPointerExit(PointerEventData e)
+    public void OnEndDrag(PointerEventData eventData)
     {
-        if (_state == State.Hover) ChangeState(State.Idle);
-    }
-
-    public void OnPointerDown(PointerEventData e)
-    {
-        if (e.button != PointerEventData.InputButton.Left) return;
-        if (_state == State.Hover) ChangeState(State.Click);
-    }
-
-    public void OnPointerUp(PointerEventData e)
-    {
-        if (e.button != PointerEventData.InputButton.Left) return;
-        if (_state == State.Click)
-        {
-            CardManager.Instance.DeselectCard();
-            ChangeState(State.Hover);
-        }
-    }
-
-    public void OnBeginDrag(PointerEventData e)
-    {
-        if (e.button != PointerEventData.InputButton.Left) return;
-        if (_state == State.Click) ChangeState(State.Drag);
-    }
-
-    public void OnDrag(PointerEventData e)
-    {
-        if (_state == State.Drag)
-            transform.position = e.position;
-    }
-
-    public void OnEndDrag(PointerEventData e)
-    {
-        if (_state != State.Drag) return;
-
-        var results = new System.Collections.Generic.List<RaycastResult>();
-        EventSystem.current.RaycastAll(e, results);
+        if (!_isDragging) return;
 
         Field targetField = null;
         CardView leftCard = null;
         CardView rightCard = null;
+        var results = new List<RaycastResult>();
+        if (EventSystem.current != null)
+            EventSystem.current.RaycastAll(eventData, results);
 
-        foreach (var r in results)
+        foreach (var result in results)
         {
-            if (r.gameObject == gameObject) continue;
-            if (targetField == null && r.gameObject.TryGetComponent<Field>(out var f))
-                targetField = f;
-            if (r.gameObject.TryGetComponent<CardView>(out var cv) && cv != this && cv.homeField != null)
+            if (result.gameObject == gameObject) continue;
+
+            if (targetField == null)
+                targetField = result.gameObject.GetComponentInParent<Field>();
+
+            var otherCard = result.gameObject.GetComponentInParent<CardView>();
+            if (otherCard == null || otherCard == this || otherCard.homeField != homeField)
+                continue;
+
+            targetField ??= otherCard.homeField;
+            if (leftCard == null)
+                leftCard = otherCard;
+            else if (otherCard != leftCard)
             {
-                if (leftCard == null)
-                    leftCard = cv;
-                else
-                    rightCard = cv;
+                rightCard = otherCard;
+                break;
             }
         }
 
-        if (targetField == null)
-            targetField = homeField;
-
-        if (targetField != null)
-        {
-            if (targetField == homeField)
-                targetField.RepositionCard(this, leftCard, rightCard);
-            else
-                targetField.SetNewCard(this, leftCard, rightCard);
-        }
+        if (targetField == homeField && homeField != null)
+            homeField.RepositionCard(this, leftCard, rightCard);
         else
-        {
-            transform.SetParent(_originalParent);
-            transform.SetSiblingIndex(index);
-            transform.position = _originalPosition;
-        }
+            RestoreOriginalTransform();
 
-        CardManager.Instance.DeselectCard();
-        ChangeState(State.Idle);
+        FinishDrag();
     }
 
     public void ForceToIdle()
     {
-        if (_state != State.Idle) ChangeState(State.Idle);
+        if (_isDragging)
+        {
+            RestoreOriginalTransform();
+            FinishDrag();
+        }
+
+        _isSelected = false;
+        _isPointerOver = false;
+        RefreshState();
+    }
+
+    void RestoreOriginalTransform()
+    {
+        var parent = _originalParent;
+        if (parent == null && homeField != null)
+            parent = homeField.cardsHolder;
+        if (parent == null) return;
+
+        transform.SetParent(parent, true);
+        transform.SetSiblingIndex(Mathf.Clamp(index, 0, parent.childCount - 1));
+        transform.position = _originalPosition;
+    }
+
+    void FinishDrag()
+    {
+        _isDragging = false;
+        if (canvasGroup) canvasGroup.blocksRaycasts = true;
+        _originalParent = null;
+        RefreshState();
     }
 }

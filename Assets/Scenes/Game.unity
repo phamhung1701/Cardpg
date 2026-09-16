@@ -394,6 +394,9 @@ MonoBehaviour:
   - {fileID: 11400000, guid: f3fed06e48b10dc48b94d009058740ae, type: 2}
   - {fileID: 11400000, guid: 3a17f2c563b91da4683ae2fad5e4ddfd, type: 2}
   - {fileID: 11400000, guid: 3a714353ebda6284cb1e12a1c92fe6e1, type: 2}
+  thiefType: {fileID: 11400000, guid: 4cf02a4bcf7b3ac4aa246a0da053d4eb, type: 2}
+  goblinType: {fileID: 11400000, guid: d1bd1b5f338bb314187873c9dc5563c8, type: 2}
+  knightType: {fileID: 11400000, guid: 190c7f06bbf4153429c9f2f030089994, type: 2}
 --- !u!4 &254908969
 Transform:
   m_ObjectHideFlags: 0
@@ -598,7 +601,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7df53530f9e905d408cac2f7965e82f4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Field
-  cardsHolder: {fileID: 1926436523}
+  cardsHolder: {fileID: 320470644}
 --- !u!114 &320470646
 MonoBehaviour:
   m_ObjectHideFlags: 0

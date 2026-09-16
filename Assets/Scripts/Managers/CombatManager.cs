@@ -19,7 +19,12 @@ public class CombatManager : Singleton<CombatManager>
 
     public void StartEnemy(EnemyRuntime enemy)
     {
+        if (enemy == null) throw new ArgumentNullException(nameof(enemy));
+        if (currentEnemy != null)
+            currentEnemy.OnHpChanged -= HandleEnemyHpChanged;
         currentEnemy = enemy;
+        pendingDamage = 0;
+        OnPendingDamageChanged?.Invoke(0);
         currentEnemy.OnHpChanged += HandleEnemyHpChanged;
         CardManager.Instance.RefillHand();
         OnEnemyChanged?.Invoke();
@@ -35,10 +40,8 @@ public class CombatManager : Singleton<CombatManager>
         int damage = data.AttackValue;
         var suit = data.suit;
 
-        CardManager.Instance.AddToDiscard(data);
-        RemoveCardNode(card);
-
         var cm = CardManager.Instance;
+        if (!cm.TryDiscard(card)) return;
 
         if (cm.HasRelic("club_power") && suit == CardData.Suit.Clubs)
         {
@@ -95,8 +98,7 @@ public class CombatManager : Singleton<CombatManager>
 
         var data = card.data;
         int value = data.AttackValue;
-        CardManager.Instance.AddToDiscard(data);
-        RemoveCardNode(card);
+        if (!CardManager.Instance.TryDiscard(card)) return;
 
         pendingDamage = Mathf.Max(0, pendingDamage - value);
         OnPendingDamageChanged?.Invoke(pendingDamage);
@@ -117,16 +119,8 @@ public class CombatManager : Singleton<CombatManager>
 
     void ActivateHearts(int value)
     {
-        var discard = CardManager.Instance.discardPile;
-        int count = Mathf.Min(value, discard.Count);
+        int count = CardManager.Instance.ReturnRandomDiscardToDeck(value);
         if (count <= 0) return;
-        discard.Shuffle();
-        for (int i = 0; i < count; i++)
-        {
-            CardManager.Instance.deck.Add(discard[^1]);
-            discard.RemoveAt(discard.Count - 1);
-        }
-        CardManager.Instance.NotifyDeckChanged();
         Log($"Hearts: {count} cards returned to deck!");
     }
 
@@ -136,7 +130,7 @@ public class CombatManager : Singleton<CombatManager>
         if (drawn > 0) Log($"Diamonds: Drew {drawn} cards!");
     }
 
-    int HandCount() => CardManager.Instance.handField != null ? CardManager.Instance.handField.CardCount : 0;
+    int HandCount() => CardManager.Instance.HandCount;
 
     void EndGameOver()
     {
@@ -144,12 +138,6 @@ public class CombatManager : Singleton<CombatManager>
             currentEnemy.OnHpChanged -= HandleEnemyHpChanged;
         SetState(GameState.GameOver);
         Log("No cards left! Game Over!");
-    }
-
-    void RemoveCardNode(CardView card)
-    {
-        CardManager.Instance.DeselectCard();
-        Destroy(card.gameObject);
     }
 
     void HandleEnemyHpChanged()
@@ -175,6 +163,9 @@ public class CombatManager : Singleton<CombatManager>
             currentEnemy.OnHpChanged -= HandleEnemyHpChanged;
         currentEnemy = null;
         pendingDamage = 0;
-        currentState = GameState.Idle;
+        SetState(GameState.Idle);
+        OnPendingDamageChanged?.Invoke(0);
+        OnEnemyChanged?.Invoke();
+        OnCombatLog?.Invoke(string.Empty);
     }
 }

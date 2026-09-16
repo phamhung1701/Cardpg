@@ -15,15 +15,34 @@ public class CardManager : Singleton<CardManager>
     public List<RelicData> relicCatalog = new();
 
     [Header("Runtime State")]
-    public List<CardData> deck = new();
-    public List<CardData> discardPile = new();
     public int gold;
     public HashSet<string> relics = new();
     public CardView selectedCard;
 
+    readonly CardCollection _cards = new();
+    readonly HashSet<CardView> _trackedViews = new();
+    readonly List<CardData> _generatedDefinitions = new();
+
+    public IReadOnlyList<CardInstance> ownedCards => _cards.OwnedCards;
+    public IReadOnlyList<CardInstance> deck => _cards.Deck;
+    public IReadOnlyList<CardInstance> hand => _cards.Hand;
+    public IReadOnlyList<CardInstance> discardPile => _cards.DiscardPile;
+    public int HandCount => _cards.HandCount;
+
     public event Action<int> OnGoldChanged;
     public event Action OnDeckChanged;
     public event Action<CardView> OnCardSelected;
+
+    public void Configure(Field field, Canvas canvas, CardView prefab, RelicData[] catalog)
+    {
+        handField = field;
+        dragCanvas = canvas;
+        cardPrefab = prefab;
+
+        relicCatalog.Clear();
+        if (catalog != null)
+            relicCatalog.AddRange(catalog);
+    }
 
     public bool HasRelic(string id) => relics.Contains(id);
 
@@ -37,77 +56,95 @@ public class CardManager : Singleton<CardManager>
 
     public void BuildDeck()
     {
-        deck.Clear();
-        discardPile.Clear();
+        ClearCardState();
+
+        var initialCards = new List<CardInstance>(52);
+        int nextId = 1;
         foreach (CardData.Suit suit in Enum.GetValues(typeof(CardData.Suit)))
         {
             foreach (CardData.Rank rank in Enum.GetValues(typeof(CardData.Rank)))
             {
-                deck.Add(CardData.Create(suit, rank));
+                var definition = CardData.Create(suit, rank);
+                _generatedDefinitions.Add(definition);
+                initialCards.Add(new CardInstance(definition, nextId++));
             }
         }
-        ShuffleDeck();
+
+        _cards.Initialize(initialCards);
+        _cards.ShuffleDeck();
         OnDeckChanged?.Invoke();
+        OnCardSelected?.Invoke(null);
     }
 
-    public void ShuffleDeck() => deck.Shuffle();
-
-    public List<CardData> DrawCards(int count)
+    public void ShuffleDeck()
     {
-        var drawn = new List<CardData>();
-        for (int i = 0; i < count; i++)
-        {
-            if (deck.Count == 0) RecycleDiscard();
-            if (deck.Count == 0) break;
-            var c = deck[^1];
-            deck.RemoveAt(deck.Count - 1);
-            drawn.Add(c);
-        }
-        return drawn;
+        _cards.ShuffleDeck();
+        OnDeckChanged?.Invoke();
     }
 
     public int DrawToHand(int count)
     {
-        if (handField == null)
+        int previousHandCount = _cards.HandCount;
+        int drawn = _cards.DrawToHand(count, HAND_SIZE);
+        if (drawn <= 0) return 0;
+
+        if (CanCreateViews())
         {
-            Debug.LogError("CardManager: handField not set");
-            return 0;
+            for (int i = previousHandCount; i < _cards.HandCount; i++)
+                CreateView(_cards.Hand[i]);
         }
-        int maxDraw = Mathf.Max(0, HAND_SIZE - handField.CardCount);
-        var drawn = DrawCards(Mathf.Min(count, maxDraw));
-        foreach (var data in drawn)
-        {
-            var card = Instantiate(cardPrefab);
-            handField.AddCard(card, data);
-        }
-        return drawn.Count;
+
+        OnDeckChanged?.Invoke();
+        return drawn;
     }
 
     public void DealHand() => DrawToHand(HAND_SIZE);
     public void RefillHand() => DrawToHand(HAND_SIZE);
 
-    public void AddToDiscard(CardData data) => discardPile.Add(data);
+    public int ReturnRandomDiscardToDeck(int count)
+    {
+        int moved = _cards.ReturnRandomDiscardToDeck(count);
+        if (moved > 0)
+            OnDeckChanged?.Invoke();
+        return moved;
+    }
+
+    public bool TryDiscard(CardView card)
+    {
+        if (card == null || card.data == null || !_trackedViews.Contains(card))
+            return false;
+        if (!_cards.TryDiscard(card.data))
+            return false;
+
+        if (selectedCard == card)
+            DeselectCard();
+        else
+            card.SetSelected(false);
+
+        DetachAndDestroyView(card);
+        OnDeckChanged?.Invoke();
+        return true;
+    }
 
     public void NotifyDeckChanged() => OnDeckChanged?.Invoke();
 
-    void RecycleDiscard()
-    {
-        if (discardPile.Count == 0) return;
-        deck.AddRange(discardPile);
-        discardPile.Clear();
-        ShuffleDeck();
-    }
-
     public void SelectCard(CardView card)
     {
+        if (card == null || card.data == null || !_trackedViews.Contains(card)) return;
+        if (!_cards.ContainsInHand(card.data)) return;
+
         if (selectedCard != null && selectedCard != card)
-            selectedCard.ForceToIdle();
+            selectedCard.SetSelected(false);
+
         selectedCard = card;
+        selectedCard.SetSelected(true);
         OnCardSelected?.Invoke(card);
     }
 
     public void DeselectCard()
     {
+        if (selectedCard != null)
+            selectedCard.SetSelected(false);
         selectedCard = null;
         OnCardSelected?.Invoke(null);
     }
@@ -128,10 +165,74 @@ public class CardManager : Singleton<CardManager>
 
     public void Reset()
     {
-        deck.Clear();
-        discardPile.Clear();
+        ClearCardState();
         gold = 0;
         relics.Clear();
+
+        OnGoldChanged?.Invoke(gold);
+        OnDeckChanged?.Invoke();
+        OnCardSelected?.Invoke(null);
+    }
+
+    protected override void OnDestroy()
+    {
+        ClearCardState();
+        base.OnDestroy();
+    }
+
+    bool CanCreateViews() => handField != null && handField.cardsHolder != null && cardPrefab != null && dragCanvas != null;
+
+    void CreateView(CardInstance cardInstance)
+    {
+        var view = Instantiate(cardPrefab);
+        _trackedViews.Add(view);
+        handField.AddCard(view, cardInstance);
+    }
+
+    void ClearCardState()
+    {
+        if (selectedCard != null)
+            selectedCard.SetSelected(false);
         selectedCard = null;
+
+        if (_trackedViews.Count > 0)
+        {
+            var views = new List<CardView>(_trackedViews);
+            foreach (var view in views)
+                DetachAndDestroyView(view);
+        }
+        _trackedViews.Clear();
+
+        _cards.Clear();
+        DestroyGeneratedDefinitions();
+    }
+
+    void DetachAndDestroyView(CardView view)
+    {
+        _trackedViews.Remove(view);
+        if (view == null) return;
+
+        view.homeField = null;
+        view.transform.SetParent(null, false);
+        view.gameObject.SetActive(false);
+        DestroyRuntimeObject(view.gameObject);
+    }
+
+    void DestroyGeneratedDefinitions()
+    {
+        foreach (var definition in _generatedDefinitions)
+        {
+            if (definition != null)
+                DestroyRuntimeObject(definition);
+        }
+        _generatedDefinitions.Clear();
+    }
+
+    static void DestroyRuntimeObject(UnityEngine.Object target)
+    {
+        if (Application.isPlaying)
+            UnityEngine.Object.Destroy(target);
+        else
+            UnityEngine.Object.DestroyImmediate(target);
     }
 }

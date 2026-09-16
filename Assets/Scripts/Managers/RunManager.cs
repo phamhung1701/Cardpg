@@ -34,9 +34,18 @@ public class RunManager : Singleton<RunManager>
 
     public void StartRun()
     {
-        CardManager.Instance.Reset();
+        if (thiefType == null || goblinType == null || knightType == null ||
+            CardManager.Instance == null || CombatManager.Instance == null)
+        {
+            Debug.LogError("RunManager: run configuration is incomplete.", this);
+            return;
+        }
+
         CombatManager.Instance.Reset();
+        CardManager.Instance.Reset();
+        Reset();
         CardManager.Instance.BuildDeck();
+        CardManager.Instance.DealHand();
         BuildBossDeck();
         NextCycle();
     }
@@ -52,6 +61,7 @@ public class RunManager : Singleton<RunManager>
             {
                 var card = CardData.Create(suit, rank);
                 rankBosses.Add(CreateBossType(card));
+                Destroy(card);
             }
             rankBosses.Shuffle();
             bossDeck.AddRange(rankBosses);
@@ -208,6 +218,9 @@ public class RunManager : Singleton<RunManager>
 
     public void Reset()
     {
+        foreach (var boss in bossDeck)
+            if (boss != null)
+                Destroy(boss);
         bossDeck.Clear();
         bossIndex = 0;
         currentPath.Clear();

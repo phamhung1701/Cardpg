@@ -1,6 +1,7 @@
-using System.Collections;
 using UnityEngine;
 
+// Managers and scene references must exist before UI OnEnable subscriptions.
+[DefaultExecutionOrder(-50)]
 public class GameController : MonoBehaviour
 {
     [Header("References")]
@@ -9,40 +10,42 @@ public class GameController : MonoBehaviour
     public CardView cardPrefab;
     public RelicData[] relicCatalog;
 
+    [Header("Enemy Definitions")]
+    public EnemyTypeData thiefType;
+    public EnemyTypeData goblinType;
+    public EnemyTypeData knightType;
+
+    bool _configured;
+
+    void Awake()
+    {
+        if (handField == null || handField.cardsHolder == null ||
+            dragCanvas == null || cardPrefab == null ||
+            thiefType == null || goblinType == null || knightType == null)
+        {
+            Debug.LogError("GameController: assign hand, card, canvas, and all enemy references before starting a run.", this);
+            return;
+        }
+
+        var cards = GetOrCreate<CardManager>();
+        GetOrCreate<CombatManager>();
+        var run = GetOrCreate<RunManager>();
+        cards.Configure(handField, dragCanvas, cardPrefab, relicCatalog);
+        run.thiefType = thiefType;
+        run.goblinType = goblinType;
+        run.knightType = knightType;
+        _configured = true;
+    }
+
     void Start()
     {
-        var cm = CardManager.Instance;
-        if (handField == null) Debug.LogError("GameController: Hand Field is not assigned.");
-        if (dragCanvas == null) Debug.LogError("GameController: Drag Canvas is not assigned.");
-        if (cardPrefab == null) Debug.LogError("GameController: Card Prefab is not assigned.");
-        if (relicCatalog == null || relicCatalog.Length == 0) Debug.LogWarning("GameController: Relic Catalog is empty.");
-
-        cm.handField = handField;
-        cm.dragCanvas = dragCanvas;
-        cm.cardPrefab = cardPrefab;
-        cm.relicCatalog.Clear();
-        if (relicCatalog != null)
-            cm.relicCatalog.AddRange(relicCatalog);
-        cm.OnGoldChanged += HandleGoldChanged;
-        cm.BuildDeck();
-        cm.DealHand();
-        StartCoroutine(DeferStartRun());
+        if (_configured)
+            RunManager.Instance.StartRun();
     }
 
-    IEnumerator DeferStartRun()
+    static T GetOrCreate<T>() where T : Singleton<T>
     {
-        yield return null;
-        RunManager.Instance.StartRun();
-    }
-
-    void HandleGoldChanged(int gold)
-    {
-        Debug.Log($"Gold: {gold}");
-    }
-
-    void OnDestroy()
-    {
-        if (CardManager.Instance != null)
-            CardManager.Instance.OnGoldChanged -= HandleGoldChanged;
+        var manager = Singleton<T>.Instance;
+        return manager != null ? manager : new GameObject($"[{typeof(T).Name}]").AddComponent<T>();
     }
 }
