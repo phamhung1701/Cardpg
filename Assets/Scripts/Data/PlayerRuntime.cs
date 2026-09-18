@@ -38,6 +38,26 @@ public sealed class PlayerRuntime
         return previousHealth - currentHealth;
     }
 
+    public int Heal(int amount)
+    {
+        if (amount <= 0 || IsDefeated)
+            return 0;
+
+        int previousHealth = currentHealth;
+        currentHealth = Math.Min(maxHealth, currentHealth + amount);
+        return currentHealth - previousHealth;
+    }
+
+    public int IncreaseMaxHealth(int amount, bool healIncrease = true)
+    {
+        if (amount <= 0) return 0;
+
+        maxHealth += amount;
+        if (healIncrease)
+            currentHealth += amount;
+        return amount;
+    }
+
     static void ValidateMaxHealth(int maxHealth)
     {
         if (maxHealth <= 0)

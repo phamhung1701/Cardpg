@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Thief
   m_EditorClassIdentifier: Assembly-CSharp::EnemyTypeData
   enemyName: Thief
-  maxHp: 10
-  baseAttack: 4
-  goldReward: 5
+  maxHp: 12
+  baseAttack: 1
+  goldReward: 15
+  encounterCount: 1
+  fleeAfterPlayerTurns: 2
   sourceCard: {fileID: 0}
   abilities: []

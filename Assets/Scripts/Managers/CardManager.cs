@@ -11,17 +11,21 @@ public class CardManager : Singleton<CardManager>
     public CardView cardPrefab;
     public Canvas dragCanvas;
 
-    [Header("Relic Catalog")]
+    [Header("Build Progression Catalogs")]
     public List<RelicData> relicCatalog = new();
+    public List<CardEnhancementData> enhancementCatalog = new();
 
     [Header("Runtime State")]
     public int gold;
     public HashSet<string> relics = new();
+    public List<RelicData> ownedArtifacts = new();
     public CardView selectedCard;
 
     readonly CardCollection _cards = new();
     readonly HashSet<CardView> _trackedViews = new();
+    readonly List<CardView> _selectedCards = new();
     readonly List<CardData> _generatedDefinitions = new();
+    CardView _activeDragCard;
     int _nextCardId = 1;
 
     public IReadOnlyList<CardInstance> ownedCards => _cards.OwnedCards;
@@ -29,30 +33,90 @@ public class CardManager : Singleton<CardManager>
     public IReadOnlyList<CardInstance> hand => _cards.Hand;
     public IReadOnlyList<CardInstance> discardPile => _cards.DiscardPile;
     public int HandCount => _cards.HandCount;
+    public IReadOnlyList<CardView> SelectedCards => _selectedCards;
+    public CardView ActiveDragCard => _activeDragCard;
 
     public event Action<int> OnGoldChanged;
     public event Action OnDeckChanged;
+    public event Action OnBuildChanged;
     public event Action<CardView> OnCardSelected;
 
-    public void Configure(Field field, Canvas canvas, CardView prefab, RelicData[] catalog)
+    public void Configure(
+        Field field,
+        Canvas canvas,
+        CardView prefab,
+        RelicData[] artifacts,
+        CardEnhancementData[] enhancements = null)
     {
         handField = field;
         dragCanvas = canvas;
         cardPrefab = prefab;
 
         relicCatalog.Clear();
-        if (catalog != null)
-            relicCatalog.AddRange(catalog);
+        if (artifacts != null)
+            relicCatalog.AddRange(artifacts);
+
+        enhancementCatalog.Clear();
+        if (enhancements != null)
+            enhancementCatalog.AddRange(enhancements);
+    }
+
+    public void ConfigureRandom(IRandomSource random)
+    {
+        _cards.ConfigureRandom(random);
     }
 
     public bool HasRelic(string id) => relics.Contains(id);
+    public bool HasArtifact(RelicData artifact) => artifact != null && HasRelic(artifact.id);
 
-    public bool BuyRelic(RelicData relic)
+    public bool BuyRelic(RelicData relic) => BuyArtifact(relic);
+
+    public bool BuyArtifact(RelicData artifact) => BuyArtifact(artifact, artifact != null ? artifact.price : -1);
+
+    public bool BuyArtifact(RelicData artifact, int price)
     {
-        if (relic == null || HasRelic(relic.id)) return false;
-        if (!SpendGold(relic.price)) return false;
-        relics.Add(relic.id);
+        if (artifact == null || price < 0 || string.IsNullOrWhiteSpace(artifact.id) || HasArtifact(artifact)) return false;
+        if (!SpendGold(price)) return false;
+        relics.Add(artifact.id);
+        ownedArtifacts.Add(artifact);
+        OnBuildChanged?.Invoke();
         return true;
+    }
+
+    public CardInstance FindOwnedCard(int cardId)
+    {
+        foreach (var card in _cards.OwnedCards)
+            if (card.Id == cardId)
+                return card;
+        return null;
+    }
+
+    public bool ApplyEnhancement(int cardId, CardEnhancementData enhancement)
+    {
+        var card = FindOwnedCard(cardId);
+        if (card == null || !card.TryApplyEnhancement(enhancement)) return false;
+        RefreshTrackedView(card);
+        OnDeckChanged?.Invoke();
+        OnBuildChanged?.Invoke();
+        return true;
+    }
+
+    public bool BuyEnhancement(int cardId, CardEnhancementData enhancement, int price)
+    {
+        var card = FindOwnedCard(cardId);
+        if (card == null || card.Enhancement != null || enhancement == null || price < 0 || gold < price)
+            return false;
+        if (!SpendGold(price)) return false;
+        if (card.TryApplyEnhancement(enhancement))
+        {
+            RefreshTrackedView(card);
+            OnDeckChanged?.Invoke();
+            OnBuildChanged?.Invoke();
+            return true;
+        }
+
+        AddGold(price);
+        return false;
     }
 
     public void BuildDeck()
@@ -137,43 +201,121 @@ public class CardManager : Singleton<CardManager>
 
     public bool TryDiscard(CardView card)
     {
-        if (card == null || card.data == null || !_trackedViews.Contains(card))
-            return false;
-        if (!_cards.TryDiscard(card.data))
-            return false;
+        if (card == null) return false;
+        return TryDiscardCards(new[] { card });
+    }
 
-        if (selectedCard == card)
-            DeselectCard();
-        else
-            card.SetSelected(false);
+    public bool TryDiscardCards(IReadOnlyList<CardView> cards)
+    {
+        if (cards == null || cards.Count == 0) return false;
 
-        DetachAndDestroyView(card);
+        var uniqueViews = new HashSet<CardView>();
+        var instances = new List<CardInstance>(cards.Count);
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var view = cards[i];
+            if (view == null || view.data == null || !_trackedViews.Contains(view) ||
+                !uniqueViews.Add(view) || !_cards.ContainsInHand(view.data))
+                return false;
+            instances.Add(view.data);
+        }
+
+        if (!_cards.TryDiscard(instances)) return false;
+
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var view = cards[i];
+            _selectedCards.Remove(view);
+            view.SetSelectionOrder(0);
+            DetachAndDestroyView(view);
+        }
+
+        RefreshSelectionPresentation();
         OnDeckChanged?.Invoke();
         return true;
     }
 
     public void NotifyDeckChanged() => OnDeckChanged?.Invoke();
 
-    public void SelectCard(CardView card)
+    public void CancelCardInteractions()
     {
-        if (card == null || card.data == null || !_trackedViews.Contains(card)) return;
-        if (!_cards.ContainsInHand(card.data)) return;
+        ClearSelection();
+        if (_activeDragCard != null)
+            _activeDragCard.CancelActiveDrag();
+        _activeDragCard = null;
 
-        if (selectedCard != null && selectedCard != card)
-            selectedCard.SetSelected(false);
-
-        selectedCard = card;
-        selectedCard.SetSelected(true);
-        OnCardSelected?.Invoke(card);
+        foreach (var view in _trackedViews)
+            if (view != null)
+                view.ForceToIdle();
     }
 
-    public void DeselectCard()
+    public void SelectCard(CardView card) => ToggleCardSelection(card);
+
+    public void ToggleCardSelection(CardView card)
     {
-        if (selectedCard != null)
-            selectedCard.SetSelected(false);
-        selectedCard = null;
-        OnCardSelected?.Invoke(null);
+        if (!CanSelect(card)) return;
+
+        if (_selectedCards.Remove(card))
+        {
+            card.SetSelectionOrder(0);
+            RefreshSelectionPresentation();
+            return;
+        }
+
+        var combat = CombatManager.Instance;
+        if (combat == null || !combat.CanAddCardToSelection(_selectedCards, card))
+            return;
+
+        if (combat.ShouldReplaceSelectionOnAdd)
+            ClearSelection(false);
+
+        _selectedCards.Add(card);
+        RefreshSelectionPresentation();
     }
+
+    public void SelectOnlyCard(CardView card)
+    {
+        if (!CanSelect(card)) return;
+        if (_selectedCards.Count == 1 && _selectedCards[0] == card) return;
+
+        var combat = CombatManager.Instance;
+        if (combat == null || !combat.CanAddCardToSelection(System.Array.Empty<CardView>(), card))
+            return;
+
+        ClearSelection(false);
+        _selectedCards.Add(card);
+        RefreshSelectionPresentation();
+    }
+
+    public bool PrepareDragSelection(CardView card)
+    {
+        if (!CanSelect(card)) return false;
+        if (_selectedCards.Contains(card)) return true;
+
+        ToggleCardSelection(card);
+        return _selectedCards.Contains(card);
+    }
+
+    public IReadOnlyList<CardView> GetSelectedCardsSnapshot()
+    {
+        return new List<CardView>(_selectedCards);
+    }
+
+    public void BeginCardDrag(CardView card)
+    {
+        if (card != null && _trackedViews.Contains(card))
+            _activeDragCard = card;
+    }
+
+    public void EndCardDrag(CardView card)
+    {
+        if (_activeDragCard == card)
+            _activeDragCard = null;
+    }
+
+    public void DeselectCard() => ClearSelection();
+
+    public void ClearSelection() => ClearSelection(true);
 
     public void AddGold(int amount)
     {
@@ -183,7 +325,7 @@ public class CardManager : Singleton<CardManager>
 
     public bool SpendGold(int amount)
     {
-        if (gold < amount) return false;
+        if (amount < 0 || gold < amount) return false;
         gold -= amount;
         OnGoldChanged?.Invoke(gold);
         return true;
@@ -194,9 +336,11 @@ public class CardManager : Singleton<CardManager>
         ClearCardState();
         gold = 0;
         relics.Clear();
+        ownedArtifacts.Clear();
 
         OnGoldChanged?.Invoke(gold);
         OnDeckChanged?.Invoke();
+        OnBuildChanged?.Invoke();
         OnCardSelected?.Invoke(null);
     }
 
@@ -217,9 +361,10 @@ public class CardManager : Singleton<CardManager>
 
     void ClearCardState()
     {
-        if (selectedCard != null)
-            selectedCard.SetSelected(false);
-        selectedCard = null;
+        if (_activeDragCard != null)
+            _activeDragCard.CancelActiveDrag();
+        _activeDragCard = null;
+        ClearSelection(false);
 
         if (_trackedViews.Count > 0)
         {
@@ -232,6 +377,46 @@ public class CardManager : Singleton<CardManager>
         _cards.Clear();
         DestroyGeneratedDefinitions();
         _nextCardId = 1;
+    }
+
+    bool CanSelect(CardView card)
+    {
+        return !GameplayInputGate.IsBlocked && card != null && card.data != null &&
+            _trackedViews.Contains(card) && _cards.ContainsInHand(card.data);
+    }
+
+    void ClearSelection(bool notify)
+    {
+        for (int i = 0; i < _selectedCards.Count; i++)
+            if (_selectedCards[i] != null)
+                _selectedCards[i].SetSelectionOrder(0);
+
+        _selectedCards.Clear();
+        selectedCard = null;
+        if (notify)
+            OnCardSelected?.Invoke(null);
+    }
+
+    void RefreshSelectionPresentation()
+    {
+        for (int i = 0; i < _selectedCards.Count; i++)
+            if (_selectedCards[i] != null)
+                _selectedCards[i].SetSelectionOrder(i + 1);
+
+        selectedCard = _selectedCards.Count > 0 ? _selectedCards[^1] : null;
+        OnCardSelected?.Invoke(selectedCard);
+    }
+
+    void RefreshTrackedView(CardInstance card)
+    {
+        foreach (var view in _trackedViews)
+        {
+            if (view != null && ReferenceEquals(view.data, card))
+            {
+                view.Setup(card);
+                return;
+            }
+        }
     }
 
     void DetachAndDestroyView(CardView view)

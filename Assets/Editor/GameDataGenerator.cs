@@ -4,54 +4,145 @@ using UnityEngine;
 
 public static class GameDataGenerator
 {
-    const string RelicDir = "Assets/Data/Relics";
+    const string ArtifactDir = "Assets/Data/Relics";
+    const string EnhancementDir = "Assets/Data/Enhancements";
     const string EnemyDir = "Assets/Data/Enemies";
 
     [MenuItem("Game/Generate Data Assets")]
     public static void GenerateAll()
     {
-        GenerateRelics();
+        GenerateArtifacts();
+        GenerateEnhancements();
         GenerateEnemies();
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log("Game data assets generated.");
     }
 
-    [MenuItem("Game/Generate Relic Assets")]
-    public static void GenerateRelics()
+    [MenuItem("Game/Generate Artifact Assets")]
+    public static void GenerateArtifacts()
     {
-        EnsureFolder(RelicDir);
-        CreateRelic("ClubPower", "club_power", "Club Power", "♣", "♣ cards deal double damage", 15);
-        CreateRelic("SpadePower", "spade_power", "Spade Power", "♠", "♠ cards reduce enemy ATK", 15);
-        CreateRelic("HeartPower", "heart_power", "Heart Power", "♥", "♥ cards recycle discard to deck", 20);
-        CreateRelic("DiamondPower", "diamond_power", "Diamond Power", "♦", "♦ cards draw extra cards", 20);
-        Debug.Log("Relic assets created.");
+        EnsureFolder(ArtifactDir);
+
+        var club = CreateArtifact("ClubPower", "club_power", "Club Power", "♣", "Club cards deal double damage", 15);
+        club.restrictToSuit = true;
+        club.affectedSuit = CardData.Suit.Clubs;
+        club.damageMultiplier = 2;
+
+        var spade = CreateArtifact("SpadePower", "spade_power", "Spade Power", "♠", "Spade cards reduce enemy attack by their base value", 15);
+        spade.restrictToSuit = true;
+        spade.affectedSuit = CardData.Suit.Spades;
+        spade.reduceEnemyAttackByCardValue = true;
+
+        var heart = CreateArtifact("HeartPower", "heart_power", "Heart Power", "♥", "Heart cards recycle discard cards equal to their base value", 20);
+        heart.restrictToSuit = true;
+        heart.affectedSuit = CardData.Suit.Hearts;
+        heart.recycleDiscardByCardValue = true;
+
+        var diamond = CreateArtifact("DiamondPower", "diamond_power", "Diamond Power", "♦", "Diamond cards draw cards equal to their base value", 20);
+        diamond.restrictToSuit = true;
+        diamond.affectedSuit = CardData.Suit.Diamonds;
+        diamond.drawByCardValue = true;
+
+        var artisan = CreateArtifact("ArtisanTools", "artisan_tools", "Artisan Tools", "ENH", "Enhanced cards deal +3 damage", 25);
+        artisan.requiresEnhancedCard = true;
+        artisan.flatDamageBonus = 3;
+
+        var sleeves = CreateArtifact("ReinforcedSleeves", "reinforced_sleeves", "Reinforced Sleeves", "BLOCK", "Enhanced cards block +3 damage", 22);
+        sleeves.requiresEnhancedCard = true;
+        sleeves.defenseBonus = 3;
+
+        CreateArtifact("VictoryDraught", "victory_draught", "Victory Draught", "HEAL", "Heal 3 HP after each victory", 24).healAfterVictory = 3;
+        CreateArtifact("GoldenCompass", "golden_compass", "Golden Compass", "GOLD", "Gain +4 gold after each victory", 20).bonusGold = 4;
+        Debug.Log("Artifact assets created or updated.");
+    }
+
+    [MenuItem("Game/Generate Enhancement Assets")]
+    public static void GenerateEnhancements()
+    {
+        EnsureFolder(EnhancementDir);
+        ConfigureEnhancement(CreateEnhancement("Sharpened", "sharpened", "Sharpened", "ATK", "+3 attack damage", 12), 3, 0, 0, 0);
+        ConfigureEnhancement(CreateEnhancement("Reinforced", "reinforced", "Reinforced", "DEF", "+3 defensive block", 12), 0, 3, 0, 0);
+        ConfigureEnhancement(CreateEnhancement("Mending", "mending", "Mending", "HP", "Heal 2 HP when played", 15), 0, 0, 2, 0);
+        ConfigureEnhancement(CreateEnhancement("Quickdraw", "quickdraw", "Quickdraw", "DRAW", "Draw 1 card when played", 18), 0, 0, 0, 1);
+        Debug.Log("Enhancement assets created or updated.");
     }
 
     [MenuItem("Game/Generate Enemy Assets")]
     public static void GenerateEnemies()
     {
         EnsureFolder(EnemyDir);
-        CreateEnemy("Thief", "Thief", 10, 4, 5);
-        CreateEnemy("Goblin", "Goblin", 15, 6, 7);
+        CreateEnemy("Thief", "Thief", 12, 1, 15, fleeAfterPlayerTurns: 2);
+        CreateEnemy("Goblin", "Goblin", 3, 2, 3, encounterCount: 3);
         CreateEnemy("Knight", "Knight", 25, 8, 10);
         Debug.Log("Enemy assets created.");
     }
 
-    static void CreateRelic(string name, string id, string displayName, string icon, string desc, int price)
+    static RelicData CreateArtifact(string name, string id, string displayName, string icon, string description, int price)
     {
-        var path = $"{RelicDir}/{name}.asset";
-        if (File.Exists(path)) return;
-        var relic = ScriptableObject.CreateInstance<RelicData>();
-        relic.id = id;
-        relic.displayName = displayName;
-        relic.icon = icon;
-        relic.description = desc;
-        relic.price = price;
-        AssetDatabase.CreateAsset(relic, path);
+        string path = $"{ArtifactDir}/{name}.asset";
+        var artifact = AssetDatabase.LoadAssetAtPath<RelicData>(path);
+        if (artifact == null)
+        {
+            artifact = ScriptableObject.CreateInstance<RelicData>();
+            AssetDatabase.CreateAsset(artifact, path);
+        }
+
+        artifact.id = id;
+        artifact.displayName = displayName;
+        artifact.icon = icon;
+        artifact.description = description;
+        artifact.price = price;
+        artifact.restrictToSuit = false;
+        artifact.requiresEnhancedCard = false;
+        artifact.damageMultiplier = 1;
+        artifact.flatDamageBonus = 0;
+        artifact.defenseBonus = 0;
+        artifact.reduceEnemyAttackByCardValue = false;
+        artifact.recycleDiscardByCardValue = false;
+        artifact.drawByCardValue = false;
+        artifact.healAfterVictory = 0;
+        artifact.bonusGold = 0;
+        EditorUtility.SetDirty(artifact);
+        return artifact;
     }
 
-    static void CreateEnemy(string name, string displayName, int hp, int atk, int gold)
+    static CardEnhancementData CreateEnhancement(string name, string id, string displayName, string icon, string description, int price)
+    {
+        string path = $"{EnhancementDir}/{name}.asset";
+        var enhancement = AssetDatabase.LoadAssetAtPath<CardEnhancementData>(path);
+        if (enhancement == null)
+        {
+            enhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
+            AssetDatabase.CreateAsset(enhancement, path);
+        }
+
+        enhancement.id = id;
+        enhancement.displayName = displayName;
+        enhancement.icon = icon;
+        enhancement.description = description;
+        enhancement.price = price;
+        EditorUtility.SetDirty(enhancement);
+        return enhancement;
+    }
+
+    static void ConfigureEnhancement(CardEnhancementData enhancement, int attack, int defense, int heal, int draw)
+    {
+        enhancement.attackBonus = attack;
+        enhancement.defenseBonus = defense;
+        enhancement.healOnPlay = heal;
+        enhancement.drawOnPlay = draw;
+        EditorUtility.SetDirty(enhancement);
+    }
+
+    static void CreateEnemy(
+        string name,
+        string displayName,
+        int hp,
+        int atk,
+        int gold,
+        int encounterCount = 1,
+        int fleeAfterPlayerTurns = 0)
     {
         var path = $"{EnemyDir}/{name}.asset";
         if (File.Exists(path)) return;
@@ -60,18 +151,18 @@ public static class GameDataGenerator
         enemy.maxHp = hp;
         enemy.baseAttack = atk;
         enemy.goldReward = gold;
+        enemy.encounterCount = encounterCount;
+        enemy.fleeAfterPlayerTurns = fleeAfterPlayerTurns;
         AssetDatabase.CreateAsset(enemy, path);
     }
 
     static void EnsureFolder(string path)
     {
-        if (!AssetDatabase.IsValidFolder(path))
-        {
-            string parent = Path.GetDirectoryName(path).Replace('\\', '/');
-            string folder = Path.GetFileName(path);
-            if (!AssetDatabase.IsValidFolder(parent))
-                AssetDatabase.CreateFolder("Assets", Path.GetFileName(parent));
-            AssetDatabase.CreateFolder(parent, folder);
-        }
+        if (AssetDatabase.IsValidFolder(path)) return;
+        string parent = Path.GetDirectoryName(path).Replace('\\', '/');
+        string folder = Path.GetFileName(path);
+        if (!AssetDatabase.IsValidFolder(parent))
+            AssetDatabase.CreateFolder("Assets", Path.GetFileName(parent));
+        AssetDatabase.CreateFolder(parent, folder);
     }
 }

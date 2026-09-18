@@ -15,5 +15,16 @@ MonoBehaviour:
   id: diamond_power
   displayName: Diamond Power
   icon: "\u2666"
-  description: "\u2666 cards draw extra cards"
+  description: Diamond cards draw cards equal to their base value
   price: 20
+  restrictToSuit: 1
+  affectedSuit: 1
+  requiresEnhancedCard: 0
+  damageMultiplier: 1
+  flatDamageBonus: 0
+  defenseBonus: 0
+  reduceEnemyAttackByCardValue: 0
+  recycleDiscardByCardValue: 0
+  drawByCardValue: 1
+  healAfterVictory: 0
+  bonusGold: 0

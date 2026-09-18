@@ -12,12 +12,18 @@ public sealed class CardCollection
     readonly List<CardInstance> _deck = new();
     readonly List<CardInstance> _hand = new();
     readonly List<CardInstance> _discardPile = new();
+    IRandomSource _random = new DeterministicRandom(RunRandomContext.StableHash("CARDPG_DEFAULT_CARDS"));
 
     public IReadOnlyList<CardInstance> OwnedCards => _ownedCards;
     public IReadOnlyList<CardInstance> Deck => _deck;
     public IReadOnlyList<CardInstance> Hand => _hand;
     public IReadOnlyList<CardInstance> DiscardPile => _discardPile;
     public int HandCount => _hand.Count;
+
+    public void ConfigureRandom(IRandomSource random)
+    {
+        _random = random ?? throw new ArgumentNullException(nameof(random));
+    }
 
     public void Initialize(IEnumerable<CardInstance> cards)
     {
@@ -66,7 +72,7 @@ public sealed class CardCollection
         _discardPile.Clear();
     }
 
-    public void ShuffleDeck() => _deck.Shuffle();
+    public void ShuffleDeck() => _deck.Shuffle(_random);
 
     public int DrawToHand(int requestedCount, int handCapacity)
     {
@@ -93,8 +99,27 @@ public sealed class CardCollection
 
     public bool TryDiscard(CardInstance card)
     {
-        if (card == null || !_hand.Remove(card)) return false;
-        _discardPile.Add(card);
+        if (card == null) return false;
+        return TryDiscard(new[] { card });
+    }
+
+    public bool TryDiscard(IReadOnlyList<CardInstance> cards)
+    {
+        if (cards == null || cards.Count == 0) return false;
+
+        var uniqueCards = new HashSet<CardInstance>();
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var card = cards[i];
+            if (card == null || !uniqueCards.Add(card) || !_hand.Contains(card))
+                return false;
+        }
+
+        for (int i = 0; i < cards.Count; i++)
+        {
+            _hand.Remove(cards[i]);
+            _discardPile.Add(cards[i]);
+        }
         return true;
     }
 
@@ -102,7 +127,7 @@ public sealed class CardCollection
     {
         if (requestedCount <= 0 || _discardPile.Count == 0) return 0;
 
-        _discardPile.Shuffle();
+        _discardPile.Shuffle(_random);
         int moved = Math.Min(requestedCount, _discardPile.Count);
         for (int i = 0; i < moved; i++)
         {

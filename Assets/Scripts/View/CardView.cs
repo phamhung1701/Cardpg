@@ -8,7 +8,7 @@ using UnityEngine.UI;
 [RequireComponent(typeof(Image))]
 public class CardView : MonoBehaviour,
     IPointerEnterHandler, IPointerExitHandler,
-    IPointerDownHandler, IPointerUpHandler,
+    IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
     IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public enum State { Idle, Hover, Click, Drag, Release }
@@ -28,27 +28,57 @@ public class CardView : MonoBehaviour,
     bool _isSelected;
     bool _isPointerOver;
     bool _isDragging;
+    int _selectionOrder;
     Vector3 _originalPosition;
     Transform _originalParent;
+    Field _dragHomeField;
+    Vector3 _pointerOffset;
 
     public State CurrentState => _state;
     public bool IsSelected => _isSelected;
 
-    static readonly Color _idleColor = new Color(0.85f, 0.92f, 0.85f);
-    static readonly Color _hoverColor = new Color(0.95f, 0.95f, 1f);
-    static readonly Color _clickColor = new Color(1f, 0.85f, 0.6f);
-    static readonly Color _dragColor = new Color(0.7f, 0.85f, 1f);
+    static readonly Color _clubColor = new(0.82f, 0.87f, 0.82f);
+    static readonly Color _diamondColor = new(0.92f, 0.82f, 0.72f);
+    static readonly Color _heartColor = new(0.92f, 0.76f, 0.76f);
+    static readonly Color _spadeColor = new(0.78f, 0.82f, 0.9f);
+    static readonly Color _selectedColor = new(1f, 0.78f, 0.32f);
+    static readonly Color _dragColor = new(0.66f, 0.82f, 1f);
+
+    Color _baseColor = new(0.85f, 0.88f, 0.9f);
 
     public void Setup(CardInstance cardData)
     {
         data = cardData;
-        if (nameLabel) nameLabel.text = data != null ? data.DisplayName : string.Empty;
+        if (nameLabel)
+        {
+            if (data == null)
+            {
+                nameLabel.text = string.Empty;
+            }
+            else
+            {
+                string enhancementLine = data.Enhancement != null
+                    ? $"\n<size=48%>{data.Enhancement.icon} {data.Enhancement.displayName}</size>"
+                    : string.Empty;
+                nameLabel.text = $"<b>{data.Definition.RankLabel}</b>\n<size=70%>{data.SuitSymbol}  {data.Definition.SuitName}</size>\n<size=52%>ATK {data.AttackValue}  •  DEF {data.DefenseValue}</size>{enhancementLine}";
+            }
+        }
+        _baseColor = data == null ? new Color(0.85f, 0.88f, 0.9f) : data.Suit switch
+        {
+            CardData.Suit.Clubs => _clubColor,
+            CardData.Suit.Diamonds => _diamondColor,
+            CardData.Suit.Hearts => _heartColor,
+            _ => _spadeColor
+        };
         RefreshState();
     }
 
-    public void SetSelected(bool selected)
+    public void SetSelected(bool selected) => SetSelectionOrder(selected ? 1 : 0);
+
+    public void SetSelectionOrder(int selectionOrder)
     {
-        _isSelected = selected;
+        _selectionOrder = Mathf.Max(0, selectionOrder);
+        _isSelected = _selectionOrder > 0;
         RefreshState();
     }
 
@@ -79,27 +109,28 @@ public class CardView : MonoBehaviour,
 
     void ApplyState(State state)
     {
+        Color color = _baseColor;
+        Vector3 scale = Vector3.one;
+
         switch (state)
         {
-            case State.Idle:
-                if (face) face.color = _idleColor;
-                if (stateLabel) stateLabel.text = string.Empty;
-                break;
             case State.Hover:
-                if (face) face.color = _hoverColor;
-                if (stateLabel) stateLabel.text = "Hover";
+                color = Color.Lerp(_baseColor, Color.white, 0.35f);
+                scale = Vector3.one * 1.04f;
                 break;
             case State.Click:
-                if (face) face.color = _clickColor;
-                if (stateLabel) stateLabel.text = "Selected";
+                color = _selectedColor;
+                scale = Vector3.one * 1.07f;
                 break;
             case State.Drag:
-                if (face) face.color = _dragColor;
-                if (stateLabel) stateLabel.text = "Drag";
-                break;
-            case State.Release:
+                color = _dragColor;
+                scale = Vector3.one * 1.07f;
                 break;
         }
+
+        if (face) face.color = color;
+        if (stateLabel) stateLabel.text = state == State.Click ? $"SELECTED {_selectionOrder}" : string.Empty;
+        transform.localScale = scale;
     }
 
     public void OnPointerEnter(PointerEventData eventData)
@@ -116,9 +147,14 @@ public class CardView : MonoBehaviour,
 
     public void OnPointerDown(PointerEventData eventData)
     {
-        if (eventData.button != PointerEventData.InputButton.Left) return;
-        if (Singleton<CardManager>.TryGetInstance(out var manager))
-            manager.SelectCard(this);
+        // Click selection is handled by OnPointerClick so beginning a drag does not toggle
+        // an already-selected card out of the intended action set.
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (GameplayInputGate.IsBlocked || eventData.button != PointerEventData.InputButton.Left) return;
+        CardManager.Instance?.ToggleCardSelection(this);
     }
 
     public void OnPointerUp(PointerEventData eventData)
@@ -128,18 +164,30 @@ public class CardView : MonoBehaviour,
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (eventData.button != PointerEventData.InputButton.Left || _isDragging) return;
+        if (GameplayInputGate.IsBlocked || eventData.button != PointerEventData.InputButton.Left || _isDragging) return;
+        var manager = CardManager.Instance;
+        if (manager == null || manager.dragCanvas == null || homeField == null)
+            return;
 
+        if (!manager.PrepareDragSelection(this))
+            return;
         _originalParent = transform.parent;
         _originalPosition = transform.position;
         index = transform.GetSiblingIndex();
+        _dragHomeField = homeField;
+        _dragHomeField.BeginVisualDrag(this);
         _isDragging = true;
+        manager.BeginCardDrag(this);
 
-        if (Singleton<CardManager>.TryGetInstance(out var manager) && manager.dragCanvas != null)
-        {
-            transform.SetParent(manager.dragCanvas.transform, true);
-            transform.SetAsLastSibling();
-        }
+        var dragRect = manager.dragCanvas.transform as RectTransform;
+        if (dragRect != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(
+                dragRect, eventData.position, eventData.pressEventCamera, out var pointerWorld))
+            _pointerOffset = transform.position - pointerWorld;
+        else
+            _pointerOffset = Vector3.zero;
+
+        transform.SetParent(manager.dragCanvas.transform, true);
+        transform.SetAsLastSibling();
 
         if (canvasGroup) canvasGroup.blocksRaycasts = false;
         RefreshState();
@@ -147,61 +195,84 @@ public class CardView : MonoBehaviour,
 
     public void OnDrag(PointerEventData eventData)
     {
-        if (_isDragging)
+        if (!_isDragging) return;
+
+        var dragRect = transform.parent as RectTransform;
+        if (dragRect != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(
+                dragRect, eventData.position, eventData.pressEventCamera, out var pointerWorld))
+            transform.position = pointerWorld + _pointerOffset;
+        else
             transform.position = eventData.position;
+
+        _dragHomeField?.UpdateVisualDrag(this, eventData.position, eventData.pressEventCamera);
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
         if (!_isDragging) return;
 
-        Field targetField = null;
-        CardView leftCard = null;
-        CardView rightCard = null;
-        var results = new List<RaycastResult>();
-        if (EventSystem.current != null)
-            EventSystem.current.RaycastAll(eventData, results);
+        var target = FindDropTarget(eventData);
+        bool committed = target != null && target.TryCommit(this);
 
-        foreach (var result in results)
+        if (committed)
         {
-            if (result.gameObject == gameObject) continue;
-
-            if (targetField == null)
-                targetField = result.gameObject.GetComponentInParent<Field>();
-
-            var otherCard = result.gameObject.GetComponentInParent<CardView>();
-            if (otherCard == null || otherCard == this || otherCard.homeField != homeField)
-                continue;
-
-            targetField ??= otherCard.homeField;
-            if (leftCard == null)
-                leftCard = otherCard;
-            else if (otherCard != leftCard)
-            {
-                rightCard = otherCard;
-                break;
-            }
+            _dragHomeField?.RemoveVisualDragSlot(this);
+        }
+        else if (_dragHomeField != null)
+        {
+            bool commitReorder = _dragHomeField.ContainsScreenPoint(eventData.position, eventData.pressEventCamera);
+            _dragHomeField.EndVisualDrag(this, commitReorder);
+            if (!commitReorder)
+                transform.position = _originalPosition;
+        }
+        else
+        {
+            RestoreOriginalTransform();
         }
 
-        if (targetField == homeField && homeField != null)
-            homeField.RepositionCard(this, leftCard, rightCard);
-        else
-            RestoreOriginalTransform();
+        FinishDrag();
+    }
 
+    public void CancelActiveDrag()
+    {
+        if (!_isDragging) return;
+        if (_dragHomeField != null)
+        {
+            _dragHomeField.EndVisualDrag(this, false);
+            transform.position = _originalPosition;
+        }
+        else
+        {
+            RestoreOriginalTransform();
+        }
         FinishDrag();
     }
 
     public void ForceToIdle()
     {
-        if (_isDragging)
-        {
-            RestoreOriginalTransform();
-            FinishDrag();
-        }
-
+        CancelActiveDrag();
+        _selectionOrder = 0;
         _isSelected = false;
         _isPointerOver = false;
         RefreshState();
+    }
+
+    CardActionDropTarget FindDropTarget(PointerEventData eventData)
+    {
+        if (EventSystem.current == null) return null;
+
+        var results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(eventData, results);
+        foreach (var result in results)
+        {
+            var behaviours = result.gameObject.GetComponentsInParent<MonoBehaviour>(true);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] is CardActionDropTarget target)
+                    return target;
+            }
+        }
+        return null;
     }
 
     void RestoreOriginalTransform()
@@ -220,7 +291,10 @@ public class CardView : MonoBehaviour,
     {
         _isDragging = false;
         if (canvasGroup) canvasGroup.blocksRaycasts = true;
+        CardManager.Instance?.EndCardDrag(this);
         _originalParent = null;
+        _dragHomeField = null;
+        _pointerOffset = Vector3.zero;
         RefreshState();
     }
 }

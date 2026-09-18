@@ -21,6 +21,8 @@ public class Bootstrap : MonoBehaviour
             return;
         }
         DontDestroyOnLoad(gameObject);
+        if (GetComponent<GameFlowService>() == null)
+            gameObject.AddComponent<GameFlowService>();
     }
 
     void OnEnable()
@@ -35,7 +37,8 @@ public class Bootstrap : MonoBehaviour
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (scene.name == "MainMenu")
+        GameFlowService.RestoreGlobalRuntimeState();
+        if (scene.name == GameFlowService.MainMenuSceneName)
         {
             if (CardManager.Instance != null) CardManager.Instance.Reset();
             if (CombatManager.Instance != null) CombatManager.Instance.Reset();

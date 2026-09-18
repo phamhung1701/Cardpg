@@ -1,16 +1,20 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 public class ActionButtonsUI : MonoBehaviour
 {
     [Header("References")]
     public Button playButton;
-    public Button discardButton;
     public Button takeDamageButton;
     public Button recoverButton;
     public TMP_Text playerHealthLabel;
-    public TMP_Text statusLabel;
+    public TMP_Text turnStateLabel;
+    public TMP_Text pendingDamageLabel;
+    public TMP_Text selectionLabel;
+    public TMP_Text combatLogLabel;
+
+    TMP_Text _primaryActionLabel;
 
     void OnEnable()
     {
@@ -20,23 +24,20 @@ public class ActionButtonsUI : MonoBehaviour
             CombatManager.Instance.OnPendingDamageChanged += HandlePendingDamage;
             CombatManager.Instance.OnPlayerHealthChanged += HandlePlayerHealthChanged;
             CombatManager.Instance.OnCombatLog += HandleCombatLog;
-            HandlePlayerHealthChanged(
-                CombatManager.Instance.player.currentHealth,
-                CombatManager.Instance.player.maxHealth);
         }
         if (CardManager.Instance != null)
         {
             CardManager.Instance.OnCardSelected += HandleSelectionChanged;
             CardManager.Instance.OnDeckChanged += HandleDeckChanged;
         }
-        if (RunManager.Instance != null)
-            RunManager.Instance.OnBossRewardGranted += HandleBossRewardGranted;
 
-        if (playButton) playButton.onClick.AddListener(OnPlayClicked);
-        if (discardButton) discardButton.onClick.AddListener(OnDiscardClicked);
+        _primaryActionLabel = playButton != null ? playButton.GetComponentInChildren<TMP_Text>(true) : null;
+
+        if (playButton) playButton.onClick.AddListener(OnPrimaryActionClicked);
         if (takeDamageButton) takeDamageButton.onClick.AddListener(OnTakeDamageClicked);
         if (recoverButton) recoverButton.onClick.AddListener(OnRecoverClicked);
-        UpdateButtons();
+
+        RefreshAll();
     }
 
     void OnDisable()
@@ -53,91 +54,117 @@ public class ActionButtonsUI : MonoBehaviour
             CardManager.Instance.OnCardSelected -= HandleSelectionChanged;
             CardManager.Instance.OnDeckChanged -= HandleDeckChanged;
         }
-        if (RunManager.Instance != null)
-            RunManager.Instance.OnBossRewardGranted -= HandleBossRewardGranted;
 
-        if (playButton) playButton.onClick.RemoveListener(OnPlayClicked);
-        if (discardButton) discardButton.onClick.RemoveListener(OnDiscardClicked);
+        if (playButton) playButton.onClick.RemoveListener(OnPrimaryActionClicked);
         if (takeDamageButton) takeDamageButton.onClick.RemoveListener(OnTakeDamageClicked);
         if (recoverButton) recoverButton.onClick.RemoveListener(OnRecoverClicked);
     }
 
-    void HandleStateChanged(GameState state)
+    void HandleStateChanged(GameState _) => RefreshAll();
+    void HandlePendingDamage(int _) => RefreshAll();
+    void HandleSelectionChanged(CardView _) => RefreshAll();
+    void HandleDeckChanged() => RefreshAll();
+    void HandlePlayerHealthChanged(int _, int __) => RefreshAll();
+
+    void HandleCombatLog(string message)
     {
-        UpdateButtons();
+        if (combatLogLabel) combatLogLabel.text = message;
+        RefreshAll();
     }
 
-    void HandlePendingDamage(int damage)
+    void RefreshAll()
     {
-        UpdateButtons();
-    }
+        var combat = CombatManager.Instance;
+        var cards = CardManager.Instance;
+        if (combat == null || cards == null) return;
 
-    void HandleSelectionChanged(CardView card)
-    {
-        UpdateButtons();
-    }
+        int selectedCount = cards.SelectedCards.Count;
+        bool hasSelected = selectedCount > 0;
+        bool canPlay = combat.CanPlayCards(cards.SelectedCards, combat.currentEnemy);
+        bool canDefend = combat.CanDefendWithCards(cards.SelectedCards);
+        bool isDefense = combat.currentState == GameState.EnemyAttacking;
+        bool canTakeDamage = isDefense && combat.pendingDamage > 0;
+        bool canRecover = combat.currentState == GameState.PlayerTurn && cards.HandCount == 0;
 
-    void HandleDeckChanged()
-    {
-        UpdateButtons();
-    }
-
-    void HandlePlayerHealthChanged(int current, int max)
-    {
-        if (playerHealthLabel) playerHealthLabel.text = $"Player HP: {current}/{max}";
-        UpdateButtons();
-    }
-
-    void HandleBossRewardGranted(CardInstance reward)
-    {
-        if (statusLabel && reward != null)
-            statusLabel.text = $"Boss defeated! Gained {reward.DisplayName}.";
-    }
-
-    void HandleCombatLog(string msg)
-    {
-        if (statusLabel) statusLabel.text = msg;
-    }
-
-    void UpdateButtons()
-    {
-        var cm = CombatManager.Instance;
-        var cardMgr = CardManager.Instance;
-        if (cm == null || cardMgr == null) return;
-
-        bool hasSelected = cardMgr.selectedCard != null;
-        bool canPlay = cm.currentState == GameState.PlayerTurn && hasSelected;
-        bool canDiscard = cm.currentState == GameState.EnemyAttacking && hasSelected;
-        bool canTakeDamage = cm.currentState == GameState.EnemyAttacking && cm.pendingDamage > 0;
-        bool canRecover = cm.currentState == GameState.PlayerTurn && cardMgr.HandCount == 0;
-
-        if (playButton) playButton.interactable = canPlay;
-        if (discardButton) discardButton.interactable = canDiscard;
+        if (playButton) playButton.interactable = isDefense ? canDefend : canPlay;
+        if (_primaryActionLabel)
+        {
+            _primaryActionLabel.text = combat.currentState switch
+            {
+                GameState.PlayerTurn => "PLAY CARD",
+                GameState.EnemyAttacking when selectedCount > 0 => $"DEFEND WITH {selectedCount} CARD{(selectedCount == 1 ? string.Empty : "S")}",
+                GameState.EnemyAttacking => "SELECT CARDS TO DEFEND",
+                _ => "CARD ACTION"
+            };
+        }
         if (takeDamageButton) takeDamageButton.interactable = canTakeDamage;
         if (recoverButton) recoverButton.interactable = canRecover;
+
+        if (playerHealthLabel)
+            playerHealthLabel.text = $"PLAYER HP  {combat.player.currentHealth}/{combat.player.maxHealth}";
+
+        if (turnStateLabel)
+        {
+            turnStateLabel.text = combat.currentState switch
+            {
+                GameState.PlayerTurn => "PLAYER TURN",
+                GameState.EnemyAttacking => "DEFENSE WINDOW",
+                GameState.GameWon => "ENCOUNTER WON",
+                GameState.GameOver => "RUN DEFEAT",
+                _ => "CHOOSE A ROUTE"
+            };
+        }
+
+        if (pendingDamageLabel)
+        {
+            bool showDamage = combat.currentState == GameState.EnemyAttacking && combat.pendingDamage > 0;
+            pendingDamageLabel.gameObject.SetActive(showDamage);
+            pendingDamageLabel.text = showDamage ? $"INCOMING DAMAGE  {combat.pendingDamage}" : string.Empty;
+        }
+
+        if (selectionLabel)
+        {
+            selectionLabel.text = combat.currentState switch
+            {
+                GameState.PlayerTurn when cards.HandCount == 0 =>
+                    $"Hand empty: Recover takes {combat.TotalEnemyAttack} damage, then draws 1 card",
+                GameState.PlayerTurn when hasSelected =>
+                    $"Selected: {cards.selectedCard.data.DisplayName}  •  Press Play or drag to the enemy",
+                GameState.PlayerTurn => "Select a card, then press Play or drag it to the enemy",
+                GameState.EnemyAttacking when hasSelected =>
+                    $"{selectedCount} selected  •  Blocks {GetSelectedDefense(cards)} of {combat.pendingDamage} incoming damage",
+                GameState.EnemyAttacking => "Select card(s) to defend, drag them to the enemy, or Take Damage",
+                GameState.GameWon => "Encounter cleared — choose the next route",
+                GameState.GameOver => "The run has ended",
+                _ => "Choose an available route on the map"
+            };
+        }
     }
 
-    void OnPlayClicked()
+    static int GetSelectedDefense(CardManager cards)
     {
-        var card = CardManager.Instance?.selectedCard;
-        if (card != null)
-            CombatManager.Instance.PlayCard(card);
+        if (cards == null) return 0;
+        return CombatManager.Instance != null
+            ? CombatManager.Instance.CalculateSelectedDefense(cards.SelectedCards)
+            : 0;
     }
 
-    void OnDiscardClicked()
+    void OnPrimaryActionClicked()
     {
-        var card = CardManager.Instance?.selectedCard;
-        if (card != null)
-            CombatManager.Instance?.DiscardCard(card);
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        if (cards == null || combat == null) return;
+
+        var selection = cards.GetSelectedCardsSnapshot();
+        if (combat.currentState == GameState.PlayerTurn)
+            combat.TryPlayCards(selection, combat.currentEnemy);
+        else if (combat.currentState == GameState.EnemyAttacking)
+            combat.TryDefendWithCards(selection);
     }
 
-    void OnTakeDamageClicked()
-    {
-        CombatManager.Instance?.TakeRemainingDamage();
-    }
+    void OnPlayClicked() => OnPrimaryActionClicked();
+    void OnDiscardClicked() => OnPrimaryActionClicked();
 
-    void OnRecoverClicked()
-    {
-        CombatManager.Instance?.Recover();
-    }
+    void OnTakeDamageClicked() => CombatManager.Instance?.TakeRemainingDamage();
+    void OnRecoverClicked() => CombatManager.Instance?.Recover();
 }

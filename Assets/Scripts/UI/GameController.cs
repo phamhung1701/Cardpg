@@ -9,9 +9,13 @@ public class GameController : MonoBehaviour
     public Canvas dragCanvas;
     public CardView cardPrefab;
     public RelicData[] relicCatalog;
+    public CardEnhancementData[] enhancementCatalog;
 
     [Header("Player Prototype Balance")]
     [Min(1)] public int playerMaxHealth = 30;
+
+    [Header("Run Content")]
+    public RunContentCatalog runContentCatalog;
 
     [Header("Enemy Definitions")]
     public EnemyTypeData thiefType;
@@ -33,17 +37,21 @@ public class GameController : MonoBehaviour
         var cards = GetOrCreate<CardManager>();
         var combat = GetOrCreate<CombatManager>();
         var run = GetOrCreate<RunManager>();
-        cards.Configure(handField, dragCanvas, cardPrefab, relicCatalog);
+        cards.Configure(handField, dragCanvas, cardPrefab, relicCatalog, enhancementCatalog);
         combat.ConfigurePlayer(playerMaxHealth);
         run.thiefType = thiefType;
         run.goblinType = goblinType;
         run.knightType = knightType;
+        run.contentCatalog = runContentCatalog;
         _configured = true;
     }
 
     void Start()
     {
-        if (_configured)
+        if (!_configured) return;
+        if (FrontendLaunchContext.TryConsumeRunSeed(out string seed))
+            RunManager.Instance.StartRunWithSeed(seed);
+        else
             RunManager.Instance.StartRun();
     }
 

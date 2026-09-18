@@ -15,5 +15,16 @@ MonoBehaviour:
   id: spade_power
   displayName: Spade Power
   icon: "\u2660"
-  description: "\u2660 cards reduce enemy ATK"
+  description: Spade cards reduce enemy attack by their base value
   price: 15
+  restrictToSuit: 1
+  affectedSuit: 3
+  requiresEnhancedCard: 0
+  damageMultiplier: 1
+  flatDamageBonus: 0
+  defenseBonus: 0
+  reduceEnemyAttackByCardValue: 1
+  recycleDiscardByCardValue: 0
+  drawByCardValue: 0
+  healAfterVictory: 0
+  bonusGold: 0

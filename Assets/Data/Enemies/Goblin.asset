@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Goblin
   m_EditorClassIdentifier: Assembly-CSharp::EnemyTypeData
   enemyName: Goblin
-  maxHp: 15
-  baseAttack: 6
-  goldReward: 7
+  maxHp: 3
+  baseAttack: 2
+  goldReward: 3
+  encounterCount: 3
+  fleeAfterPlayerTurns: 0
   sourceCard: {fileID: 0}
   abilities: []

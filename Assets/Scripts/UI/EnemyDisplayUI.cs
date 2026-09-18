@@ -1,6 +1,6 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 public class EnemyDisplayUI : MonoBehaviour
 {
@@ -10,15 +10,34 @@ public class EnemyDisplayUI : MonoBehaviour
     public TMP_Text atkText;
     public TMP_Text statusText;
     public Image portrait;
+    public Slider healthBar;
+
+    EnemyRuntime _boundEnemy;
+    bool _hasExplicitBinding;
+
+    public EnemyRuntime DisplayedEnemy => _hasExplicitBinding
+        ? _boundEnemy
+        : CombatManager.Instance != null ? CombatManager.Instance.currentEnemy : null;
+
+    public void Bind(EnemyRuntime enemy)
+    {
+        _hasExplicitBinding = true;
+        _boundEnemy = enemy;
+        RefreshDisplay();
+        RefreshStateGuidance();
+    }
 
     void OnEnable()
     {
         if (CombatManager.Instance != null)
         {
             CombatManager.Instance.OnEnemyChanged += RefreshDisplay;
+            CombatManager.Instance.OnEnemiesChanged += RefreshDisplay;
             CombatManager.Instance.OnEnemyHpChanged += RefreshHp;
             CombatManager.Instance.OnStateChanged += HandleStateChanged;
         }
+        RefreshDisplay();
+        HandleStateChanged(CombatManager.Instance != null ? CombatManager.Instance.currentState : GameState.Idle);
     }
 
     void OnDisable()
@@ -26,6 +45,7 @@ public class EnemyDisplayUI : MonoBehaviour
         if (CombatManager.Instance != null)
         {
             CombatManager.Instance.OnEnemyChanged -= RefreshDisplay;
+            CombatManager.Instance.OnEnemiesChanged -= RefreshDisplay;
             CombatManager.Instance.OnEnemyHpChanged -= RefreshHp;
             CombatManager.Instance.OnStateChanged -= HandleStateChanged;
         }
@@ -33,44 +53,53 @@ public class EnemyDisplayUI : MonoBehaviour
 
     void RefreshDisplay()
     {
-        var enemy = CombatManager.Instance.currentEnemy;
-        if (enemy == null)
+        var enemy = DisplayedEnemy;
+        bool hasEnemy = enemy != null;
+
+        if (nameText) nameText.text = hasEnemy ? enemy.DisplayName.ToUpperInvariant() : "AWAITING ENCOUNTER";
+        if (hpText) hpText.text = hasEnemy ? $"HP  {enemy.currentHp}/{enemy.maxHp}" : "HP  —";
+        if (atkText) atkText.text = hasEnemy ? $"ATTACK  {enemy.currentAttack}" : "ATTACK  —";
+        if (healthBar)
         {
-            if (nameText) nameText.text = string.Empty;
-            if (hpText) hpText.text = string.Empty;
-            if (atkText) atkText.text = string.Empty;
-            return;
+            healthBar.minValue = 0;
+            healthBar.maxValue = hasEnemy ? Mathf.Max(1, enemy.maxHp) : 1;
+            healthBar.value = hasEnemy ? enemy.currentHp : 0;
         }
-        if (nameText) nameText.text = enemy.DisplayName;
-        RefreshHp();
     }
 
-    void RefreshHp()
+    void RefreshHp() => RefreshDisplay();
+
+    public void RefreshStateGuidance()
     {
-        var enemy = CombatManager.Instance.currentEnemy;
-        if (enemy == null) return;
-        if (hpText) hpText.text = $"HP: {enemy.currentHp}/{enemy.maxHp}";
-        if (atkText) atkText.text = $"ATK: {enemy.currentAttack}";
+        HandleStateChanged(CombatManager.Instance != null ? CombatManager.Instance.currentState : GameState.Idle);
     }
 
     void HandleStateChanged(GameState state)
     {
         if (statusText)
         {
-            statusText.text = state switch
+            string guidance = state switch
             {
-                GameState.PlayerTurn      => "Your Turn",
-                GameState.EnemyAttacking   => "Enemy Attacking!",
-                GameState.GameWon          => "VICTORY!",
-                GameState.GameOver         => "GAME OVER",
-                _                          => ""
+                GameState.PlayerTurn => "Choose a card to attack",
+                GameState.EnemyAttacking => "Enemy attack incoming",
+                GameState.GameWon => "Encounter cleared",
+                GameState.GameOver => "Player defeated",
+                _ => "Choose your next encounter"
             };
+            string abilities = DisplayedEnemy?.AbilitySummary;
+            statusText.text = string.IsNullOrEmpty(abilities)
+                ? guidance
+                : $"{guidance}\nTrait: {abilities}";
         }
+
         if (portrait)
         {
-            portrait.color = state == GameState.GameWon ? Color.green
-                           : state == GameState.GameOver ? Color.red
-                           : Color.white;
+            bool isSelectedTarget = DisplayedEnemy != null &&
+                ReferenceEquals(CombatManager.Instance?.currentEnemy, DisplayedEnemy);
+            portrait.color = state == GameState.GameWon ? new Color(0.35f, 0.75f, 0.48f)
+                : state == GameState.GameOver ? new Color(0.75f, 0.28f, 0.3f)
+                : isSelectedTarget ? new Color(0.42f, 0.52f, 0.72f)
+                : new Color(0.32f, 0.38f, 0.5f);
         }
     }
 }

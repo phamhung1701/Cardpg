@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -121,6 +122,24 @@ public sealed class RunProgressionTests
         AssertBossGroup(4, CardData.Rank.Queen);
         AssertBossGroup(8, CardData.Rank.King);
         Assert.That(_runManager.bossDeck.Select(boss => boss.sourceCard).Distinct().Count(), Is.EqualTo(12));
+    }
+
+    [Test]
+    public void BossVictory_RecordsCompletedMapSplitAndStartsFreshNextMapTimer()
+    {
+        _runManager.StartRunWithSeed("TIMING-SPLIT");
+        _runManager.Timing.Advance(42.5d);
+
+        typeof(RunManager).GetMethod("HandleBossVictory", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.Invoke(_runManager, null);
+
+        Assert.That(_runManager.bossIndex, Is.EqualTo(1));
+        Assert.That(_runManager.Timing.CompletedSplits, Has.Count.EqualTo(1));
+        Assert.That(_runManager.Timing.CompletedSplits[0].MapNumber, Is.EqualTo(1));
+        Assert.That(_runManager.Timing.CompletedSplits[0].ElapsedSeconds, Is.EqualTo(42.5d));
+        Assert.That(_runManager.Timing.CurrentMapIndex, Is.EqualTo(1));
+        Assert.That(_runManager.Timing.CurrentMapElapsedSeconds, Is.Zero);
+        Assert.That(_runManager.Timing.IsActive, Is.True);
     }
 
     [Test]

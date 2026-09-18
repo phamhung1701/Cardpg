@@ -13,28 +13,33 @@ public class ShopUI : MonoBehaviour
 
     void OnEnable()
     {
-        if (CombatManager.Instance != null)
-            CombatManager.Instance.OnEncounterResult += HandleEncounterResult;
+        if (RunManager.Instance != null)
+        {
+            RunManager.Instance.OnShowShop += Open;
+            RunManager.Instance.OnHideShop += Close;
+        }
         if (CardManager.Instance != null)
+        {
             CardManager.Instance.OnGoldChanged += HandleGoldChanged;
+            CardManager.Instance.OnBuildChanged += RefreshItems;
+        }
         if (continueButton) continueButton.onClick.AddListener(OnContinue);
+        Close();
     }
 
     void OnDisable()
     {
-        if (CombatManager.Instance != null)
-            CombatManager.Instance.OnEncounterResult -= HandleEncounterResult;
+        if (RunManager.Instance != null)
+        {
+            RunManager.Instance.OnShowShop -= Open;
+            RunManager.Instance.OnHideShop -= Close;
+        }
         if (CardManager.Instance != null)
+        {
             CardManager.Instance.OnGoldChanged -= HandleGoldChanged;
+            CardManager.Instance.OnBuildChanged -= RefreshItems;
+        }
         if (continueButton) continueButton.onClick.RemoveListener(OnContinue);
-    }
-
-    void HandleEncounterResult(EncounterResult result)
-    {
-        if (result == EncounterResult.Victory)
-            Open();
-        else
-            Close();
     }
 
     void HandleGoldChanged(int gold)
@@ -62,21 +67,34 @@ public class ShopUI : MonoBehaviour
             Destroy(child.gameObject);
 
         var cm = CardManager.Instance;
-        foreach (var relic in cm.relicCatalog)
+        var offers = RunManager.Instance != null
+            ? RunManager.Instance.GetCurrentShopOffers()
+            : System.Array.Empty<ShopOffer>();
+        foreach (var offer in offers)
         {
-            bool owned = cm.HasRelic(relic.id);
-            bool canAfford = cm.gold >= relic.price;
+            string unavailableReason = RunManager.Instance != null
+                ? RunManager.Instance.GetShopOfferUnavailableReason(offer.StableId)
+                : "Offer unavailable";
+            bool available = string.IsNullOrEmpty(unavailableReason);
 
             var btn = Instantiate(itemButtonPrefab, itemsContainer);
+            btn.name = $"ShopOffer_{offer.StableId.Replace(':', '_')}";
             var text = btn.GetComponentInChildren<TMP_Text>();
-            if (text) text.text = $"{relic.icon} {relic.displayName} - {relic.price}g\n{relic.description}";
+            if (text)
+            {
+                string status = available ? string.Empty : $"\n<color=#DFA0A0>{unavailableReason}</color>";
+                text.text = $"{offer.Icon} {offer.DisplayName} - {offer.price}g\n{offer.Description(cm)}{status}";
+            }
 
             var button = btn.GetComponent<Button>();
             if (button)
             {
-                button.interactable = !owned && canAfford;
-                var r = relic;
-                button.onClick.AddListener(() => { if (cm.BuyRelic(r)) RefreshItems(); });
+                button.interactable = available;
+                string stableId = offer.StableId;
+                button.onClick.AddListener(() =>
+                {
+                    if (RunManager.Instance.PurchaseShopOffer(stableId)) RefreshItems();
+                });
             }
         }
     }

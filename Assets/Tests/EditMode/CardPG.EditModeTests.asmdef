@@ -2,7 +2,8 @@
   "name": "CardPG.EditModeTests",
   "rootNamespace": "",
   "references": [
-    "CardPG.Runtime"
+    "CardPG.Runtime",
+    "Unity.TextMeshPro"
   ],
   "includePlatforms": [
     "Editor"

@@ -1,24 +1,27 @@
+using System;
 using System.Collections.Generic;
 
 public static class ListExtensions
 {
-    private static readonly System.Random _rng = new System.Random();
-
-    public static void Shuffle<T>(this IList<T> list)
+    public static void Shuffle<T>(this IList<T> list, IRandomSource random)
     {
+        if (list == null) throw new ArgumentNullException(nameof(list));
+        if (random == null) throw new ArgumentNullException(nameof(random));
+
         int n = list.Count;
         while (n > 1)
         {
             n--;
-            int k = _rng.Next(n + 1);
+            int k = random.NextInt(0, n + 1);
             (list[k], list[n]) = (list[n], list[k]);
         }
     }
 
-    public static T RandomPick<T>(this IList<T> list)
+    public static T RandomPick<T>(this IList<T> list, IRandomSource random)
     {
-        if (list.Count == 0) return default;
-        return list[_rng.Next(list.Count)];
+        if (list == null) throw new ArgumentNullException(nameof(list));
+        if (random == null) throw new ArgumentNullException(nameof(random));
+        return list.Count == 0 ? default : list[random.NextInt(0, list.Count)];
     }
 
     public static void RemoveRange<T>(this IList<T> list, int index, int count)

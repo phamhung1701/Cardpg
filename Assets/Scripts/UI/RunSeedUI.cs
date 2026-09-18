@@ -1,0 +1,28 @@
+using TMPro;
+using UnityEngine;
+
+public class RunSeedUI : MonoBehaviour
+{
+    public TMP_Text seedDisplayLabel;
+
+    void OnEnable()
+    {
+        if (RunManager.Instance != null)
+            RunManager.Instance.OnRunStarted += HandleRunStarted;
+        Refresh();
+    }
+
+    void OnDisable()
+    {
+        if (RunManager.Instance != null)
+            RunManager.Instance.OnRunStarted -= HandleRunStarted;
+    }
+
+    void HandleRunStarted(string _) => Refresh();
+
+    void Refresh()
+    {
+        string seed = RunManager.Instance != null ? RunManager.Instance.RunSeed : string.Empty;
+        if (seedDisplayLabel) seedDisplayLabel.text = $"SEED  {seed}";
+    }
+}

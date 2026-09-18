@@ -1,22 +1,32 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
-public class MainMenuUI : MonoBehaviour
+public sealed class MainMenuUI : MonoBehaviour
 {
-    [Header("Settings")]
-    public string gameSceneName = "Game";
+    public FrontendMenuNavigator navigator;
+    public Button newRunButton;
+    public Button settingsButton;
+    public Button creditsButton;
+    public Button quitButton;
 
-    public void OnPlayClicked()
+    void OnEnable()
     {
-        SceneManager.LoadScene(gameSceneName);
+        if (newRunButton) newRunButton.onClick.AddListener(ShowRunSetup);
+        if (settingsButton) settingsButton.onClick.AddListener(ShowSettings);
+        if (creditsButton) creditsButton.onClick.AddListener(ShowCredits);
+        if (quitButton) quitButton.onClick.AddListener(Quit);
     }
 
-    public void OnQuitClicked()
+    void OnDisable()
     {
-#if UNITY_EDITOR
-        UnityEditor.EditorApplication.isPlaying = false;
-#else
-        Application.Quit();
-#endif
+        if (newRunButton) newRunButton.onClick.RemoveListener(ShowRunSetup);
+        if (settingsButton) settingsButton.onClick.RemoveListener(ShowSettings);
+        if (creditsButton) creditsButton.onClick.RemoveListener(ShowCredits);
+        if (quitButton) quitButton.onClick.RemoveListener(Quit);
     }
+
+    public void ShowRunSetup() => navigator?.ShowRunSetup();
+    public void ShowSettings() => navigator?.ShowSettings();
+    public void ShowCredits() => navigator?.ShowCredits();
+    public void Quit() => GameFlowService.Instance?.Quit();
 }

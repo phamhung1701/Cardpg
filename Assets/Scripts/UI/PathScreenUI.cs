@@ -67,35 +67,92 @@ public class PathScreenUI : MonoBehaviour
         foreach (Transform child in mapContainer)
             Destroy(child.gameObject);
 
-        var rm = RunManager.Instance;
-        foreach (var node in rm.currentPath)
+        var run = RunManager.Instance;
+        if (run == null) return;
+
+        foreach (var node in run.currentPath)
         {
-            var btn = Instantiate(nodeButtonPrefab, mapContainer);
-            var text = btn.GetComponentInChildren<TMP_Text>();
-            if (text)
+            foreach (int nextId in node.next)
             {
-                text.text = node.revealed
-                    ? $"{rm.GetNodeLabel(node)}\n{rm.GetNodeDesc(node)}"
-                    : "?\n???";
+                var next = run.currentPath.Find(candidate => candidate.id == nextId);
+                if (next != null)
+                    CreateConnection(GridToLocal(node.col, node.row), GridToLocal(next.col, next.row));
+            }
+        }
+
+        foreach (var node in run.currentPath)
+        {
+            var buttonObject = Instantiate(nodeButtonPrefab, mapContainer);
+            buttonObject.name = $"Node_{node.id}_{node.kind}";
+            var label = buttonObject.GetComponentInChildren<TMP_Text>();
+            if (label)
+            {
+                label.text = node.revealed || node.completed
+                    ? $"{GetNodeSymbol(node.kind)}  {run.GetNodeLabel(node)}\n<size=70%>{run.GetNodeDesc(node)}</size>"
+                    : "?\n<size=70%>Unknown route</size>";
             }
 
-            btn.transform.localPosition = GridToLocal(node.col, node.row);
+            buttonObject.transform.localPosition = GridToLocal(node.col, node.row);
 
-            var button = btn.GetComponent<Button>();
+            var button = buttonObject.GetComponent<Button>();
             if (button)
             {
                 button.interactable = !node.completed && node.accessible;
-                var img = btn.GetComponent<Image>();
-                if (img)
-                {
-                    img.color = node.completed ? new Color(0.6f, 1f, 0.6f)
-                              : !node.accessible ? new Color(0.5f, 0.5f, 0.5f)
-                              : Color.white;
-                }
+                var image = buttonObject.GetComponent<Image>();
+                if (image)
+                    image.color = GetNodeColor(node);
                 int id = node.id;
-                button.onClick.AddListener(() => rm.OnPathChosen(id));
+                button.onClick.AddListener(() => run.OnPathChosen(id));
             }
         }
+    }
+
+    void CreateConnection(Vector3 from, Vector3 to)
+    {
+        var connection = new GameObject("RouteConnection", typeof(RectTransform), typeof(Image));
+        connection.layer = gameObject.layer;
+        connection.transform.SetParent(mapContainer, false);
+        connection.transform.SetAsFirstSibling();
+
+        var rect = connection.GetComponent<RectTransform>();
+        Vector2 delta = (Vector2)(to - from);
+        rect.anchoredPosition = ((Vector2)from + (Vector2)to) * 0.5f;
+        rect.sizeDelta = new Vector2(delta.magnitude, 4f);
+        rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+
+        var image = connection.GetComponent<Image>();
+        image.color = new Color(0.28f, 0.34f, 0.44f, 0.8f);
+        image.raycastTarget = false;
+    }
+
+    static string GetNodeSymbol(MapNodeType kind) => kind switch
+    {
+        MapNodeType.Combat => "FIGHT",
+        MapNodeType.Elite => "ELITE",
+        MapNodeType.Shop => "SHOP",
+        MapNodeType.Event => "EVENT",
+        MapNodeType.Upgrade => "UP",
+        MapNodeType.Risk => "RISK",
+        MapNodeType.Boss => "BOSS",
+        _ => "NODE"
+    };
+
+    static Color GetNodeColor(PathNode node)
+    {
+        if (node.completed) return new Color(0.24f, 0.52f, 0.34f);
+        if (!node.accessible) return new Color(0.18f, 0.21f, 0.27f);
+        if (!node.revealed) return new Color(0.36f, 0.3f, 0.48f);
+
+        return node.kind switch
+        {
+            MapNodeType.Elite => new Color(0.64f, 0.3f, 0.26f),
+            MapNodeType.Shop => new Color(0.5f, 0.4f, 0.18f),
+            MapNodeType.Event => new Color(0.28f, 0.45f, 0.58f),
+            MapNodeType.Upgrade => new Color(0.28f, 0.56f, 0.42f),
+            MapNodeType.Risk => new Color(0.54f, 0.28f, 0.48f),
+            MapNodeType.Boss => new Color(0.64f, 0.24f, 0.28f),
+            _ => new Color(0.26f, 0.43f, 0.68f)
+        };
     }
 
     Vector3 GridToLocal(float col, float row)

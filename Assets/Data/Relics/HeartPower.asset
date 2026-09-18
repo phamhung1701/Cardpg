@@ -15,5 +15,16 @@ MonoBehaviour:
   id: heart_power
   displayName: Heart Power
   icon: "\u2665"
-  description: "\u2665 cards recycle discard to deck"
+  description: Heart cards recycle discard cards equal to their base value
   price: 20
+  restrictToSuit: 1
+  affectedSuit: 0
+  requiresEnhancedCard: 0
+  damageMultiplier: 1
+  flatDamageBonus: 0
+  defenseBonus: 0
+  reduceEnemyAttackByCardValue: 0
+  recycleDiscardByCardValue: 1
+  drawByCardValue: 0
+  healAfterVictory: 0
+  bonusGold: 0
