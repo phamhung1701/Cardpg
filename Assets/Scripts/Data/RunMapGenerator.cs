@@ -37,7 +37,7 @@ public static class RunMapGenerator
                     col = col,
                     row = row,
                     accessible = col == 0,
-                    revealed = col == 0 && !hidden,
+                    revealed = kind == MapNodeType.Elite || (col == 0 && !hidden),
                     hidden = hidden,
                     completed = false,
                     mapIndex = mapIndex,

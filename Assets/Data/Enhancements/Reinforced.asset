@@ -13,11 +13,21 @@ MonoBehaviour:
   m_Name: Reinforced
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: reinforced
-  displayName: Reinforced
+  displayName: Hardened
   icon: DEF
-  description: +3 defensive block
+  description: This card blocks +3 damage
   price: 12
+  canonicalId: enh_002
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects:
+  - kind: 2
+    trigger: 1
+    amount: 3
+    conditions: []
+  ruleModifiers: []
   attackBonus: 0
-  defenseBonus: 3
+  defenseBonus: 0
   healOnPlay: 0
   drawOnPlay: 0

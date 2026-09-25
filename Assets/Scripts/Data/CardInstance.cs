@@ -27,9 +27,11 @@ public sealed class CardInstance
     public CardData.Suit suit => Suit;
     public CardData.Rank rank => Rank;
 
+    public GameplayEffectState EffectState { get; } = new();
+
     public int BaseAttackValue => definition.AttackValue;
-    public int AttackValue => Mathf.Max(0, BaseAttackValue + (enhancement != null ? enhancement.attackBonus : 0));
-    public int DefenseValue => Mathf.Max(0, BaseAttackValue + (enhancement != null ? enhancement.defenseBonus : 0));
+    public int AttackValue => Mathf.Max(0, BaseAttackValue + GameplayEffectResolver.CardLocalFlat(this, GameplayEffectKind.FlatAttack));
+    public int DefenseValue => Mathf.Max(0, BaseAttackValue + GameplayEffectResolver.CardLocalFlat(this, GameplayEffectKind.FlatBlock));
     public string DisplayName => enhancement != null
         ? $"{definition.DisplayName} [{enhancement.displayName}]"
         : definition.DisplayName;

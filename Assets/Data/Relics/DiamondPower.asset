@@ -13,10 +13,24 @@ MonoBehaviour:
   m_Name: DiamondPower
   m_EditorClassIdentifier: Assembly-CSharp::RelicData
   id: diamond_power
-  displayName: Diamond Power
+  displayName: Diamond Emblem
   icon: "\u2666"
-  description: Diamond cards draw cards equal to their base value
+  description: Playing a Diamond card draws up to 2 cards
   price: 20
+  capacityCategory: 0
+  canonicalId: rel_003
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects:
+  - kind: 5
+    trigger: 2
+    amount: 2
+    conditions:
+    - kind: 0
+      suit: 1
+      expected: 0
+  ruleModifiers: []
   restrictToSuit: 1
   affectedSuit: 1
   requiresEnhancedCard: 0
@@ -25,6 +39,6 @@ MonoBehaviour:
   defenseBonus: 0
   reduceEnemyAttackByCardValue: 0
   recycleDiscardByCardValue: 0
-  drawByCardValue: 1
+  drawByCardValue: 0
   healAfterVictory: 0
   bonusGold: 0

@@ -1,5 +1,11 @@
 using UnityEngine;
 
+public enum ArtifactCapacityCategory
+{
+    Persistent = 0,
+    NonSlot = 1
+}
+
 [CreateAssetMenu(fileName = "Artifact", menuName = "Game/Artifact Data")]
 public class RelicData : ScriptableObject
 {
@@ -9,7 +15,23 @@ public class RelicData : ScriptableObject
     [TextArea] public string description;
     [Min(0)] public int price;
 
-    [Header("Card Filter")]
+    [Header("Capacity")]
+    // Existing authored Artifacts default to Persistent; future temporary/system/quest
+    // Artifacts may be marked NonSlot without relying on names or creating a new inventory.
+    public ArtifactCapacityCategory capacityCategory = ArtifactCapacityCategory.Persistent;
+    public bool OccupiesCapacitySlot => capacityCategory == ArtifactCapacityCategory.Persistent;
+
+    [Header("Canonical Content Metadata")]
+    public string canonicalId;
+    public string rarity = "Common";
+    [Min(1)] public int tier = 1;
+    public string upgradeFromId;
+
+    [Header("Typed Gameplay Effects")]
+    public GameplayEffectDefinition[] effects = System.Array.Empty<GameplayEffectDefinition>();
+    public GameplayRuleModifierData[] ruleModifiers = System.Array.Empty<GameplayRuleModifierData>();
+
+    [Header("Legacy Prototype Hooks (used only without typed effects)")]
     public bool restrictToSuit;
     public CardData.Suit affectedSuit;
     public bool requiresEnhancedCard;
@@ -33,14 +55,9 @@ public class RelicData : ScriptableObject
         return !requiresEnhancedCard || card.Enhancement != null;
     }
 
-    public int ModifyAttack(CardInstance card, int currentDamage)
-    {
-        if (!Matches(card)) return currentDamage;
-        return Mathf.Max(0, currentDamage * Mathf.Max(1, damageMultiplier) + flatDamageBonus);
-    }
+    public int ModifyAttack(CardInstance card, int currentDamage) =>
+        GameplayEffectResolver.ModifyWithSingleArtifact(this, card, currentDamage, false);
 
-    public int ModifyDefense(CardInstance card, int currentDefense)
-    {
-        return Matches(card) ? Mathf.Max(0, currentDefense + defenseBonus) : currentDefense;
-    }
+    public int ModifyDefense(CardInstance card, int currentDefense) =>
+        GameplayEffectResolver.ModifyWithSingleArtifact(this, card, currentDefense, true);
 }

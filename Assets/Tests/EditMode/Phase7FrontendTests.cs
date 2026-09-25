@@ -79,6 +79,65 @@ public sealed class Phase7FrontendTests
     }
 
     [Test]
+    public void RunSetup_BlankIsOptionalAndEachNewLaunchGeneratesAFreshSeed()
+    {
+        var setup = CreateComponent<RunSetupUI>("Run Setup");
+        setup.seedInput = CreateComponent<TMP_InputField>("Seed Input");
+        setup.seedPreviewLabel = CreateComponent<TextMeshProUGUI>("Seed Preview");
+        setup.seedInput.text = "OLD-RUN";
+
+        setup.Prepare();
+        Assert.That(setup.seedInput.text, Is.Empty);
+        Assert.That(setup.seedPreviewLabel.text, Does.Contain("fresh random seed"));
+
+        string first = RunSetupUI.ResolveStartSeed(setup.seedInput.text);
+        string second = RunSetupUI.ResolveStartSeed("   ");
+        Assert.That(first, Is.Not.Empty.And.Not.EqualTo("CARDPG"));
+        Assert.That(second, Is.Not.Empty.And.Not.EqualTo(first));
+        Assert.That(setup.seedInput.text, Is.Empty, "Generated seeds must not turn into sticky custom input.");
+    }
+
+    [Test]
+    public void RunSetup_CustomSeedAndOneShotHandoffPreserveActualNormalizedSeed()
+    {
+        string custom = RunSetupUI.ResolveStartSeed("  My Shareable Seed  ");
+        Assert.That(custom, Is.EqualTo("My Shareable Seed"));
+        Assert.That(RunSetupUI.ResolveStartSeed("  My Shareable Seed  "), Is.EqualTo(custom));
+        FrontendLaunchContext.RequestRun(custom);
+        Assert.That(FrontendLaunchContext.TryConsumeRunSeed(out string handoff), Is.True);
+        Assert.That(handoff, Is.EqualTo(custom));
+        Assert.That(FrontendLaunchContext.TryConsumeRunSeed(out _), Is.False);
+
+        var cards = CreateComponent<CardManager>("Seed CardManager");
+        cards.Configure(null, null, null, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        var combat = CreateComponent<CombatManager>("Seed CombatManager");
+        combat.ConfigurePlayer(30);
+        var run = CreateComponent<RunManager>("Seed RunManager");
+        run.thiefType = CreateEnemy("Thief", 10, 4, 5);
+        run.goblinType = CreateEnemy("Goblin", 15, 6, 7);
+        run.knightType = CreateEnemy("Knight", 25, 8, 10);
+        run.StartRunWithSeed(handoff);
+        Assert.That(run.RunSeed, Is.EqualTo(custom));
+        string firstMap = string.Join(",", run.currentPath.Select(node => $"{node.kind}:{node.row}:{node.col}"));
+        run.RestartRun();
+        Assert.That(run.RunSeed, Is.EqualTo(custom));
+        Assert.That(string.Join(",", run.currentPath.Select(node => $"{node.kind}:{node.row}:{node.col}")), Is.EqualTo(firstMap));
+
+        string fresh = RunSetupUI.ResolveStartSeed("");
+        FrontendLaunchContext.RequestRun(fresh);
+        Assert.That(FrontendLaunchContext.TryConsumeRunSeed(out string nextHandoff), Is.True);
+        run.StartRunWithSeed(nextHandoff);
+        Assert.That(run.RunSeed, Is.EqualTo(fresh).And.Not.EqualTo(custom));
+        run.RestartRun();
+        Assert.That(run.RunSeed, Is.EqualTo(fresh));
+        string anotherFresh = RunSetupUI.ResolveStartSeed("");
+        FrontendLaunchContext.RequestRun(anotherFresh);
+        Assert.That(FrontendLaunchContext.TryConsumeRunSeed(out string laterHandoff), Is.True);
+        run.StartRunWithSeed(laterHandoff);
+        Assert.That(run.RunSeed, Is.EqualTo(anotherFresh).And.Not.EqualTo(fresh));
+    }
+
+    [Test]
     public void ModalCoordinator_NestsLayersAndRestoresGameplayStateOnlyAfterFinalPop()
     {
         var host = CreateGameObject("Coordinator Host");
@@ -175,7 +234,9 @@ public sealed class Phase7FrontendTests
         run.thiefType = CreateEnemy("Thief", 10, 4, 5);
         run.goblinType = CreateEnemy("Goblin", 15, 6, 7);
         run.knightType = CreateEnemy("Knight", 25, 8, 10);
-        run.StartRunWithSeed("PHASE7-RESULT");
+        string generatedSeed = RunSetupUI.ResolveStartSeed("");
+        run.StartRunWithSeed(generatedSeed);
+        Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));
         cards.AddGold(27);
         run.Timing.Advance(62.8d);
         run.Timing.CompleteCurrentMap();
@@ -201,7 +262,7 @@ public sealed class Phase7FrontendTests
 
         Assert.That(panel.activeSelf, Is.True);
         Assert.That(title.text, Is.EqualTo("RUN DEFEAT"));
-        Assert.That(body.text, Does.Contain("PHASE7-RESULT"));
+        Assert.That(body.text, Does.StartWith($"Seed  {run.RunSeed}\n"));
         Assert.That(body.text, Does.Contain("Gold  27"));
         Assert.That(body.text, Does.Contain("Bosses Defeated"));
         Assert.That(body.text, Does.Contain("Total Run Time  01:08"));
@@ -209,13 +270,20 @@ public sealed class Phase7FrontendTests
         Assert.That(body.text, Does.Contain("Map 2  00:05 (incomplete)"));
 
         result.RetrySameSeed();
-        Assert.That(run.RunSeed, Is.EqualTo("PHASE7-RESULT"));
+        Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));
         Assert.That(run.bossIndex, Is.Zero);
         Assert.That(run.Timing.IsActive, Is.True);
         Assert.That(run.Timing.TotalElapsedSeconds, Is.Zero);
         Assert.That(run.Timing.CompletedSplits, Is.Empty);
         Assert.That(cards.gold, Is.Zero);
         Assert.That(panel.activeSelf, Is.False);
+
+        typeof(RunResultUI).GetMethod("ShowResult", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.Invoke(result, new object[] { true });
+        Assert.That(title.text, Is.EqualTo("RUN VICTORY"));
+        Assert.That(body.text, Does.StartWith($"Seed  {run.RunSeed}\n"));
+        result.RetrySameSeed();
+        Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));
     }
 
     T CreateComponent<T>(string name) where T : Component

@@ -29,8 +29,8 @@ public sealed class RunSetupUI : MonoBehaviour
 
     public void Prepare()
     {
-        if (seedInput == null || string.IsNullOrWhiteSpace(seedInput.text)) RandomizeSeed();
-        else RefreshPreview();
+        if (seedInput) seedInput.text = string.Empty;
+        RefreshPreview();
     }
 
     public void RandomizeSeed()
@@ -42,10 +42,13 @@ public sealed class RunSetupUI : MonoBehaviour
 
     public void StartRun()
     {
-        string seed = RunRandomContext.NormalizeSeed(seedInput != null ? seedInput.text : string.Empty);
-        if (seedInput) seedInput.text = seed;
+        string seed = ResolveStartSeed(seedInput != null ? seedInput.text : string.Empty);
         GameFlowService.Instance?.StartRun(seed);
     }
+
+    public static string ResolveStartSeed(string input) => string.IsNullOrWhiteSpace(input)
+        ? RunSeedUtility.GenerateSeed()
+        : RunRandomContext.NormalizeSeed(input);
 
     public void Back() => navigator?.ShowHome();
 
@@ -54,6 +57,8 @@ public sealed class RunSetupUI : MonoBehaviour
     void RefreshPreview()
     {
         if (seedPreviewLabel)
-            seedPreviewLabel.text = $"RUN SEED  •  {RunRandomContext.NormalizeSeed(seedInput != null ? seedInput.text : string.Empty)}";
+            seedPreviewLabel.text = string.IsNullOrWhiteSpace(seedInput != null ? seedInput.text : string.Empty)
+                ? "Leave blank for a fresh random seed"
+                : $"RUN SEED  •  {RunRandomContext.NormalizeSeed(seedInput.text)}";
     }
 }

@@ -24,25 +24,21 @@ public static class GameDataGenerator
     {
         EnsureFolder(ArtifactDir);
 
-        var club = CreateArtifact("ClubPower", "club_power", "Club Power", "♣", "Club cards deal double damage", 15);
-        club.restrictToSuit = true;
-        club.affectedSuit = CardData.Suit.Clubs;
-        club.damageMultiplier = 2;
+        var club = CreateArtifact("ClubPower", "club_power", "Club Emblem", "♣", "Club cards deal double damage", 15);
+        ConfigureCoreArtifact(club, "rel_001", GameplayEffectKind.AttackMultiplier,
+            GameplayEffectTrigger.AttackCalculated, 2, CardData.Suit.Clubs);
 
-        var spade = CreateArtifact("SpadePower", "spade_power", "Spade Power", "♠", "Spade cards reduce enemy attack by their base value", 15);
-        spade.restrictToSuit = true;
-        spade.affectedSuit = CardData.Suit.Spades;
-        spade.reduceEnemyAttackByCardValue = true;
+        var spade = CreateArtifact("SpadePower", "spade_power", "Spade Emblem", "♠", "Spade cards block double after card Enhancement block bonuses", 15);
+        ConfigureCoreArtifact(spade, "rel_004", GameplayEffectKind.BlockMultiplier,
+            GameplayEffectTrigger.DefenseCalculated, 2, CardData.Suit.Spades);
 
-        var heart = CreateArtifact("HeartPower", "heart_power", "Heart Power", "♥", "Heart cards recycle discard cards equal to their base value", 20);
-        heart.restrictToSuit = true;
-        heart.affectedSuit = CardData.Suit.Hearts;
-        heart.recycleDiscardByCardValue = true;
+        var heart = CreateArtifact("HeartPower", "heart_power", "Heart Emblem", "♥", "Playing a Heart card heals 1 HP", 20);
+        ConfigureCoreArtifact(heart, "rel_002", GameplayEffectKind.Heal,
+            GameplayEffectTrigger.CardCommitted, 1, CardData.Suit.Hearts);
 
-        var diamond = CreateArtifact("DiamondPower", "diamond_power", "Diamond Power", "♦", "Diamond cards draw cards equal to their base value", 20);
-        diamond.restrictToSuit = true;
-        diamond.affectedSuit = CardData.Suit.Diamonds;
-        diamond.drawByCardValue = true;
+        var diamond = CreateArtifact("DiamondPower", "diamond_power", "Diamond Emblem", "♦", "Playing a Diamond card draws up to 2 cards", 20);
+        ConfigureCoreArtifact(diamond, "rel_003", GameplayEffectKind.Draw,
+            GameplayEffectTrigger.CardCommitted, 2, CardData.Suit.Diamonds);
 
         var artisan = CreateArtifact("ArtisanTools", "artisan_tools", "Artisan Tools", "ENH", "Enhanced cards deal +3 damage", 25);
         artisan.requiresEnhancedCard = true;
@@ -61,10 +57,14 @@ public static class GameDataGenerator
     public static void GenerateEnhancements()
     {
         EnsureFolder(EnhancementDir);
-        ConfigureEnhancement(CreateEnhancement("Sharpened", "sharpened", "Sharpened", "ATK", "+3 attack damage", 12), 3, 0, 0, 0);
-        ConfigureEnhancement(CreateEnhancement("Reinforced", "reinforced", "Reinforced", "DEF", "+3 defensive block", 12), 0, 3, 0, 0);
-        ConfigureEnhancement(CreateEnhancement("Mending", "mending", "Mending", "HP", "Heal 2 HP when played", 15), 0, 0, 2, 0);
-        ConfigureEnhancement(CreateEnhancement("Quickdraw", "quickdraw", "Quickdraw", "DRAW", "Draw 1 card when played", 18), 0, 0, 0, 1);
+        ConfigureCoreEnhancement(CreateEnhancement("Sharpened", "sharpened", "Sharpened", "ATK", "+3 attack damage", 12),
+            "enh_001", GameplayEffectKind.FlatAttack, GameplayEffectTrigger.AttackCalculated, 3);
+        ConfigureCoreEnhancement(CreateEnhancement("Reinforced", "reinforced", "Hardened", "DEF", "+3 defensive block", 12),
+            "enh_002", GameplayEffectKind.FlatBlock, GameplayEffectTrigger.DefenseCalculated, 3);
+        ConfigureCoreEnhancement(CreateEnhancement("Mending", "mending", "Mending", "HP", "Heal 2 HP at each player-turn start while this card is in hand", 15),
+            "enh_003", GameplayEffectKind.Heal, GameplayEffectTrigger.PlayerTurnStart, 2);
+        ConfigureCoreEnhancement(CreateEnhancement("Quickdraw", "quickdraw", "Quickdraw", "DRAW", "Draw 1 card when played", 18),
+            "enh_004", GameplayEffectKind.Draw, GameplayEffectTrigger.CardCommitted, 1);
         Debug.Log("Enhancement assets created or updated.");
     }
 
@@ -126,12 +126,41 @@ public static class GameDataGenerator
         return enhancement;
     }
 
-    static void ConfigureEnhancement(CardEnhancementData enhancement, int attack, int defense, int heal, int draw)
+    static void ConfigureCoreArtifact(RelicData artifact, string canonicalId,
+        GameplayEffectKind kind, GameplayEffectTrigger trigger, int amount, CardData.Suit suit)
     {
-        enhancement.attackBonus = attack;
-        enhancement.defenseBonus = defense;
-        enhancement.healOnPlay = heal;
-        enhancement.drawOnPlay = draw;
+        artifact.canonicalId = canonicalId;
+        artifact.rarity = "Common";
+        artifact.tier = 1;
+        artifact.upgradeFromId = "";
+        artifact.restrictToSuit = true;
+        artifact.affectedSuit = suit;
+        artifact.effects = new[] { new GameplayEffectDefinition
+        {
+            kind = kind, trigger = trigger, amount = amount,
+            conditions = new[] { new GameplayEffectCondition
+            {
+                kind = GameplayConditionKind.CardSuit, suit = suit
+            } }
+        } };
+        EditorUtility.SetDirty(artifact);
+    }
+
+    static void ConfigureCoreEnhancement(CardEnhancementData enhancement, string canonicalId,
+        GameplayEffectKind kind, GameplayEffectTrigger trigger, int amount)
+    {
+        enhancement.canonicalId = canonicalId;
+        enhancement.rarity = "Common";
+        enhancement.tier = 1;
+        enhancement.upgradeFromId = "";
+        enhancement.attackBonus = 0;
+        enhancement.defenseBonus = 0;
+        enhancement.healOnPlay = 0;
+        enhancement.drawOnPlay = 0;
+        enhancement.effects = new[] { new GameplayEffectDefinition
+        {
+            kind = kind, trigger = trigger, amount = amount
+        } };
         EditorUtility.SetDirty(enhancement);
     }
 

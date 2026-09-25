@@ -136,10 +136,12 @@ public sealed class Phase5BuildProgressionTests
 
         var enhancementOffer = _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Enhancement);
         int beforeEnhancement = _cards.gold;
-        Assert.That(_run.PurchaseShopOffer(enhancementOffer.StableId), Is.True);
+        var chosenCard = _cards.ownedCards.First(card => card.Enhancement == null);
+        Assert.That(_run.PurchaseShopOffer(enhancementOffer.StableId), Is.False, "A target is required");
+        Assert.That(_run.PurchaseShopEnhancement(enhancementOffer.StableId, chosenCard.Id), Is.True);
         Assert.That(_cards.gold, Is.EqualTo(beforeEnhancement - enhancementOffer.price));
-        Assert.That(_cards.FindOwnedCard(enhancementOffer.cardId).Enhancement, Is.SameAs(enhancementOffer.enhancement));
-        Assert.That(_run.PurchaseShopOffer(enhancementOffer.StableId), Is.False);
+        Assert.That(_cards.FindOwnedCard(chosenCard.Id).Enhancement, Is.SameAs(enhancementOffer.enhancement));
+        Assert.That(_run.PurchaseShopEnhancement(enhancementOffer.StableId, chosenCard.Id), Is.False);
     }
 
     [Test]
@@ -151,11 +153,13 @@ public sealed class Phase5BuildProgressionTests
         _run.OnPathChosen(upgrade.id);
         var offer = _run.GetCurrentUpgradeOffers()[0];
 
-        Assert.That(_run.ChooseUpgradeOffer(0), Is.True);
-        Assert.That(_cards.FindOwnedCard(offer.cardId).Enhancement, Is.SameAs(offer.enhancement));
+        var chosenCard = _cards.ownedCards.First(card => card.Enhancement == null);
+        Assert.That(_run.ChooseUpgradeOffer(0), Is.False, "A target is required");
+        Assert.That(_run.ChooseUpgradeOffer(0, chosenCard.Id), Is.True);
+        Assert.That(_cards.FindOwnedCard(chosenCard.Id).Enhancement, Is.SameAs(offer.enhancement));
         Assert.That(upgrade.completed, Is.True);
         Assert.That(_run.ActiveNode, Is.Null);
-        Assert.That(_run.ChooseUpgradeOffer(0), Is.False);
+        Assert.That(_run.ChooseUpgradeOffer(0, chosenCard.Id), Is.False);
     }
 
     [Test]

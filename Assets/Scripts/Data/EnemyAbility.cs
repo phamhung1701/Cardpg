@@ -17,6 +17,17 @@ public class EnemyAbility : ScriptableObject
     public EnemyAbilityEffect effect;
     [Min(0)] public int amount = 1;
 
+    public virtual int ModifyIncomingDamage(
+        EnemyRuntime enemy,
+        CombatManager context,
+        DamageRequest request,
+        int damage)
+    {
+        return request.Origin == CombatDamageOrigin.Card
+            ? ModifyIncomingCardDamage(enemy, context, damage)
+            : damage;
+    }
+
     public virtual int ModifyIncomingCardDamage(EnemyRuntime enemy, CombatManager context, int damage)
     {
         return effect == EnemyAbilityEffect.ReduceIncomingCardDamage
@@ -28,6 +39,13 @@ public class EnemyAbility : ScriptableObject
     {
         if (effect == EnemyAbilityEffect.IncreaseAttackOnEncounterStart)
             enemy.IncreaseAttack(amount);
+    }
+
+    public virtual void OnIncomingHitResolved(
+        EnemyRuntime enemy,
+        CombatManager context,
+        DamageResult result)
+    {
     }
 
     public virtual void OnPlayerCardResolved(EnemyRuntime enemy, CombatManager context)

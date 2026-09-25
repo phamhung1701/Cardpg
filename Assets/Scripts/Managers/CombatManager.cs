@@ -6,13 +6,30 @@ public enum GameState { Idle, PlayerTurn, EnemyAttacking, GameOver, GameWon }
 
 public class CombatManager : Singleton<CombatManager>
 {
+    [Header("Critical Hits")]
+    [SerializeField, Range(0f, 100f)] float criticalChancePercent = 25f;
+    IRandomSource _criticalRandom;
+
     [Header("Runtime State")]
     public GameState currentState = GameState.Idle;
     public EnemyRuntime currentEnemy;
     public int pendingDamage;
 
     readonly List<EnemyRuntime> _enemies = new();
+    readonly List<int> _pendingAttacks = new();
+    int _attackCountAtStart;
+    public int PendingAttackCount => _pendingAttacks.Count;
+    public int BlockedAttackCount => _attackCountAtStart - _pendingAttacks.Count;
+    readonly HashSet<EnemyRuntime> _processedEnemyDeaths = new();
+    readonly CombatResolver _resolver = new();
+    readonly CombatReactionQueue _reactions = new();
     int _earnedGoldReward;
+    long _nextActionId = 1;
+    int _nextReactiveHitIndex;
+    int _playerTurnNumber;
+    bool _isResolvingAction;
+    CombatActionContext _activeAction;
+    CombatReactionPhase? _processingReactionPhase;
     public IReadOnlyList<EnemyRuntime> Enemies => _enemies;
     public int TotalEnemyAttack
     {
@@ -37,7 +54,11 @@ public class CombatManager : Singleton<CombatManager>
     public event Action<int> OnPendingDamageChanged;
     public event Action<int, int> OnPlayerHealthChanged;
     public event Action<EncounterResult> OnEncounterResult;
+    public event Action<DamageResult> OnDamageResolved;
     public event Action<string> OnCombatLog;
+
+    public bool IsResolvingAction => _isResolvingAction;
+    public CombatActionContext ActiveAction => _activeAction;
 
     bool _encounterResolved;
 
@@ -64,6 +85,8 @@ public class CombatManager : Singleton<CombatManager>
         UnsubscribeFromEnemies();
         CardManager.Instance?.CancelCardInteractions();
         _enemies.Clear();
+        _pendingAttacks.Clear();
+        _attackCountAtStart = 0;
         var uniqueEnemies = new HashSet<EnemyRuntime>();
         for (int i = 0; i < enemies.Count; i++)
         {
@@ -75,19 +98,27 @@ public class CombatManager : Singleton<CombatManager>
 
         currentEnemy = _enemies[0];
         _earnedGoldReward = 0;
+        _processedEnemyDeaths.Clear();
+        _reactions.Clear();
+        _playerTurnNumber = 0;
         _encounterResolved = false;
+        player.ResetShield();
         SetPendingDamage(0, true);
+        var encounterAction = CreateAction(CombatActionOrigin.Legacy);
         for (int i = 0; i < _enemies.Count; i++)
         {
-            _enemies[i].OnHpChanged += HandleEnemyHpChanged;
-            _enemies[i].OnAttackChanged += HandleEnemyHpChanged;
-            _enemies[i].NotifyEncounterStarted(this);
+            var enemy = _enemies[i];
+            enemy.ResetShield();
+            enemy.OnHpChanged += HandleEnemyHpChanged;
+            enemy.OnAttackChanged += HandleEnemyHpChanged;
+            EnqueueEncounterStartedAbilities(encounterAction, enemy, i);
         }
+        ProcessReactions(CombatReactionPhase.EncounterStarted);
 
         int drawn = CardManager.Instance.DrawToHand(1);
         OnEnemiesChanged?.Invoke();
         OnEnemyChanged?.Invoke();
-        SetState(GameState.PlayerTurn);
+        BeginPlayerTurn();
         Log(_enemies.Count == 1
             ? $"Enemy appears: {_enemies[0].DisplayName} (HP: {_enemies[0].maxHp}, ATK: {_enemies[0].currentAttack})"
             : $"Enemy group appears: {string.Join(", ", _enemies.ConvertAll(enemy => $"{enemy.DisplayName} {enemy.currentHp} HP/{enemy.currentAttack} ATK"))}");
@@ -114,11 +145,17 @@ public class CombatManager : Singleton<CombatManager>
 
         return currentState switch
         {
-            GameState.PlayerTurn => true,
-            GameState.EnemyAttacking => pendingDamage > 0 &&
-                CalculateSelectedDefense(selectedCards) < pendingDamage,
+            GameState.PlayerTurn => selectedCards == null || selectedCards.Count < 2,
+            GameState.EnemyAttacking => CanAddDefenseCard(selectedCards, candidate),
             _ => false
         };
+    }
+
+    public bool CanPairSelection(IReadOnlyList<CardView> selectedCards, CardView candidate)
+    {
+        return currentState == GameState.PlayerTurn && selectedCards != null && selectedCards.Count == 1 &&
+            selectedCards[0]?.data != null && candidate?.data != null &&
+            (selectedCards[0].data.Rank == CardData.Rank.Ace || candidate.data.Rank == CardData.Rank.Ace);
     }
 
     public int CalculateSelectedDefense(IReadOnlyList<CardView> cards)
@@ -131,84 +168,192 @@ public class CombatManager : Singleton<CombatManager>
         return total;
     }
 
+    public bool TryPreviewDefense(IReadOnlyList<CardView> cards, out int blockedCount, out int remainingDamage)
+    {
+        blockedCount = 0;
+        remainingDamage = pendingDamage;
+        if (cards == null || cards.Count == 0 || !AreValidHandViews(cards)) return false;
+        var matched = MatchDefenseCards(cards);
+        if (matched == null) return false;
+        blockedCount = matched.Count;
+        for (int i = 0; i < matched.Count; i++)
+            remainingDamage -= _pendingAttacks[matched[i]];
+        return true;
+    }
+
+    bool CanAddDefenseCard(IReadOnlyList<CardView> selectedCards, CardView candidate)
+    {
+        if (pendingDamage <= 0 || currentState != GameState.EnemyAttacking) return false;
+        var proposed = new List<CardView>((selectedCards?.Count ?? 0) + 1);
+        if (selectedCards != null) proposed.AddRange(selectedCards);
+        proposed.Add(candidate);
+        return AreValidHandViews(proposed) && MatchDefenseCards(proposed) != null;
+    }
+
+    // Strongest cards are assigned to the strongest remaining attack they can fully cover.
+    // Equal values keep their original hand/encounter order for deterministic ties.
+    List<int> MatchDefenseCards(IReadOnlyList<CardView> cards)
+    {
+        if (cards.Count > _pendingAttacks.Count) return null;
+        var cardOrder = new List<int>(cards.Count);
+        for (int i = 0; i < cards.Count; i++) cardOrder.Add(i);
+        cardOrder.Sort((a, b) =>
+        {
+            int comparison = CalculateCardDefense(cards[b].data).CompareTo(CalculateCardDefense(cards[a].data));
+            return comparison != 0 ? comparison : a.CompareTo(b);
+        });
+        var attackOrder = new List<int>(_pendingAttacks.Count);
+        for (int i = 0; i < _pendingAttacks.Count; i++) attackOrder.Add(i);
+        attackOrder.Sort((a, b) =>
+        {
+            int comparison = _pendingAttacks[b].CompareTo(_pendingAttacks[a]);
+            return comparison != 0 ? comparison : a.CompareTo(b);
+        });
+
+        var matched = new List<int>(cards.Count);
+        foreach (int cardIndex in cardOrder)
+        {
+            int defense = CalculateCardDefense(cards[cardIndex].data);
+            int attackIndex = attackOrder.FindIndex(index => _pendingAttacks[index] <= defense);
+            if (attackIndex < 0) return null;
+            matched.Add(attackOrder[attackIndex]);
+            attackOrder.RemoveAt(attackIndex);
+        }
+        return matched;
+    }
+
     public void PlayCard(CardView card)
     {
         if (card != null)
             TryPlayCards(new[] { card }, currentEnemy);
     }
 
+    public float CriticalChancePercent
+    {
+        get => criticalChancePercent;
+        set => criticalChancePercent = Mathf.Clamp(value, 0f, 100f);
+    }
+
+    public void ConfigureCriticalRandom(IRandomSource random) => _criticalRandom = random;
+
     public bool CanPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
     {
-        return !GameplayInputGate.IsBlocked && currentState == GameState.PlayerTurn &&
+        return !GameplayInputGate.IsBlocked && !_isResolvingAction && currentState == GameState.PlayerTurn &&
             target != null && !target.IsDefeated && _enemies.Contains(target) && !_encounterResolved &&
-            cards != null && cards.Count == 1 && AreValidHandViews(cards);
+            cards != null && (cards.Count == 1 || (cards.Count == 2 &&
+                (cards[0]?.data?.Rank == CardData.Rank.Ace || cards[1]?.data?.Rank == CardData.Rank.Ace))) &&
+            AreValidHandViews(cards);
     }
 
     public bool TryPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
     {
-        if (!CanPlayCards(cards, target)) return false;
+        return TryPlayCards(cards, target, 1);
+    }
 
-        var card = cards[0];
-        var data = card.data;
-        int damage = CalculateCardAttackDamage(data);
+    public bool TryPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target, int hitCount)
+    {
+        if (hitCount <= 0 || !CanPlayCards(cards, target)) return false;
 
+        var cardInstances = new CardInstance[cards.Count];
+        int damagePerHit = 0;
+        var names = new List<string>(cards.Count);
+        for (int i = 0; i < cards.Count; i++)
+        {
+            cardInstances[i] = cards[i].data;
+            damagePerHit += CalculateCardAttackDamage(cardInstances[i]);
+            names.Add(cardInstances[i].DisplayName);
+        }
+        bool critical = false;
         var cm = CardManager.Instance;
-        if (!cm.TryDiscardCards(cards)) return false;
 
-        foreach (var artifact in cm.ownedArtifacts)
+        _isResolvingAction = true;
+        _reactions.Clear();
+        _activeAction = CreateAction(
+            CombatActionOrigin.PlayerCard,
+            sourcePlayer: player,
+            card: cardInstances[0],
+            targetEnemy: target,
+            hitCount: hitCount);
+        _nextReactiveHitIndex = hitCount;
+
+        try
         {
-            if (artifact == null || !artifact.Matches(data)) continue;
-            if (artifact.reduceEnemyAttackByCardValue)
+            if (!cm.TryDiscardCards(cards)) return false;
+
+            if (cards.Count == 2)
             {
-                int reduce = data.BaseAttackValue;
-                target.ReduceAttack(reduce);
-                Log($"{artifact.displayName}: Enemy ATK reduced by {reduce} to {target.currentAttack}!");
+                if (criticalChancePercent >= 100f) critical = true;
+                else if (criticalChancePercent > 0f && _criticalRandom != null)
+                    critical = _criticalRandom.NextFloat() * 100f < criticalChancePercent;
+            }
+            if (critical) damagePerHit *= 2;
+
+            bool reactionFailed = false;
+            for (int cardIndex = 0; cardIndex < cards.Count && !reactionFailed; cardIndex++)
+            {
+                EnqueueCardCommittedEffects(_activeAction, cardInstances[cardIndex], target, cm, cardIndex);
+                reactionFailed = !ProcessReactions(CombatReactionPhase.CardCommitted);
             }
 
-            if (artifact.recycleDiscardByCardValue)
+            int totalHpLost = 0;
+            int resolvedHits = 0;
+            for (int hitIndex = 0; hitIndex < hitCount && !reactionFailed; hitIndex++)
             {
-                int returned = cm.ReturnRandomDiscardToDeck(data.BaseAttackValue);
-                if (returned > 0) Log($"{artifact.displayName}: {returned} cards returned to deck!");
+                if (target.IsDefeated || !_enemies.Contains(target)) break;
+
+                var request = new DamageRequest(
+                    _activeAction,
+                    hitIndex,
+                    CombatDamageOrigin.Card,
+                    player,
+                    target,
+                    damagePerHit);
+                var result = ResolveDamage(request);
+                totalHpLost += result.ActualHpLost;
+                resolvedHits++;
+                if (!target.IsDefeated)
+                    EnqueueIncomingHitResolvedAbilities(_activeAction, target, result);
+                reactionFailed = !ProcessReactions(CombatReactionPhase.HitResolved);
+                if (player.IsDefeated)
+                {
+                    ResolveEncounter(EncounterResult.Defeat);
+                    return true;
+                }
+
+                if (target.IsDefeated)
+                {
+                    HandleEnemyDefeated(target);
+                    break;
+                }
             }
 
-            if (artifact.drawByCardValue)
-            {
-                int drawn = cm.DrawToHand(data.BaseAttackValue);
-                if (drawn > 0) Log($"{artifact.displayName}: Drew {drawn} cards!");
-            }
-        }
+            if (hitCount == 1)
+                Log($"Played {string.Join(" + ", names)} on {target.DisplayName}{(critical ? " (CRITICAL)" : string.Empty)} for {totalHpLost} damage! (HP: {target.currentHp}/{target.maxHp})");
+            else
+                Log($"Played {string.Join(" + ", names)} on {target.DisplayName}{(critical ? " (CRITICAL)" : string.Empty)}: {resolvedHits}/{hitCount} hits dealt {totalHpLost} damage. (HP: {target.currentHp}/{target.maxHp})");
 
-        if (data.Enhancement != null)
-        {
-            if (data.Enhancement.healOnPlay > 0)
+            if (!reactionFailed && !target.IsDefeated && _enemies.Contains(target))
             {
-                int healed = HealPlayer(data.Enhancement.healOnPlay);
-                if (healed > 0) Log($"{data.Enhancement.displayName}: Healed {healed} HP.");
+                EnqueuePlayerCardResolvedAbilities(_activeAction, target);
+                reactionFailed = !ProcessReactions(CombatReactionPhase.CardResolved);
             }
 
-            if (data.Enhancement.drawOnPlay > 0)
+            CompletePlayerTurnForEnemies();
+            if (_enemies.Count == 0)
             {
-                int drawn = cm.DrawToHand(data.Enhancement.drawOnPlay);
-                if (drawn > 0) Log($"{data.Enhancement.displayName}: Drew {drawn} card(s).");
+                ResolveEncounter(EncounterResult.Victory);
+                return true;
             }
-        }
 
-        int dealtDamage = target.TakeCardDamage(damage, this);
-        Log($"Played {data.DisplayName} on {target.DisplayName} for {dealtDamage} damage! (HP: {target.currentHp}/{target.maxHp})");
-        target.NotifyPlayerCardResolved(this);
-
-        if (target.IsDefeated)
-            HandleEnemyDefeated(target);
-
-        CompletePlayerTurnForEnemies();
-        if (_enemies.Count == 0)
-        {
-            ResolveEncounter(EncounterResult.Victory);
+            BeginEnemyAttack();
             return true;
         }
-
-        BeginEnemyAttack();
-        return true;
+        finally
+        {
+            _activeAction = null;
+            _isResolvingAction = false;
+            _reactions.Clear();
+        }
     }
 
     public void DiscardCard(CardView card)
@@ -224,9 +369,9 @@ public class CombatManager : Singleton<CombatManager>
 
     public bool CanDefendWithCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
     {
-        return !GameplayInputGate.IsBlocked && currentState == GameState.EnemyAttacking &&
+        return !GameplayInputGate.IsBlocked && !_isResolvingAction && currentState == GameState.EnemyAttacking &&
             target != null && !target.IsDefeated && _enemies.Contains(target) && !_encounterResolved &&
-            cards != null && cards.Count > 0 && AreValidHandViews(cards);
+            cards != null && cards.Count > 0 && AreValidHandViews(cards) && MatchDefenseCards(cards) != null;
     }
 
     public bool TryDefendWithCards(IReadOnlyList<CardView> cards)
@@ -238,19 +383,26 @@ public class CombatManager : Singleton<CombatManager>
     {
         if (!CanDefendWithCards(cards, target)) return false;
 
-        int totalDefense = CalculateSelectedDefense(cards);
+        var matched = MatchDefenseCards(cards);
         var names = new List<string>(cards.Count);
         for (int i = 0; i < cards.Count; i++)
             names.Add(cards[i].data.DisplayName);
 
         if (!CardManager.Instance.TryDiscardCards(cards)) return false;
 
-        SetPendingDamage(pendingDamage - totalDefense);
-        Log($"Defended with {string.Join(", ", names)} (-{totalDefense}). Remaining: {pendingDamage}");
+        int blockedDamage = 0;
+        matched.Sort();
+        for (int i = matched.Count - 1; i >= 0; i--)
+        {
+            blockedDamage += _pendingAttacks[matched[i]];
+            _pendingAttacks.RemoveAt(matched[i]);
+        }
+        SetPendingDamage(pendingDamage - blockedDamage);
+        Log($"Defended with {string.Join(", ", names)}: blocked {matched.Count} attack(s) ({blockedDamage} damage). Remaining: {pendingDamage}");
 
         if (pendingDamage <= 0)
         {
-            SetState(GameState.PlayerTurn);
+            BeginPlayerTurn();
             Log("Defended! Your turn.");
         }
         return true;
@@ -258,29 +410,41 @@ public class CombatManager : Singleton<CombatManager>
 
     public void TakeRemainingDamage()
     {
-        if (GameplayInputGate.IsBlocked || currentState != GameState.EnemyAttacking || _enemies.Count == 0 ||
-            _encounterResolved)
+        if (GameplayInputGate.IsBlocked || _isResolvingAction || currentState != GameState.EnemyAttacking ||
+            _enemies.Count == 0 || _encounterResolved)
             return;
 
         int damage = pendingDamage;
+        _pendingAttacks.Clear();
         SetPendingDamage(0);
-        ApplyPlayerDamage(damage, "Took");
+        ResolvePlayerDamageAction(
+            CombatActionOrigin.EnemyRetaliation,
+            CombatDamageOrigin.EnemyAggregate,
+            damage,
+            "Took",
+            allowShield: true);
 
         if (!_encounterResolved)
         {
-            SetState(GameState.PlayerTurn);
+            BeginPlayerTurn();
             Log("Your turn.");
         }
     }
 
     public void Recover()
     {
-        if (GameplayInputGate.IsBlocked || currentState != GameState.PlayerTurn || _enemies.Count == 0 ||
-            _encounterResolved || HandCount() != 0)
+        if (GameplayInputGate.IsBlocked || _isResolvingAction || currentState != GameState.PlayerTurn ||
+            _enemies.Count == 0 || _encounterResolved || HandCount() != 0)
             return;
 
         int damage = TotalEnemyAttack;
-        ApplyPlayerDamage(damage, "Recovery attack dealt");
+        // Temporary Phase 7B.5 policy: Recover is combat damage and may consume one Shield charge.
+        ResolvePlayerDamageAction(
+            CombatActionOrigin.Recovery,
+            CombatDamageOrigin.Recovery,
+            damage,
+            "Recovery attack dealt",
+            allowShield: true);
         if (_encounterResolved) return;
 
         int drawn = CardManager.Instance.DrawToHand(1);
@@ -289,9 +453,20 @@ public class CombatManager : Singleton<CombatManager>
 
     void BeginEnemyAttack()
     {
-        SetPendingDamage(TotalEnemyAttack);
+        _pendingAttacks.Clear();
+        for (int i = 0; i < _enemies.Count; i++)
+        {
+            var enemy = _enemies[i];
+            if (enemy != null && !enemy.IsDefeated && enemy.currentAttack > 0)
+                _pendingAttacks.Add(enemy.currentAttack);
+        }
+        _attackCountAtStart = _pendingAttacks.Count;
+        int total = 0;
+        for (int i = 0; i < _pendingAttacks.Count; i++) total += _pendingAttacks[i];
+        SetPendingDamage(total);
         if (pendingDamage <= 0)
         {
+            BeginPlayerTurn();
             Log("Enemy attack is 0! Your turn.");
             return;
         }
@@ -317,7 +492,7 @@ public class CombatManager : Singleton<CombatManager>
 
     void HandleEnemyDefeated(EnemyRuntime enemy)
     {
-        if (enemy == null || !_enemies.Contains(enemy)) return;
+        if (enemy == null || !_enemies.Contains(enemy) || !_processedEnemyDeaths.Add(enemy)) return;
         _earnedGoldReward += Mathf.Max(0, enemy.GoldReward);
         RemoveEnemy(enemy);
         int drawn = CardManager.Instance.DrawToHand(1);
@@ -335,14 +510,233 @@ public class CombatManager : Singleton<CombatManager>
         OnEnemyChanged?.Invoke();
     }
 
-    void ApplyPlayerDamage(int amount, string logPrefix)
+    DamageResult ResolveDamage(DamageRequest request)
     {
-        int dealt = player.TakeDamage(Mathf.Max(0, amount));
-        NotifyPlayerHealthChanged();
-        Log($"{logPrefix} {dealt} damage. (HP: {player.currentHealth}/{player.maxHealth})");
+        var result = _resolver.Resolve(request, this);
+        if (ReferenceEquals(request.Target, player))
+            NotifyPlayerHealthChanged();
+        OnDamageResolved?.Invoke(result);
+        return result;
+    }
 
-        if (player.IsDefeated)
-            ResolveEncounter(EncounterResult.Defeat);
+    void ResolvePlayerDamageAction(
+        CombatActionOrigin actionOrigin,
+        CombatDamageOrigin damageOrigin,
+        int amount,
+        string logPrefix,
+        bool allowShield)
+    {
+        _isResolvingAction = true;
+        _reactions.Clear();
+        _activeAction = CreateAction(actionOrigin);
+        _nextReactiveHitIndex = 1;
+        try
+        {
+            var request = new DamageRequest(
+                _activeAction,
+                0,
+                damageOrigin,
+                null,
+                player,
+                amount,
+                allowShield);
+            var result = ResolveDamage(request);
+            ProcessReactions(CombatReactionPhase.HitResolved);
+            Log($"{logPrefix} {result.ActualHpLost} damage. (HP: {player.currentHealth}/{player.maxHealth})");
+
+            if (player.IsDefeated)
+                ResolveEncounter(EncounterResult.Defeat);
+        }
+        finally
+        {
+            _activeAction = null;
+            _isResolvingAction = false;
+            _reactions.Clear();
+        }
+    }
+
+    public int GrantPlayerShield(int charges)
+    {
+        return player.GainShield(charges);
+    }
+
+    public int GrantEnemyShield(EnemyRuntime enemy, int charges)
+    {
+        return enemy != null && _enemies.Contains(enemy) ? enemy.GainShield(charges) : 0;
+    }
+
+    public bool QueueReactiveDamage(
+        ICombatDamageTarget source,
+        ICombatDamageTarget target,
+        int amount,
+        int sourceOrder,
+        int handlerOrder,
+        int priority = 0)
+    {
+        if (!_isResolvingAction || _activeAction == null || target == null ||
+            _processingReactionPhase != CombatReactionPhase.HitResolved)
+            return false;
+        int hitIndex = _nextReactiveHitIndex++;
+        return _reactions.Enqueue(
+            _activeAction.ActionId,
+            hitIndex,
+            CombatReactionPhase.HitResolved,
+            CombatReactionSourceCategory.Core,
+            sourceOrder,
+            handlerOrder,
+            () =>
+            {
+                var request = new DamageRequest(
+                    _activeAction,
+                    hitIndex,
+                    CombatDamageOrigin.Reactive,
+                    source,
+                    target,
+                    amount);
+                var result = ResolveDamage(request);
+                if (target is EnemyRuntime enemy && !enemy.IsDefeated)
+                    EnqueueIncomingHitResolvedAbilities(_activeAction, enemy, result);
+                if (target is EnemyRuntime defeatedEnemy && defeatedEnemy.IsDefeated)
+                    HandleEnemyDefeated(defeatedEnemy);
+            },
+            priority);
+    }
+
+    void EnqueueEncounterStartedAbilities(CombatActionContext action, EnemyRuntime enemy, int enemyOrder)
+    {
+        var abilities = enemy?.type?.abilities;
+        if (abilities == null) return;
+        for (int abilityIndex = 0; abilityIndex < abilities.Length; abilityIndex++)
+        {
+            var ability = abilities[abilityIndex];
+            if (ability == null) continue;
+            int capturedIndex = abilityIndex;
+            _reactions.Enqueue(
+                action.ActionId,
+                -1,
+                CombatReactionPhase.EncounterStarted,
+                CombatReactionSourceCategory.EnemyAbility,
+                enemyOrder,
+                capturedIndex,
+                () => ability.OnEncounterStarted(enemy, this));
+        }
+    }
+
+    void EnqueueCardCommittedEffects(
+        CombatActionContext action,
+        CardInstance card,
+        EnemyRuntime target,
+        CardManager cards,
+        int cardOrder)
+    {
+        GameplayEffectResolver.EnqueueCardCommitted(
+            new CardCommittedEffectContext(action, card, target, this, cards, cardOrder), _reactions);
+    }
+
+    void BeginPlayerTurn()
+    {
+        SetState(GameState.PlayerTurn);
+        var cards = CardManager.Instance;
+        if (cards == null || _encounterResolved) return;
+        // Separate bounded phase so a zero-attack turn cannot disturb the action's hit queue.
+        var turnQueue = new CombatReactionQueue();
+        var context = new PlayerTurnStartEffectContext(CreateAction(CombatActionOrigin.Legacy),
+            player, this, cards, ++_playerTurnNumber);
+        GameplayEffectResolver.EnqueuePlayerTurnStart(context, turnQueue);
+        if (!turnQueue.ProcessPhase(CombatReactionPhase.PlayerTurnStarted,
+            () => player.IsDefeated || _encounterResolved))
+            Log("Player-turn effect processing stopped at the reaction limit.");
+    }
+
+    internal void LogEffect(string message) => Log(message);
+
+    void EnqueueIncomingHitResolvedAbilities(
+        CombatActionContext action,
+        EnemyRuntime target,
+        DamageResult result)
+    {
+        var abilities = target?.type?.abilities;
+        if (abilities == null) return;
+        int enemyOrder = _enemies.IndexOf(target);
+        for (int abilityIndex = 0; abilityIndex < abilities.Length; abilityIndex++)
+        {
+            var ability = abilities[abilityIndex];
+            if (ability == null) continue;
+            int capturedIndex = abilityIndex;
+            _reactions.Enqueue(
+                action.ActionId,
+                result.Request.HitIndex,
+                CombatReactionPhase.HitResolved,
+                CombatReactionSourceCategory.EnemyAbility,
+                enemyOrder,
+                capturedIndex,
+                () =>
+                {
+                    if (target.IsDefeated || !_enemies.Contains(target)) return;
+                    ability.OnIncomingHitResolved(target, this, result);
+                });
+        }
+    }
+
+    void EnqueuePlayerCardResolvedAbilities(CombatActionContext action, EnemyRuntime target)
+    {
+        var abilities = target?.type?.abilities;
+        if (abilities == null) return;
+        int enemyOrder = _enemies.IndexOf(target);
+        for (int abilityIndex = 0; abilityIndex < abilities.Length; abilityIndex++)
+        {
+            var ability = abilities[abilityIndex];
+            if (ability == null) continue;
+            int capturedIndex = abilityIndex;
+            _reactions.Enqueue(
+                action.ActionId,
+                -1,
+                CombatReactionPhase.CardResolved,
+                CombatReactionSourceCategory.EnemyAbility,
+                enemyOrder,
+                capturedIndex,
+                () =>
+                {
+                    if (target.IsDefeated || !_enemies.Contains(target)) return;
+                    ability.OnPlayerCardResolved(target, this);
+                });
+        }
+    }
+
+    bool ProcessReactions(CombatReactionPhase phase)
+    {
+        _processingReactionPhase = phase;
+        try
+        {
+            bool completed = _reactions.ProcessPhase(
+                phase,
+                () => player.IsDefeated || _encounterResolved);
+            if (!completed)
+                Log($"Reaction processing halted during {phase}; remaining action effects were skipped.");
+            return completed;
+        }
+        finally
+        {
+            _processingReactionPhase = null;
+        }
+    }
+
+    CombatActionContext CreateAction(
+        CombatActionOrigin origin,
+        PlayerRuntime sourcePlayer = null,
+        EnemyRuntime sourceEnemy = null,
+        CardInstance card = null,
+        EnemyRuntime targetEnemy = null,
+        int hitCount = 1)
+    {
+        return new CombatActionContext(
+            _nextActionId++,
+            origin,
+            sourcePlayer,
+            sourceEnemy,
+            card,
+            targetEnemy,
+            hitCount);
     }
 
     void ResolveEncounter(EncounterResult result)
@@ -352,19 +746,16 @@ public class CombatManager : Singleton<CombatManager>
         _encounterResolved = true;
         CardManager.Instance?.CancelCardInteractions();
         UnsubscribeFromEnemies();
+        _pendingAttacks.Clear();
+        _attackCountAtStart = 0;
         SetPendingDamage(0);
 
         if (result == EncounterResult.Victory)
         {
             var cards = CardManager.Instance;
             int reward = _earnedGoldReward;
-            int victoryHeal = 0;
-            foreach (var artifact in cards.ownedArtifacts)
-            {
-                if (artifact == null) continue;
-                reward += artifact.bonusGold;
-                victoryHeal += artifact.healAfterVictory;
-            }
+            var (bonusGold, victoryHeal) = GameplayEffectResolver.EncounterWon(cards);
+            reward += bonusGold;
 
             cards.AddGold(reward);
             if (victoryHeal > 0)
@@ -411,39 +802,11 @@ public class CombatManager : Singleton<CombatManager>
         return dealt;
     }
 
-    public int CalculateCardAttackDamage(CardInstance card)
-    {
-        if (card == null) return 0;
+    public int CalculateCardAttackDamage(CardInstance card) =>
+        GameplayEffectResolver.CalculateAttack(card, CardManager.Instance);
 
-        int multiplier = 1;
-        int flatBonus = 0;
-        var cards = CardManager.Instance;
-        if (cards != null)
-        {
-            foreach (var artifact in cards.ownedArtifacts)
-            {
-                if (artifact == null || !artifact.Matches(card)) continue;
-                multiplier = Mathf.Max(1, multiplier * Mathf.Max(1, artifact.damageMultiplier));
-                flatBonus += artifact.flatDamageBonus;
-            }
-        }
-        return Mathf.Max(0, card.AttackValue * multiplier + flatBonus);
-    }
-
-    public int CalculateCardDefense(CardInstance card)
-    {
-        if (card == null) return 0;
-
-        int defense = card.DefenseValue;
-        var cards = CardManager.Instance;
-        if (cards != null)
-        {
-            foreach (var artifact in cards.ownedArtifacts)
-                if (artifact != null && artifact.Matches(card))
-                    defense += artifact.defenseBonus;
-        }
-        return Mathf.Max(0, defense);
-    }
+    public int CalculateCardDefense(CardInstance card) =>
+        GameplayEffectResolver.CalculateBlock(card, CardManager.Instance);
 
     bool AreValidHandViews(IReadOnlyList<CardView> cards)
     {
@@ -517,8 +880,17 @@ public class CombatManager : Singleton<CombatManager>
     {
         UnsubscribeFromEnemies();
         _enemies.Clear();
+        _pendingAttacks.Clear();
+        _attackCountAtStart = 0;
         currentEnemy = null;
         _earnedGoldReward = 0;
+        _processedEnemyDeaths.Clear();
+        _reactions.Clear();
+        _nextActionId = 1;
+        _nextReactiveHitIndex = 0;
+        _playerTurnNumber = 0;
+        _activeAction = null;
+        _isResolvingAction = false;
         _encounterResolved = false;
         player.Configure(_configuredPlayerMaxHealth);
         player.Reset();

@@ -5,6 +5,7 @@ using UnityEngine;
 public class CardManager : Singleton<CardManager>
 {
     public const int HAND_SIZE = 8;
+    public const int BASE_ARTIFACT_CAPACITY = 5;
 
     [Header("References")]
     public Field handField;
@@ -25,6 +26,7 @@ public class CardManager : Singleton<CardManager>
     readonly HashSet<CardView> _trackedViews = new();
     readonly List<CardView> _selectedCards = new();
     readonly List<CardData> _generatedDefinitions = new();
+    readonly Dictionary<RelicData, ArtifactRuntimeInstance> _artifactInstances = new();
     CardView _activeDragCard;
     int _nextCardId = 1;
 
@@ -35,6 +37,17 @@ public class CardManager : Singleton<CardManager>
     public int HandCount => _cards.HandCount;
     public IReadOnlyList<CardView> SelectedCards => _selectedCards;
     public CardView ActiveDragCard => _activeDragCard;
+    public int ArtifactCapacity => BASE_ARTIFACT_CAPACITY;
+    public int ArtifactSlotsUsed
+    {
+        get
+        {
+            int count = 0;
+            foreach (var artifact in ownedArtifacts)
+                if (artifact != null && artifact.OccupiesCapacitySlot) count++;
+            return count;
+        }
+    }
 
     public event Action<int> OnGoldChanged;
     public event Action OnDeckChanged;
@@ -69,18 +82,35 @@ public class CardManager : Singleton<CardManager>
     public bool HasRelic(string id) => relics.Contains(id);
     public bool HasArtifact(RelicData artifact) => artifact != null && HasRelic(artifact.id);
 
+    public string GetArtifactAcquisitionUnavailableReason(RelicData artifact)
+    {
+        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id)) return "Artifact unavailable";
+        if (HasArtifact(artifact)) return "Already owned";
+        return artifact.OccupiesCapacitySlot && ArtifactSlotsUsed >= ArtifactCapacity
+            ? "Artifact Capacity Full" : string.Empty;
+    }
+
     public bool BuyRelic(RelicData relic) => BuyArtifact(relic);
 
     public bool BuyArtifact(RelicData artifact) => BuyArtifact(artifact, artifact != null ? artifact.price : -1);
 
     public bool BuyArtifact(RelicData artifact, int price)
     {
-        if (artifact == null || price < 0 || string.IsNullOrWhiteSpace(artifact.id) || HasArtifact(artifact)) return false;
+        if (price < 0 || !string.IsNullOrEmpty(GetArtifactAcquisitionUnavailableReason(artifact))) return false;
         if (!SpendGold(price)) return false;
         relics.Add(artifact.id);
         ownedArtifacts.Add(artifact);
+        _artifactInstances.Add(artifact, new ArtifactRuntimeInstance(artifact));
         OnBuildChanged?.Invoke();
         return true;
+    }
+
+    public ArtifactRuntimeInstance GetArtifactInstance(RelicData artifact)
+    {
+        if (artifact == null || !ownedArtifacts.Contains(artifact)) return null;
+        if (!_artifactInstances.TryGetValue(artifact, out var instance))
+            _artifactInstances.Add(artifact, instance = new ArtifactRuntimeInstance(artifact));
+        return instance;
     }
 
     public CardInstance FindOwnedCard(int cardId)
@@ -266,7 +296,7 @@ public class CardManager : Singleton<CardManager>
         if (combat == null || !combat.CanAddCardToSelection(_selectedCards, card))
             return;
 
-        if (combat.ShouldReplaceSelectionOnAdd)
+        if (combat.ShouldReplaceSelectionOnAdd && !combat.CanPairSelection(_selectedCards, card))
             ClearSelection(false);
 
         _selectedCards.Add(card);
@@ -337,6 +367,7 @@ public class CardManager : Singleton<CardManager>
         gold = 0;
         relics.Clear();
         ownedArtifacts.Clear();
+        _artifactInstances.Clear();
 
         OnGoldChanged?.Invoke(gold);
         OnDeckChanged?.Invoke();

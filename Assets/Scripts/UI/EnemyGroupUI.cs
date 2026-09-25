@@ -1,13 +1,19 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Binds a fixed set of presentation slots to the active encounter enemies.
-/// CombatManager remains authoritative; slots are presentation only.
+/// Owns the dynamic enemy presentation for the active encounter.
+/// CombatManager remains authoritative; instantiated views bind to individual runtime enemies.
 /// </summary>
 public class EnemyGroupUI : MonoBehaviour
 {
-    public EnemyDisplayUI[] slots;
-    [Min(1f)] public float horizontalSpacing = 480f;
+    [Header("Dynamic Enemy Area")]
+    public RectTransform enemyContainer;
+    public EnemyDisplayUI enemyViewPrefab;
+
+    readonly List<EnemyDisplayUI> _activeViews = new();
+
+    public IReadOnlyList<EnemyDisplayUI> ActiveViews => _activeViews;
 
     void OnEnable()
     {
@@ -32,36 +38,42 @@ public class EnemyGroupUI : MonoBehaviour
     {
         var enemies = CombatManager.Instance?.Enemies;
         int enemyCount = enemies?.Count ?? 0;
-        int visibleCount = Mathf.Min(enemyCount, slots?.Length ?? 0);
-
-        if (slots == null) return;
-        for (int i = 0; i < slots.Length; i++)
+        if (enemyContainer == null || enemyViewPrefab == null)
         {
-            var slot = slots[i];
-            if (slot == null) continue;
-
-            bool visible = i < visibleCount;
-            if (visible)
-            {
-                slot.gameObject.SetActive(true);
-                slot.Bind(enemies[i]);
-                PositionSlot(slot.transform as RectTransform, i, visibleCount);
-            }
-            else
-            {
-                slot.Bind(null);
-                slot.gameObject.SetActive(false);
-            }
+            if (enemyCount > 0)
+                Debug.LogError("EnemyGroupUI requires an Enemy Area and Enemy View prefab.", this);
+            return;
         }
 
-        if (enemyCount > slots.Length)
-            Debug.LogError($"EnemyGroupUI has {slots.Length} slots for {enemyCount} active enemies.", this);
+        EnsureViewCount(enemyCount);
+        for (int i = 0; i < enemyCount; i++)
+        {
+            var view = _activeViews[i];
+            view.gameObject.SetActive(true);
+            view.Bind(enemies[i]);
+            view.transform.SetSiblingIndex(i);
+        }
     }
 
-    void PositionSlot(RectTransform slot, int index, int count)
+    void EnsureViewCount(int requiredCount)
     {
-        if (slot == null) return;
-        float centerOffset = (count - 1) * 0.5f;
-        slot.anchoredPosition = new Vector2((index - centerOffset) * horizontalSpacing, slot.anchoredPosition.y);
+        while (_activeViews.Count < requiredCount)
+        {
+            var view = Instantiate(enemyViewPrefab, enemyContainer, false);
+            view.name = $"EnemyView {_activeViews.Count + 1}";
+            _activeViews.Add(view);
+        }
+
+        for (int i = _activeViews.Count - 1; i >= requiredCount; i--)
+        {
+            var view = _activeViews[i];
+            _activeViews.RemoveAt(i);
+            if (view == null) continue;
+            view.gameObject.SetActive(false);
+            if (Application.isPlaying)
+                Destroy(view.gameObject);
+            else
+                DestroyImmediate(view.gameObject);
+        }
     }
 }

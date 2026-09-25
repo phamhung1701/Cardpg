@@ -17,7 +17,17 @@ MonoBehaviour:
   icon: DRAW
   description: Draw 1 card when played
   price: 18
+  canonicalId: enh_004
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects:
+  - kind: 5
+    trigger: 2
+    amount: 1
+    conditions: []
+  ruleModifiers: []
   attackBonus: 0
   defenseBonus: 0
   healOnPlay: 0
-  drawOnPlay: 1
+  drawOnPlay: 0

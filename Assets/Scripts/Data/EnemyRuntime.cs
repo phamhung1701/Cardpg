@@ -2,12 +2,13 @@ using System;
 using System.Linq;
 using UnityEngine;
 
-public class EnemyRuntime
+public class EnemyRuntime : ICombatDamageTarget
 {
     public EnemyTypeData type;
     public int maxHp;
     public int currentHp;
     public int currentAttack;
+    public int ShieldCharges { get; private set; }
     public int PlayerTurnsCompleted { get; private set; }
 
     readonly int _instanceNumber;
@@ -27,6 +28,8 @@ public class EnemyRuntime
     }
 
     public string DisplayName => _encounterSize > 1 ? $"{type.enemyName} {_instanceNumber}" : type.enemyName;
+    public string CombatDisplayName => DisplayName;
+    public int CurrentHealth => currentHp;
     public int GoldReward => type.goldReward;
     public bool IsDefeated => currentHp <= 0;
     public bool ShouldFlee => !IsDefeated && type.fleeAfterPlayerTurns > 0 &&
@@ -37,24 +40,67 @@ public class EnemyRuntime
 
     public int TakeCardDamage(int amount, CombatManager context)
     {
-        int resolvedDamage = Mathf.Max(0, amount);
-        if (type.abilities != null)
-        {
-            foreach (var ability in type.abilities)
-                if (ability != null)
-                    resolvedDamage = ability.ModifyIncomingCardDamage(this, context, resolvedDamage);
-        }
+        var action = new CombatActionContext(
+            0,
+            CombatActionOrigin.Legacy,
+            sourcePlayer: context?.player,
+            targetEnemy: this);
+        var request = new DamageRequest(
+            action,
+            0,
+            CombatDamageOrigin.Card,
+            context?.player,
+            this,
+            amount);
+        return new CombatResolver().Resolve(request, context).ActualHpLost;
+    }
 
+    public int ModifyIncomingCombatDamage(DamageRequest request, CombatManager context, int damage)
+    {
+        int resolvedDamage = Mathf.Max(0, damage);
+        if (type.abilities == null) return resolvedDamage;
+
+        for (int i = 0; i < type.abilities.Length; i++)
+        {
+            var ability = type.abilities[i];
+            if (ability != null)
+                resolvedDamage = ability.ModifyIncomingDamage(this, context, request, resolvedDamage);
+        }
+        return Mathf.Max(0, resolvedDamage);
+    }
+
+    public int ApplyResolvedCombatDamage(int amount)
+    {
         int previousHp = currentHp;
-        currentHp = Mathf.Max(0, currentHp - resolvedDamage);
+        currentHp = Mathf.Max(0, currentHp - Mathf.Max(0, amount));
         OnHpChanged?.Invoke();
         return previousHp - currentHp;
     }
 
+    public int GainShield(int amount)
+    {
+        if (amount <= 0 || IsDefeated) return 0;
+        ShieldCharges += amount;
+        return amount;
+    }
+
+    public bool TryConsumeShield()
+    {
+        if (ShieldCharges <= 0) return false;
+        ShieldCharges--;
+        return true;
+    }
+
+    public void ResetShield()
+    {
+        ShieldCharges = 0;
+    }
+
     public void TakeDamage(int amount)
     {
-        currentHp = Mathf.Max(0, currentHp - amount);
-        OnHpChanged?.Invoke();
+        var action = new CombatActionContext(0, CombatActionOrigin.Legacy, targetEnemy: this);
+        var request = new DamageRequest(action, 0, CombatDamageOrigin.Legacy, null, this, amount);
+        new CombatResolver().Resolve(request, null);
     }
 
     public void Heal(int amount)

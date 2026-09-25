@@ -150,20 +150,26 @@ public sealed class Phase7BMultiEnemyTests
         };
         _combat.StartEncounter(enemies);
 
-        var groupObject = CreateGameObject("Enemy Group");
+        var groupObject = CreateGameObject("Enemy Group", typeof(RectTransform));
+        groupObject.SetActive(false);
         var group = groupObject.AddComponent<EnemyGroupUI>();
-        group.slots = new[] { CreateDisplay("Slot 1"), CreateDisplay("Slot 2"), CreateDisplay("Slot 3") };
+        var container = CreateGameObject("Enemy Area", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        container.transform.SetParent(groupObject.transform, false);
+        var prefab = CreateDisplay("Enemy View Prefab");
+        prefab.gameObject.SetActive(false);
+        group.enemyContainer = (RectTransform)container.transform;
+        group.enemyViewPrefab = prefab;
+        groupObject.SetActive(true);
         group.Refresh();
 
-        Assert.That(group.slots.Select(slot => slot.DisplayedEnemy), Is.EqualTo(enemies));
-        Assert.That(group.slots.All(slot => slot.gameObject.activeSelf), Is.True);
+        Assert.That(group.ActiveViews.Select(view => view.DisplayedEnemy), Is.EqualTo(enemies));
+        Assert.That(group.ActiveViews.All(view => view.gameObject.activeSelf), Is.True);
 
         var attackCard = HighestAttackView();
         Assert.That(_combat.TryPlayCards(new[] { attackCard }, enemies[1]), Is.True);
         group.Refresh();
-        Assert.That(group.slots.Take(2).All(slot => slot.gameObject.activeSelf), Is.True);
-        Assert.That(group.slots[2].gameObject.activeSelf, Is.False);
-        Assert.That(group.slots.Take(2).Select(slot => slot.DisplayedEnemy), Is.EqualTo(_combat.Enemies));
+        Assert.That(group.ActiveViews.Count, Is.EqualTo(2));
+        Assert.That(group.ActiveViews.Select(view => view.DisplayedEnemy), Is.EqualTo(_combat.Enemies));
     }
 
     void KillTarget(EnemyRuntime target)

@@ -12,12 +12,12 @@ public sealed class ShopOffer
     public ShopOfferKind kind;
     public RelicData artifact;
     public CardEnhancementData enhancement;
-    public int cardId;
+    public int slot;
     public int price;
 
     public string StableId => kind == ShopOfferKind.Artifact
         ? $"artifact:{artifact?.id}"
-        : $"enhancement:{cardId}:{enhancement?.id}";
+        : $"enhancement:{slot}:{enhancement?.id}";
 
     public string DisplayName => kind == ShopOfferKind.Artifact
         ? artifact != null ? artifact.displayName : "Unknown Artifact"
@@ -32,9 +32,7 @@ public sealed class ShopOffer
         if (kind == ShopOfferKind.Artifact)
             return artifact != null ? artifact.description : string.Empty;
 
-        var card = cards != null ? cards.FindOwnedCard(cardId) : null;
-        string target = card != null ? card.DisplayName : "card";
         string effect = enhancement != null ? enhancement.description : string.Empty;
-        return $"Enhance {target}: {effect}";
+        return $"Choose an owned card to enhance: {effect}";
     }
 }

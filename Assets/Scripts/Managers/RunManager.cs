@@ -115,6 +115,7 @@ public class RunManager : Singleton<RunManager>
 
         SubscribeToCombatResults();
         CombatManager.Instance.Reset();
+        CombatManager.Instance.ConfigureCriticalRandom(_randomContext.CreateStream("combat-critical"));
         CardManager.Instance.Reset();
         ResetRuntimeState();
         CardManager.Instance.ConfigureRandom(_randomContext.CreateStream("cards"));
@@ -324,8 +325,8 @@ public class RunManager : Singleton<RunManager>
         if (node == null) return "Unknown";
         return node.kind switch
         {
-            MapNodeType.Combat => FindEnemy(node.contentId)?.enemyName ?? "Combat",
-            MapNodeType.Elite => $"Elite {FindEnemy(node.contentId)?.enemyName ?? "Enemy"}",
+            MapNodeType.Combat => "Combat",
+            MapNodeType.Elite => "Elite",
             MapNodeType.Shop => "Shop",
             MapNodeType.Event => "Event",
             MapNodeType.Upgrade => "Training",
@@ -359,7 +360,7 @@ public class RunManager : Singleton<RunManager>
 
     public string GetShopOfferUnavailableReason(string stableId)
     {
-        if (_activeNode == null || _activeNode.kind != MapNodeType.Shop || string.IsNullOrEmpty(stableId))
+        if (_activeNode == null || _activeNode.completed || _activeNode.kind != MapNodeType.Shop || string.IsNullOrEmpty(stableId))
             return "Offer unavailable";
 
         var offer = _activeShopOffers.FirstOrDefault(candidate => candidate.StableId == stableId);
@@ -369,41 +370,61 @@ public class RunManager : Singleton<RunManager>
 
         if (offer.kind == ShopOfferKind.Artifact)
         {
-            if (offer.artifact == null) return "Artifact unavailable";
-            if (cards.HasArtifact(offer.artifact)) return "Already owned";
+            string reason = cards.GetArtifactAcquisitionUnavailableReason(offer.artifact);
+            if (!string.IsNullOrEmpty(reason)) return reason;
         }
-        else
+        else if (offer.kind == ShopOfferKind.Enhancement)
         {
             if (offer.enhancement == null) return "Enhancement unavailable";
-            var card = cards.FindOwnedCard(offer.cardId);
-            if (card == null) return "Target card unavailable";
-            if (card.Enhancement != null) return "Target already enhanced";
+            if (!cards.ownedCards.Any(card => card != null && card.Enhancement == null))
+                return "No eligible cards";
         }
+        else return "Offer unavailable";
 
         return cards.gold < offer.price
             ? $"Need {offer.price}g (have {cards.gold}g)"
             : string.Empty;
     }
 
+    public string GetEnhancementTargetUnavailableReason(int cardId)
+    {
+        var card = CardManager.Instance != null ? CardManager.Instance.FindOwnedCard(cardId) : null;
+        if (card == null) return "Target card unavailable";
+        return card.Enhancement != null ? "Target already enhanced" : string.Empty;
+    }
+
+    // Artifact purchases need no target. Enhancement purchases require an explicit card ID.
     public bool PurchaseShopOffer(string stableId)
     {
         if (GameplayInputGate.IsBlocked || !CanPurchaseShopOffer(stableId)) return false;
         var offer = _activeShopOffers.First(candidate => candidate.StableId == stableId);
-        return offer.kind == ShopOfferKind.Artifact
-            ? CardManager.Instance.BuyArtifact(offer.artifact, offer.price)
-            : CardManager.Instance.BuyEnhancement(offer.cardId, offer.enhancement, offer.price);
+        return offer.kind == ShopOfferKind.Artifact &&
+            CardManager.Instance.BuyArtifact(offer.artifact, offer.price);
     }
 
-    public bool ChooseUpgradeOffer(int offerIndex)
+    public bool PurchaseShopEnhancement(string stableId, int cardId)
+    {
+        if (GameplayInputGate.IsBlocked || !CanPurchaseShopOffer(stableId) ||
+            !string.IsNullOrEmpty(GetEnhancementTargetUnavailableReason(cardId))) return false;
+        var offer = _activeShopOffers.First(candidate => candidate.StableId == stableId);
+        return offer.kind == ShopOfferKind.Enhancement &&
+            CardManager.Instance.BuyEnhancement(cardId, offer.enhancement, offer.price);
+    }
+
+    // No implicit target may commit an Upgrade reward.
+    public bool ChooseUpgradeOffer(int offerIndex) => false;
+
+    public bool ChooseUpgradeOffer(int offerIndex, int cardId)
     {
         if (GameplayInputGate.IsBlocked) return false;
-        if (_activeNode == null || _activeNode.kind != MapNodeType.Upgrade ||
-            offerIndex < 0 || offerIndex >= _activeUpgradeOffers.Count)
+        if (_activeNode == null || _activeNode.completed || _activeNode.kind != MapNodeType.Upgrade ||
+            offerIndex < 0 || offerIndex >= _activeUpgradeOffers.Count ||
+            !string.IsNullOrEmpty(GetEnhancementTargetUnavailableReason(cardId)))
             return false;
 
         var offer = _activeUpgradeOffers[offerIndex];
-        if (offer.kind != ShopOfferKind.Enhancement ||
-            !CardManager.Instance.ApplyEnhancement(offer.cardId, offer.enhancement))
+        if (offer.kind != ShopOfferKind.Enhancement || offer.enhancement == null ||
+            !CardManager.Instance.ApplyEnhancement(cardId, offer.enhancement))
             return false;
 
         OnHideUpgrade?.Invoke();
@@ -493,6 +514,8 @@ public class RunManager : Singleton<RunManager>
             .ToList();
         if (targets.Count == 0 || enhancements.Count == 0) return;
 
+        // Keep the original independent card stream's offer-generation consumption,
+        // but never bind its shuffled card to the purchased Enhancement.
         targets.Shuffle(_randomContext.CreateStream(cardStream, context));
         enhancements.Shuffle(_randomContext.CreateStream(enhancementStream, context));
         int count = Mathf.Min(maximumOffers, targets.Count);
@@ -503,7 +526,7 @@ public class RunManager : Singleton<RunManager>
             {
                 kind = ShopOfferKind.Enhancement,
                 enhancement = enhancement,
-                cardId = targets[i].Id,
+                slot = i,
                 price = free ? 0 : enhancement.price
             });
         }

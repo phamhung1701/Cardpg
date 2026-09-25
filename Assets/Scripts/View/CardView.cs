@@ -16,8 +16,26 @@ public class CardView : MonoBehaviour,
     [Header("References")]
     public Image face;
     public TMP_Text nameLabel;
+    public TMP_Text enhancementLabel;
     public TMP_Text stateLabel;
     public CanvasGroup canvasGroup;
+    public RectTransform visualRoot;
+    public Outline selectionOutline;
+    public GameObject statsPlate;
+    public GameObject enhancementPlate;
+    public GameObject selectionBadge;
+
+    [Header("Card Artwork")]
+    [Tooltip("Sprites indexed by CardData.Suit enum order, then Ace through King.")]
+    public Sprite[] cardSprites = new Sprite[52];
+
+    [Header("Presentation Motion")]
+    [Min(0f)] public float hoverRaise = 10f;
+    [Min(0f)] public float selectedRaise = 18f;
+    [Min(0f)] public float dragRaise = 6f;
+    [Min(0.001f)] public float positionSmoothTime = 0.055f;
+    [Min(0.001f)] public float layoutSmoothTime = 0.075f;
+    [Min(0.001f)] public float scaleSmoothTime = 0.055f;
 
     [Header("State")]
     [NonSerialized] public CardInstance data;
@@ -32,45 +50,87 @@ public class CardView : MonoBehaviour,
     Vector3 _originalPosition;
     Transform _originalParent;
     Field _dragHomeField;
-    Vector3 _pointerOffset;
+
+    Vector2 _layoutOffset;
+    Vector2 _layoutVelocity;
+    Vector2 _stateOffset;
+    Vector2 _stateVelocity;
+    float _visualScale = 1f;
+    float _scaleVelocity;
+    float _targetRaise;
+    float _targetScale = 1f;
 
     public State CurrentState => _state;
     public bool IsSelected => _isSelected;
 
-    static readonly Color _clubColor = new(0.82f, 0.87f, 0.82f);
-    static readonly Color _diamondColor = new(0.92f, 0.82f, 0.72f);
-    static readonly Color _heartColor = new(0.92f, 0.76f, 0.76f);
-    static readonly Color _spadeColor = new(0.78f, 0.82f, 0.9f);
-    static readonly Color _selectedColor = new(1f, 0.78f, 0.32f);
-    static readonly Color _dragColor = new(0.66f, 0.82f, 1f);
+    static readonly Color _selectedColor = new(1f, 0.72f, 0.2f, 1f);
+    static readonly Color _dragColor = new(0.35f, 0.72f, 1f, 1f);
 
-    Color _baseColor = new(0.85f, 0.88f, 0.9f);
+    void OnEnable()
+    {
+        if (Application.isPlaying && CardManager.Instance != null)
+            CardManager.Instance.OnBuildChanged += RefreshContent;
+    }
+
+    void OnDisable()
+    {
+        if (CardManager.TryGetInstance(out var manager))
+            manager.OnBuildChanged -= RefreshContent;
+    }
 
     public void Setup(CardInstance cardData)
     {
         data = cardData;
+        RefreshContent();
+        RefreshState();
+    }
+
+    public void RefreshContent()
+    {
+        Sprite sprite = ResolveCardSprite(data);
+        if (face)
+        {
+            face.sprite = sprite;
+            face.preserveAspect = true;
+            face.color = Color.white;
+        }
+
+        bool hasData = data != null;
+        bool hasEnhancement = hasData && data.Enhancement != null;
+        if (statsPlate) statsPlate.SetActive(hasData);
+        if (enhancementPlate) enhancementPlate.SetActive(hasEnhancement);
+
         if (nameLabel)
         {
-            if (data == null)
+            if (!hasData)
             {
                 nameLabel.text = string.Empty;
             }
             else
             {
-                string enhancementLine = data.Enhancement != null
-                    ? $"\n<size=48%>{data.Enhancement.icon} {data.Enhancement.displayName}</size>"
+                var combat = CombatManager.Instance;
+                int attack = combat != null ? combat.CalculateCardAttackDamage(data) : data.AttackValue;
+                int defense = combat != null ? combat.CalculateCardDefense(data) : data.DefenseValue;
+                string identityFallback = sprite == null
+                    ? $"{data.Definition.RankLabel}{data.SuitSymbol}  "
                     : string.Empty;
-                nameLabel.text = $"<b>{data.Definition.RankLabel}</b>\n<size=70%>{data.SuitSymbol}  {data.Definition.SuitName}</size>\n<size=52%>ATK {data.AttackValue}  •  DEF {data.DefenseValue}</size>{enhancementLine}";
+                nameLabel.text = $"{identityFallback}<b>ATK {attack}</b>   DEF {defense}";
             }
         }
-        _baseColor = data == null ? new Color(0.85f, 0.88f, 0.9f) : data.Suit switch
-        {
-            CardData.Suit.Clubs => _clubColor,
-            CardData.Suit.Diamonds => _diamondColor,
-            CardData.Suit.Hearts => _heartColor,
-            _ => _spadeColor
-        };
-        RefreshState();
+
+        if (enhancementLabel)
+            enhancementLabel.text = hasEnhancement
+                ? $"{data.Enhancement.icon}  {data.Enhancement.displayName}"
+                : string.Empty;
+    }
+
+    public Sprite ResolveCardSprite(CardInstance card) => ResolveCardSprite(card?.Definition);
+
+    public Sprite ResolveCardSprite(CardData card)
+    {
+        if (card == null || cardSprites == null) return null;
+        int index = (int)card.suit * 13 + (int)card.rank;
+        return index >= 0 && index < cardSprites.Length ? cardSprites[index] : null;
     }
 
     public void SetSelected(bool selected) => SetSelectionOrder(selected ? 1 : 0);
@@ -109,28 +169,52 @@ public class CardView : MonoBehaviour,
 
     void ApplyState(State state)
     {
-        Color color = _baseColor;
-        Vector3 scale = Vector3.one;
-
-        switch (state)
+        _targetRaise = state switch
         {
-            case State.Hover:
-                color = Color.Lerp(_baseColor, Color.white, 0.35f);
-                scale = Vector3.one * 1.04f;
-                break;
-            case State.Click:
-                color = _selectedColor;
-                scale = Vector3.one * 1.07f;
-                break;
-            case State.Drag:
-                color = _dragColor;
-                scale = Vector3.one * 1.07f;
-                break;
-        }
+            State.Hover => hoverRaise,
+            State.Click => selectedRaise,
+            State.Drag => 0f,
+            _ => 0f
+        };
+        _targetScale = state switch
+        {
+            State.Hover => 1.035f,
+            State.Click => 1.055f,
+            State.Drag => 1.065f,
+            _ => 1f
+        };
 
-        if (face) face.color = color;
-        if (stateLabel) stateLabel.text = state == State.Click ? $"SELECTED {_selectionOrder}" : string.Empty;
-        transform.localScale = scale;
+        if (face) face.color = state == State.Idle ? new Color(0.97f, 0.97f, 0.97f, 1f) : Color.white;
+        if (selectionOutline)
+        {
+            selectionOutline.enabled = state == State.Click || state == State.Drag;
+            selectionOutline.effectColor = state == State.Drag ? _dragColor : _selectedColor;
+        }
+        if (selectionBadge) selectionBadge.SetActive(state == State.Click);
+        if (stateLabel) stateLabel.text = state == State.Click ? _selectionOrder.ToString() : string.Empty;
+    }
+
+    void LateUpdate()
+    {
+        if (visualRoot == null) return;
+        float deltaTime = Time.unscaledDeltaTime;
+        _layoutOffset = Vector2.SmoothDamp(
+            _layoutOffset, Vector2.zero, ref _layoutVelocity,
+            layoutSmoothTime, Mathf.Infinity, deltaTime);
+        _stateOffset = Vector2.SmoothDamp(
+            _stateOffset, new Vector2(0f, _targetRaise), ref _stateVelocity,
+            positionSmoothTime, Mathf.Infinity, deltaTime);
+        _visualScale = Mathf.SmoothDamp(
+            _visualScale, _targetScale, ref _scaleVelocity,
+            scaleSmoothTime, Mathf.Infinity, deltaTime);
+        visualRoot.anchoredPosition = _layoutOffset + _stateOffset;
+        visualRoot.localScale = Vector3.one * _visualScale;
+    }
+
+    public void ApplyLayoutWorldOffset(Vector3 worldOffset)
+    {
+        Vector3 localOffset = transform.InverseTransformVector(worldOffset);
+        _layoutOffset += new Vector2(localOffset.x, localOffset.y);
     }
 
     public void OnPointerEnter(PointerEventData eventData)
@@ -179,15 +263,11 @@ public class CardView : MonoBehaviour,
         _isDragging = true;
         manager.BeginCardDrag(this);
 
-        var dragRect = manager.dragCanvas.transform as RectTransform;
-        if (dragRect != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(
-                dragRect, eventData.position, eventData.pressEventCamera, out var pointerWorld))
-            _pointerOffset = transform.position - pointerWorld;
-        else
-            _pointerOffset = Vector3.zero;
-
         transform.SetParent(manager.dragCanvas.transform, true);
         transform.SetAsLastSibling();
+        _stateOffset = Vector2.zero;
+        _stateVelocity = Vector2.zero;
+        MoveToPointer(eventData);
 
         if (canvasGroup) canvasGroup.blocksRaycasts = false;
         RefreshState();
@@ -197,13 +277,7 @@ public class CardView : MonoBehaviour,
     {
         if (!_isDragging) return;
 
-        var dragRect = transform.parent as RectTransform;
-        if (dragRect != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(
-                dragRect, eventData.position, eventData.pressEventCamera, out var pointerWorld))
-            transform.position = pointerWorld + _pointerOffset;
-        else
-            transform.position = eventData.position;
-
+        MoveToPointer(eventData);
         _dragHomeField?.UpdateVisualDrag(this, eventData.position, eventData.pressEventCamera);
     }
 
@@ -222,8 +296,6 @@ public class CardView : MonoBehaviour,
         {
             bool commitReorder = _dragHomeField.ContainsScreenPoint(eventData.position, eventData.pressEventCamera);
             _dragHomeField.EndVisualDrag(this, commitReorder);
-            if (!commitReorder)
-                transform.position = _originalPosition;
         }
         else
         {
@@ -239,7 +311,6 @@ public class CardView : MonoBehaviour,
         if (_dragHomeField != null)
         {
             _dragHomeField.EndVisualDrag(this, false);
-            transform.position = _originalPosition;
         }
         else
         {
@@ -254,7 +325,21 @@ public class CardView : MonoBehaviour,
         _selectionOrder = 0;
         _isSelected = false;
         _isPointerOver = false;
+        _layoutOffset = Vector2.zero;
+        _layoutVelocity = Vector2.zero;
+        _stateOffset = Vector2.zero;
+        _stateVelocity = Vector2.zero;
+        _visualScale = 1f;
+        _scaleVelocity = 0f;
         RefreshState();
+    }
+
+    void MoveToPointer(PointerEventData eventData)
+    {
+        var dragRect = transform.parent as RectTransform;
+        if (dragRect != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(
+                dragRect, eventData.position, eventData.pressEventCamera, out var pointerWorld))
+            transform.position = pointerWorld;
     }
 
     CardActionDropTarget FindDropTarget(PointerEventData eventData)
@@ -294,7 +379,6 @@ public class CardView : MonoBehaviour,
         CardManager.Instance?.EndCardDrag(this);
         _originalParent = null;
         _dragHomeField = null;
-        _pointerOffset = Vector3.zero;
         RefreshState();
     }
 }

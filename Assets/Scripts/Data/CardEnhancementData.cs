@@ -9,7 +9,17 @@ public sealed class CardEnhancementData : ScriptableObject
     [TextArea] public string description;
     [Min(0)] public int price;
 
-    [Header("Card Hooks")]
+    [Header("Canonical Content Metadata")]
+    public string canonicalId;
+    public string rarity = "Common";
+    [Min(1)] public int tier = 1;
+    public string upgradeFromId;
+
+    [Header("Typed Gameplay Effects")]
+    public GameplayEffectDefinition[] effects = System.Array.Empty<GameplayEffectDefinition>();
+    public GameplayRuleModifierData[] ruleModifiers = System.Array.Empty<GameplayRuleModifierData>();
+
+    [Header("Legacy Prototype Hooks (used only without typed effects)")]
     public int attackBonus;
     public int defenseBonus;
     [Min(0)] public int healOnPlay;

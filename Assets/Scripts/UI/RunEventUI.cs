@@ -9,6 +9,7 @@ public class RunEventUI : MonoBehaviour
     public TMP_Text descriptionLabel;
     public Transform choicesContainer;
     public GameObject choiceButtonPrefab;
+    public EnhancementTargetUI enhancementTargetUI;
 
     void OnEnable()
     {
@@ -92,7 +93,7 @@ public class RunEventUI : MonoBehaviour
 
             var button = buttonObject.GetComponent<Button>();
             if (button)
-                button.onClick.AddListener(() => RunManager.Instance.ChooseUpgradeOffer(choiceIndex));
+                button.onClick.AddListener(() => { if (enhancementTargetUI) enhancementTargetUI.OpenUpgrade(choiceIndex); });
         }
 
         panel.SetActive(true);

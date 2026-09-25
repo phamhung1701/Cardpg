@@ -15,9 +15,19 @@ MonoBehaviour:
   id: mending
   displayName: Mending
   icon: HP
-  description: Heal 2 HP when played
+  description: Heal 2 HP at each player-turn start while this card is in hand
   price: 15
+  canonicalId: enh_003
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects:
+  - kind: 4
+    trigger: 3
+    amount: 2
+    conditions: []
+  ruleModifiers: []
   attackBonus: 0
   defenseBonus: 0
-  healOnPlay: 2
+  healOnPlay: 0
   drawOnPlay: 0

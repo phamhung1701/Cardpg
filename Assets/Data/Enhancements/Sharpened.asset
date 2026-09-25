@@ -15,9 +15,19 @@ MonoBehaviour:
   id: sharpened
   displayName: Sharpened
   icon: ATK
-  description: +3 attack damage
+  description: This card deals +3 attack damage
   price: 12
-  attackBonus: 3
+  canonicalId: enh_001
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects:
+  - kind: 0
+    trigger: 0
+    amount: 3
+    conditions: []
+  ruleModifiers: []
+  attackBonus: 0
   defenseBonus: 0
   healOnPlay: 0
   drawOnPlay: 0

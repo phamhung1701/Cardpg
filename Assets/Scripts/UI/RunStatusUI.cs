@@ -1,3 +1,4 @@
+using System.Text;
 using TMPro;
 using UnityEngine;
 
@@ -9,6 +10,7 @@ public class RunStatusUI : MonoBehaviour
     public TMP_Text runProgressLabel;
     public TMP_Text bossProgressLabel;
     public TMP_Text timingLabel;
+    public TMP_Text ownedArtifactsLabel;
 
     void OnEnable()
     {
@@ -71,6 +73,8 @@ public class RunStatusUI : MonoBehaviour
         if (goldLabel)
             goldLabel.text = cards != null ? $"Gold  {cards.gold}" : "Gold  —";
 
+        RefreshArtifacts(cards);
+
         if (pileSummaryLabel)
         {
             if (cards == null)
@@ -83,7 +87,7 @@ public class RunStatusUI : MonoBehaviour
                 foreach (var card in cards.ownedCards)
                     if (card.Enhancement != null) enhancedCount++;
                 pileSummaryLabel.text =
-                    $"Draw  {cards.deck.Count}    Discard  {cards.discardPile.Count}    Hand  {cards.HandCount}/{CardManager.HAND_SIZE}    Artifacts  {cards.ownedArtifacts.Count}    Enhanced  {enhancedCount}";
+                    $"Draw  {cards.deck.Count}    Discard  {cards.discardPile.Count}    Hand  {cards.HandCount}/{CardManager.HAND_SIZE}    Artifacts  {cards.ArtifactSlotsUsed}/{cards.ArtifactCapacity}    Enhanced  {enhancedCount}";
             }
         }
 
@@ -112,6 +116,31 @@ public class RunStatusUI : MonoBehaviour
         }
 
         RefreshTiming();
+    }
+
+    void RefreshArtifacts(CardManager cards)
+    {
+        if (!ownedArtifactsLabel) return;
+        int used = cards != null ? cards.ArtifactSlotsUsed : 0;
+        int capacity = cards != null ? cards.ArtifactCapacity : CardManager.BASE_ARTIFACT_CAPACITY;
+        var text = new StringBuilder($"<b>ARTIFACTS  •  {used}/{capacity}</b>\n");
+        if (cards == null || cards.ownedArtifacts.Count == 0)
+        {
+            text.Append("None owned");
+        }
+        else
+        {
+            bool first = true;
+            foreach (var artifact in cards.ownedArtifacts)
+            {
+                if (artifact == null) continue;
+                if (!first) text.Append("    •    ");
+                if (!string.IsNullOrWhiteSpace(artifact.icon)) text.Append(artifact.icon).Append(' ');
+                text.Append(artifact.displayName);
+                first = false;
+            }
+        }
+        ownedArtifactsLabel.text = text.ToString();
     }
 
     void RefreshTiming()

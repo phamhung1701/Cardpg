@@ -1,12 +1,16 @@
 using System;
 
-public sealed class PlayerRuntime
+public sealed class PlayerRuntime : ICombatDamageTarget
 {
     public const int DefaultMaxHealth = 30;
 
     public int maxHealth { get; private set; }
     public int currentHealth { get; private set; }
+    public int shieldCharges { get; private set; }
 
+    public string CombatDisplayName => "Player";
+    public int CurrentHealth => currentHealth;
+    public int ShieldCharges => shieldCharges;
     public bool IsDefeated => currentHealth <= 0;
 
     public PlayerRuntime(int maxHealth = DefaultMaxHealth)
@@ -26,6 +30,33 @@ public sealed class PlayerRuntime
     public void Reset()
     {
         currentHealth = maxHealth;
+        ResetShield();
+    }
+
+    public int ModifyIncomingCombatDamage(DamageRequest request, CombatManager context, int damage)
+    {
+        return Math.Max(0, damage);
+    }
+
+    public int ApplyResolvedCombatDamage(int amount) => TakeDamage(amount);
+
+    public int GainShield(int amount)
+    {
+        if (amount <= 0 || IsDefeated) return 0;
+        shieldCharges += amount;
+        return amount;
+    }
+
+    public bool TryConsumeShield()
+    {
+        if (shieldCharges <= 0) return false;
+        shieldCharges--;
+        return true;
+    }
+
+    public void ResetShield()
+    {
+        shieldCharges = 0;
     }
 
     public int TakeDamage(int amount)

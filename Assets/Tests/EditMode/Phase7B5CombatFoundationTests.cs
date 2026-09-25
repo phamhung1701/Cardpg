@@ -1,0 +1,521 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+using UnityEngine.UI;
+
+public sealed class Phase7B5CombatFoundationTests
+{
+    readonly List<UnityEngine.Object> _created = new();
+    CardManager _cards;
+    CombatManager _combat;
+    Field _field;
+
+    [SetUp]
+    public void SetUp()
+    {
+        GameplayInputGate.Clear();
+        _field = CreateHandField();
+        var dragCanvas = CreateComponent<Canvas>("Phase7B5 Foundation Drag Canvas");
+        dragCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        var prefab = CreateCardView("Phase7B5 Foundation Card Prefab");
+
+        _cards = CreateComponent<CardManager>("Phase7B5 Foundation CardManager");
+        _cards.Configure(_field, dragCanvas, prefab, Array.Empty<RelicData>(), Array.Empty<CardEnhancementData>());
+        _cards.BuildDeck();
+        _cards.DealHand();
+
+        _combat = CreateComponent<CombatManager>("Phase7B5 Foundation CombatManager");
+        _combat.ConfigurePlayer(30);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        GameplayInputGate.Clear();
+        for (int i = _created.Count - 1; i >= 0; i--)
+            if (_created[i] != null) UnityEngine.Object.DestroyImmediate(_created[i]);
+        _created.Clear();
+    }
+
+    [Test]
+    public void DamageResult_DistinguishesModifierShieldHpLossOverkillAndLethality()
+    {
+        var guard = CreateAbility(EnemyAbilityEffect.ReduceIncomingCardDamage, 2);
+        var enemy = new EnemyRuntime(CreateEnemyType("Resolver Target", 10, 0, 0, guard));
+        enemy.GainShield(1);
+        var action = new CombatActionContext(1, CombatActionOrigin.PlayerCard, _combat.player, card: _cards.ownedCards[0], targetEnemy: enemy);
+        var resolver = new CombatResolver();
+
+        var blocked = resolver.Resolve(new DamageRequest(action, 0, CombatDamageOrigin.Card, _combat.player, enemy, 7), _combat);
+        var lethal = resolver.Resolve(new DamageRequest(action, 1, CombatDamageOrigin.Card, _combat.player, enemy, 100), _combat);
+
+        Assert.That(blocked.RequestedDamage, Is.EqualTo(7));
+        Assert.That(blocked.ModifiedDamage, Is.EqualTo(5));
+        Assert.That(blocked.ModifierPreventedDamage, Is.EqualTo(2));
+        Assert.That(blocked.ShieldBlockedDamage, Is.EqualTo(5));
+        Assert.That(blocked.ActualHpLost, Is.Zero);
+        Assert.That(blocked.ShieldConsumed, Is.True);
+        Assert.That(lethal.ModifiedDamage, Is.EqualTo(98));
+        Assert.That(lethal.ActualHpLost, Is.EqualTo(10));
+        Assert.That(lethal.OverkillDamage, Is.EqualTo(88));
+        Assert.That(lethal.WasLethal, Is.True);
+    }
+
+    [Test]
+    public void DamageResult_AlreadyDefeatedTargetIsNotReportedAsModifierPrevention()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Already Defeated", 5, 0, 0));
+        enemy.TakeDamage(5);
+        var action = new CombatActionContext(6, CombatActionOrigin.PlayerCard, _combat.player, targetEnemy: enemy);
+        var request = new DamageRequest(action, 0, CombatDamageOrigin.Card, _combat.player, enemy, 9);
+
+        var result = new CombatResolver().Resolve(request, _combat);
+
+        Assert.That(result.RequestedDamage, Is.EqualTo(9));
+        Assert.That(result.ModifiedDamage, Is.Zero);
+        Assert.That(result.ModifierPreventedDamage, Is.Zero);
+        Assert.That(result.ShieldBlockedDamage, Is.Zero);
+        Assert.That(result.ActualHpLost, Is.Zero);
+        Assert.That(result.OverkillDamage, Is.Zero);
+        Assert.That(result.TargetAlreadyDefeated, Is.True);
+        Assert.That(result.WasLethal, Is.False);
+    }
+
+    [Test]
+    public void Shield_ZeroOrFullyPreventedDamageDoesNotConsumeCharge()
+    {
+        var fullGuard = CreateAbility(EnemyAbilityEffect.ReduceIncomingCardDamage, 10);
+        var enemy = new EnemyRuntime(CreateEnemyType("Prevented Target", 10, 0, 0, fullGuard));
+        enemy.GainShield(2);
+        var action = new CombatActionContext(2, CombatActionOrigin.PlayerCard, _combat.player, card: _cards.ownedCards[0], targetEnemy: enemy);
+        var resolver = new CombatResolver();
+
+        var zero = resolver.Resolve(new DamageRequest(action, 0, CombatDamageOrigin.Card, _combat.player, enemy, 0), _combat);
+        var prevented = resolver.Resolve(new DamageRequest(action, 1, CombatDamageOrigin.Card, _combat.player, enemy, 5), _combat);
+
+        Assert.That(zero.ShieldConsumed, Is.False);
+        Assert.That(prevented.ModifiedDamage, Is.Zero);
+        Assert.That(prevented.ModifierPreventedDamage, Is.EqualTo(5));
+        Assert.That(prevented.ShieldConsumed, Is.False);
+        Assert.That(enemy.ShieldCharges, Is.EqualTo(2));
+        Assert.That(enemy.currentHp, Is.EqualTo(10));
+    }
+
+    [Test]
+    public void Shield_IsSymmetricAndNonCombatHealthCostBypassesIt()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Shield Symmetry", 10, 0, 0));
+        enemy.GainShield(1);
+        _combat.player.GainShield(2);
+        var resolver = new CombatResolver();
+        var enemyAction = new CombatActionContext(3, CombatActionOrigin.PlayerCard, _combat.player, targetEnemy: enemy);
+        var playerAction = new CombatActionContext(4, CombatActionOrigin.EnemyRetaliation, sourceEnemy: enemy);
+
+        var enemyResult = resolver.Resolve(new DamageRequest(enemyAction, 0, CombatDamageOrigin.Card, _combat.player, enemy, 50), _combat);
+        var playerResult = resolver.Resolve(new DamageRequest(playerAction, 0, CombatDamageOrigin.EnemyAggregate, enemy, _combat.player, 50), _combat);
+        int runDamage = _combat.TakeRunDamage(3);
+
+        Assert.That(enemyResult.ActualHpLost, Is.Zero);
+        Assert.That(enemy.ShieldCharges, Is.Zero);
+        Assert.That(playerResult.ActualHpLost, Is.Zero);
+        Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
+        Assert.That(runDamage, Is.EqualTo(3));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(27));
+        Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void EncounterAndCombatReset_ClearPlayerAndEnemyShield()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Shield Reset", 10, 0, 0));
+        _combat.player.GainShield(3);
+        enemy.GainShield(2);
+
+        _combat.StartEnemy(enemy);
+        Assert.That(_combat.player.ShieldCharges, Is.Zero);
+        Assert.That(enemy.ShieldCharges, Is.Zero);
+
+        _combat.player.GainShield(1);
+        enemy.GainShield(1);
+        _combat.Reset();
+        Assert.That(_combat.player.ShieldCharges, Is.Zero);
+        Assert.That(enemy.ShieldCharges, Is.EqualTo(1), "Removed enemy state is not retained by CombatManager; a reused enemy resets on its next encounter.");
+
+        _combat.StartEnemy(enemy);
+        Assert.That(enemy.ShieldCharges, Is.Zero);
+    }
+
+    [Test]
+    public void MultipleShieldCharges_BlockIndependentHitsOneAtATime()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Multiple Shield", 10, 0, 0));
+        enemy.GainShield(2);
+        var action = new CombatActionContext(5, CombatActionOrigin.PlayerCard, _combat.player, targetEnemy: enemy, hitCount: 3);
+        var resolver = new CombatResolver();
+
+        var first = resolver.Resolve(new DamageRequest(action, 0, CombatDamageOrigin.Card, _combat.player, enemy, 3), _combat);
+        var second = resolver.Resolve(new DamageRequest(action, 1, CombatDamageOrigin.Card, _combat.player, enemy, 100), _combat);
+        var third = resolver.Resolve(new DamageRequest(action, 2, CombatDamageOrigin.Card, _combat.player, enemy, 3), _combat);
+
+        Assert.That(first.ShieldConsumed, Is.True);
+        Assert.That(second.ShieldConsumed, Is.True);
+        Assert.That(third.ShieldConsumed, Is.False);
+        Assert.That(third.ActualHpLost, Is.EqualTo(3));
+        Assert.That(enemy.ShieldCharges, Is.Zero);
+        Assert.That(enemy.currentHp, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void AggregateEnemyRetaliation_RemainsOneDamageInstanceForShield()
+    {
+        var type = CreateEnemyType("Aggregate", 100, 4, 0);
+        var first = new EnemyRuntime(type, 1, 2);
+        var second = new EnemyRuntime(type, 2, 2);
+        _combat.StartEncounter(new[] { first, second });
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, first), Is.True);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(8));
+        _combat.GrantPlayerShield(1);
+
+        _combat.TakeRemainingDamage();
+
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
+        Assert.That(_combat.player.ShieldCharges, Is.Zero);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+    }
+
+    [Test]
+    public void Recover_TemporarilyUsesCombatShieldPolicyAndStillDrawsOnce()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Shielded Recover", 100, 6, 0));
+        _combat.StartEnemy(enemy);
+        foreach (var view in HandViews().ToArray())
+            Assert.That(_cards.TryDiscard(view), Is.True);
+        _combat.GrantPlayerShield(1);
+
+        _combat.Recover();
+
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
+        Assert.That(_combat.player.ShieldCharges, Is.Zero);
+        Assert.That(_cards.HandCount, Is.EqualTo(1));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+    }
+
+    [Test]
+    public void DefeatedEnemy_DoesNotRunOrdinaryPerHitOrPostCardReactions()
+    {
+        var counter = CreateCountingAbility();
+        var enemy = new EnemyRuntime(CreateEnemyType("Dead Reaction", 1, 0, 0, counter));
+        _combat.StartEnemy(enemy);
+
+        Assert.That(_combat.TryPlayCards(new[] { HighestAttackView() }, enemy, 3), Is.True);
+
+        Assert.That(enemy.IsDefeated, Is.True);
+        Assert.That(counter.HitResolvedCount, Is.Zero);
+        Assert.That(counter.CardResolvedCount, Is.Zero);
+    }
+
+    [Test]
+    public void MultiHit_ConsumesCardOnce_ResolvesOrderedHits_AndRunsOncePerCardEffectsOnce()
+    {
+        var counter = CreateCountingAbility();
+        var reduction = CreateAbility(EnemyAbilityEffect.ReduceIncomingCardDamage, 1);
+        var enemy = new EnemyRuntime(CreateEnemyType("Multi Hit", 100, 20, 0, reduction, counter));
+        _combat.StartEnemy(enemy);
+        var card = HighestAttackView();
+        int damagePerHit = _combat.CalculateCardAttackDamage(card.data);
+        int handBefore = _cards.HandCount;
+        enemy.GainShield(1);
+
+        var artifact = ScriptableObject.CreateInstance<RelicData>();
+        artifact.id = "phase7b5_once";
+        artifact.displayName = "Once Per Card";
+        artifact.damageMultiplier = 1;
+        artifact.reduceEnemyAttackByCardValue = true;
+        _created.Add(artifact);
+        _cards.ownedArtifacts.Add(artifact);
+
+        var enhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
+        enhancement.id = "phase7b5_heal";
+        enhancement.displayName = "Heal Once";
+        enhancement.healOnPlay = 2;
+        _created.Add(enhancement);
+        Assert.That(_cards.ApplyEnhancement(card.data.Id, enhancement), Is.True);
+        _combat.TakeRunDamage(5);
+
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += result =>
+        {
+            if (result.Request.Origin == CombatDamageOrigin.Card)
+                results.Add(result);
+        };
+
+        Assert.That(_combat.TryPlayCards(new[] { card }, enemy, 3), Is.True);
+
+        Assert.That(results.Select(result => result.Request.HitIndex), Is.EqualTo(new[] { 0, 1, 2 }));
+        Assert.That(results.Count(result => result.ShieldConsumed), Is.EqualTo(1));
+        Assert.That(results.Sum(result => result.ActualHpLost), Is.EqualTo((damagePerHit - 1) * 2));
+        Assert.That(counter.HitResolvedCount, Is.EqualTo(3));
+        Assert.That(counter.CardResolvedCount, Is.EqualTo(1));
+        Assert.That(enemy.currentAttack, Is.EqualTo(Mathf.Max(0, 20 - card.data.BaseAttackValue)));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(27));
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore - 1));
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void MultiHit_EarlyDeathStopsRemainingHitsAndDoesNotRetarget()
+    {
+        var type = CreateEnemyType("Multi Target", 1, 0, 4);
+        var first = new EnemyRuntime(type, 1, 2);
+        var second = new EnemyRuntime(type, 2, 2);
+        _combat.StartEncounter(new[] { first, second });
+        var card = HighestAttackView();
+        int cardHitCount = 0;
+        _combat.OnDamageResolved += result =>
+        {
+            if (result.Request.Origin == CombatDamageOrigin.Card)
+                cardHitCount++;
+        };
+
+        Assert.That(_combat.TryPlayCards(new[] { card }, first, 3), Is.True);
+
+        Assert.That(cardHitCount, Is.EqualTo(1));
+        Assert.That(first.IsDefeated, Is.True);
+        Assert.That(second.currentHp, Is.EqualTo(second.maxHp));
+        Assert.That(_combat.Enemies, Is.EqualTo(new[] { second }));
+        Assert.That(_cards.gold, Is.Zero);
+    }
+
+    [Test]
+    public void ReentrantCardCommand_IsRejectedDuringCommittedAction()
+    {
+        var reentrant = ScriptableObject.CreateInstance<ReentrantCardPlayAbility>();
+        _created.Add(reentrant);
+        var enemy = new EnemyRuntime(CreateEnemyType("Reentrant", 100, 1, 0, reentrant));
+        _combat.StartEnemy(enemy);
+        var first = LowestAttackView();
+        var second = HandViews().First(view => view != first);
+        reentrant.Combat = _combat;
+        reentrant.Card = second;
+        reentrant.Target = enemy;
+
+        Assert.That(_combat.TryPlayCards(new[] { first }, enemy), Is.True);
+
+        Assert.That(reentrant.Attempted, Is.True);
+        Assert.That(reentrant.Succeeded, Is.False);
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(1));
+        Assert.That(_cards.hand, Does.Contain(second.data));
+    }
+
+    [Test]
+    public void LethalReaction_StopsLaterQueuedDamageAndCompletesDefeatOnce()
+    {
+        var lethalReaction = ScriptableObject.CreateInstance<LethalThenFollowupReactiveAbility>();
+        _created.Add(lethalReaction);
+        var enemy = new EnemyRuntime(CreateEnemyType("Lethal Reaction", 100, 0, 0, lethalReaction));
+        _combat.StartEnemy(enemy);
+        lethalReaction.Combat = _combat;
+
+        int reactiveDamageResults = 0;
+        int encounterResults = 0;
+        EncounterResult observedResult = EncounterResult.Victory;
+        _combat.OnDamageResolved += result =>
+        {
+            if (result.Request.Origin == CombatDamageOrigin.Reactive)
+                reactiveDamageResults++;
+        };
+        _combat.OnEncounterResult += result =>
+        {
+            encounterResults++;
+            observedResult = result;
+        };
+
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.True);
+
+        Assert.That(lethalReaction.FollowupQueued, Is.True);
+        Assert.That(_combat.player.IsDefeated, Is.True);
+        Assert.That(reactiveDamageResults, Is.EqualTo(1));
+        Assert.That(encounterResults, Is.EqualTo(1));
+        Assert.That(observedResult, Is.EqualTo(EncounterResult.Defeat));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
+        Assert.That(_combat.IsResolvingAction, Is.False);
+        Assert.That(_combat.ActiveAction, Is.Null);
+    }
+
+    [Test]
+    public void ReactionQueue_UsesExplicitOrder_DeduplicatesSameHook_AndAllowsRepeatedHits()
+    {
+        var queue = new CombatReactionQueue();
+        var order = new List<string>();
+
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Enhancement, 0, 0, () => order.Add("enhancement"), priority: -10), Is.True);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 1, 0, () => order.Add("artifact-1"), priority: -20), Is.True);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 0, 1, () => order.Add("artifact-0-handler-1"), priority: -30), Is.True);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 0, 0, () => order.Add("artifact-0"), priority: 20), Is.True);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 0, 0, () => order.Add("duplicate"), priority: -20), Is.False);
+        Assert.That(queue.Enqueue(10, 0, CombatReactionPhase.HitResolved, CombatReactionSourceCategory.EnemyAbility, 0, 0, () => order.Add("hit-0")), Is.True);
+        Assert.That(queue.Enqueue(10, 1, CombatReactionPhase.HitResolved, CombatReactionSourceCategory.EnemyAbility, 0, 0, () => order.Add("hit-1")), Is.True);
+
+        queue.ProcessPhase(CombatReactionPhase.CardCommitted);
+        queue.ProcessPhase(CombatReactionPhase.HitResolved);
+
+        Assert.That(order, Is.EqualTo(new[] { "artifact-0", "artifact-0-handler-1", "artifact-1", "enhancement", "hit-0", "hit-1" }));
+    }
+
+    [Test]
+    public void ReactionQueue_RunawayWorkIsStoppedAndDiagnosed()
+    {
+        var queue = new CombatReactionQueue(operationLimit: 4);
+        int handler = 0;
+        Action schedule = null;
+        schedule = () =>
+        {
+            int current = handler++;
+            queue.Enqueue(1, 0, CombatReactionPhase.HitResolved, CombatReactionSourceCategory.Core, 0, current, schedule);
+        };
+        schedule();
+        LogAssert.Expect(LogType.Error, "Combat reaction limit (4) exceeded. Remaining reactions were discarded.");
+
+        Assert.That(queue.ProcessPhase(CombatReactionPhase.HitResolved), Is.False);
+        Assert.That(queue.RunawayDetected, Is.True);
+        Assert.That(queue.ProcessedCount, Is.EqualTo(4));
+        Assert.That(queue.PendingCount, Is.Zero);
+    }
+
+    [Test]
+    public void CombatReset_RestartsActionIdentityAndClearsTransientResolutionState()
+    {
+        var firstEnemy = new EnemyRuntime(CreateEnemyType("First Action", 100, 0, 0));
+        _combat.StartEnemy(firstEnemy);
+        long firstActionId = 0;
+        _combat.OnDamageResolved += result => firstActionId = result.Request.Action.ActionId;
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, firstEnemy), Is.True);
+        Assert.That(firstActionId, Is.GreaterThan(0));
+
+        _combat.Reset();
+        var secondEnemy = new EnemyRuntime(CreateEnemyType("Second Action", 100, 0, 0));
+        _combat.StartEnemy(secondEnemy);
+        long restartedActionId = 0;
+        _combat.OnDamageResolved += result => restartedActionId = result.Request.Action.ActionId;
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, secondEnemy), Is.True);
+
+        Assert.That(restartedActionId, Is.EqualTo(firstActionId));
+        Assert.That(_combat.IsResolvingAction, Is.False);
+        Assert.That(_combat.ActiveAction, Is.Null);
+    }
+
+    CountingEnemyAbility CreateCountingAbility()
+    {
+        var ability = ScriptableObject.CreateInstance<CountingEnemyAbility>();
+        _created.Add(ability);
+        return ability;
+    }
+
+    EnemyAbility CreateAbility(EnemyAbilityEffect effect, int amount)
+    {
+        var ability = ScriptableObject.CreateInstance<EnemyAbility>();
+        ability.effect = effect;
+        ability.amount = amount;
+        _created.Add(ability);
+        return ability;
+    }
+
+    EnemyTypeData CreateEnemyType(string name, int health, int attack, int gold, params EnemyAbility[] abilities)
+    {
+        var type = EnemyTypeData.Create(name, health, attack, gold);
+        type.abilities = abilities ?? Array.Empty<EnemyAbility>();
+        _created.Add(type);
+        return type;
+    }
+
+    CardView HighestAttackView() => HandViews().OrderByDescending(view => _combat.CalculateCardAttackDamage(view.data)).First();
+    CardView LowestAttackView() => HandViews().OrderBy(view => _combat.CalculateCardAttackDamage(view.data)).First();
+
+    List<CardView> HandViews()
+    {
+        var result = new List<CardView>();
+        for (int i = 0; i < _field.cardsHolder.childCount; i++)
+            if (_field.cardsHolder.GetChild(i).TryGetComponent<CardView>(out var view))
+                result.Add(view);
+        return result;
+    }
+
+    Field CreateHandField()
+    {
+        var canvas = CreateComponent<Canvas>("Phase7B5 Foundation Hand Canvas");
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        var holder = CreateGameObject("Hand Holder", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        holder.transform.SetParent(canvas.transform, false);
+        var field = holder.AddComponent<Field>();
+        field.cardsHolder = (RectTransform)holder.transform;
+        return field;
+    }
+
+    CardView CreateCardView(string name)
+    {
+        var gameObject = CreateGameObject(name, typeof(RectTransform), typeof(Image), typeof(CanvasGroup), typeof(LayoutElement));
+        var view = gameObject.AddComponent<CardView>();
+        view.face = gameObject.GetComponent<Image>();
+        view.canvasGroup = gameObject.GetComponent<CanvasGroup>();
+        return view;
+    }
+
+    T CreateComponent<T>(string name) where T : Component => CreateGameObject(name).AddComponent<T>();
+
+    GameObject CreateGameObject(string name, params Type[] components)
+    {
+        var gameObject = components.Length > 0 ? new GameObject(name, components) : new GameObject(name);
+        _created.Add(gameObject);
+        return gameObject;
+    }
+}
+
+public sealed class CountingEnemyAbility : EnemyAbility
+{
+    public int HitResolvedCount { get; private set; }
+    public int CardResolvedCount { get; private set; }
+
+    public override void OnEncounterStarted(EnemyRuntime enemy, CombatManager context)
+    {
+    }
+
+    public override void OnIncomingHitResolved(EnemyRuntime enemy, CombatManager context, DamageResult result)
+    {
+        HitResolvedCount++;
+    }
+
+    public override void OnPlayerCardResolved(EnemyRuntime enemy, CombatManager context)
+    {
+        CardResolvedCount++;
+    }
+}
+
+public sealed class ReentrantCardPlayAbility : EnemyAbility
+{
+    public CombatManager Combat { get; set; }
+    public CardView Card { get; set; }
+    public EnemyRuntime Target { get; set; }
+    public bool Attempted { get; private set; }
+    public bool Succeeded { get; private set; }
+
+    public override void OnPlayerCardResolved(EnemyRuntime enemy, CombatManager context)
+    {
+        Attempted = true;
+        Succeeded = Combat.TryPlayCards(new[] { Card }, Target);
+    }
+}
+
+public sealed class LethalThenFollowupReactiveAbility : EnemyAbility
+{
+    public CombatManager Combat { get; set; }
+    public bool FollowupQueued { get; private set; }
+
+    public override void OnIncomingHitResolved(EnemyRuntime enemy, CombatManager context, DamageResult result)
+    {
+        Combat.QueueReactiveDamage(enemy, Combat.player, Combat.player.currentHealth, 0, 0);
+        FollowupQueued = Combat.QueueReactiveDamage(enemy, Combat.player, 1, 1, 0);
+    }
+}

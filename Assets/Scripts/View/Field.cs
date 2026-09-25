@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -6,9 +7,13 @@ public class Field : MonoBehaviour
     [Header("References")]
     public RectTransform cardsHolder;
 
+    [Header("Hand Motion")]
+    [Min(0f)] public float reorderThreshold = 18f;
+
     GameObject _dragPlaceholder;
     CardView _draggedCard;
     int _dragOriginalIndex;
+    readonly Dictionary<CardView, Vector3> _positionsBeforeLayout = new();
 
     public int CardCount
     {
@@ -68,31 +73,25 @@ public class Field : MonoBehaviour
             return;
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
-        const float crossingThreshold = 10f;
-        bool moved;
-        do
+        int slotIndex = _dragPlaceholder.transform.GetSiblingIndex();
+        int targetIndex = slotIndex;
+        var left = FindCardAtOrBefore(slotIndex - 1, -1);
+        if (left != null && screenPosition.x < GetScreenCenterX(left.transform as RectTransform, eventCamera) - reorderThreshold)
         {
-            moved = false;
-            int slotIndex = _dragPlaceholder.transform.GetSiblingIndex();
-            var left = FindCardAtOrBefore(slotIndex - 1, -1);
-            if (left != null && screenPosition.x < GetScreenCenterX(left.transform as RectTransform, eventCamera) - crossingThreshold)
-            {
-                _dragPlaceholder.transform.SetSiblingIndex(left.transform.GetSiblingIndex());
-                moved = true;
-                continue;
-            }
-
-            slotIndex = _dragPlaceholder.transform.GetSiblingIndex();
-            var right = FindCardAtOrBefore(slotIndex + 1, 1);
-            if (right != null && screenPosition.x > GetScreenCenterX(right.transform as RectTransform, eventCamera) + crossingThreshold)
-            {
-                _dragPlaceholder.transform.SetSiblingIndex(right.transform.GetSiblingIndex());
-                moved = true;
-            }
+            targetIndex = left.transform.GetSiblingIndex();
         }
-        while (moved);
+        else
+        {
+            var right = FindCardAtOrBefore(slotIndex + 1, 1);
+            if (right != null && screenPosition.x > GetScreenCenterX(right.transform as RectTransform, eventCamera) + reorderThreshold)
+                targetIndex = right.transform.GetSiblingIndex();
+        }
 
+        if (targetIndex == slotIndex) return;
+        CaptureLayoutPositions();
+        _dragPlaceholder.transform.SetSiblingIndex(targetIndex);
         LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+        AnimateLayoutChanges();
     }
 
     public bool ContainsScreenPoint(Vector2 screenPosition, Camera eventCamera)
@@ -104,6 +103,7 @@ public class Field : MonoBehaviour
     {
         if (card != _draggedCard) return;
 
+        Vector3 releaseWorldPosition = card.transform.position;
         int targetIndex = commitReorder && _dragPlaceholder != null
             ? _dragPlaceholder.transform.GetSiblingIndex()
             : _dragOriginalIndex;
@@ -119,15 +119,21 @@ public class Field : MonoBehaviour
         DestroyPlaceholder();
         _draggedCard = null;
         LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+        if (card != null)
+            card.ApplyLayoutWorldOffset(releaseWorldPosition - card.transform.position);
     }
 
     public void RemoveVisualDragSlot(CardView card)
     {
         if (card != _draggedCard) return;
+        CaptureLayoutPositions();
         DestroyPlaceholder();
         _draggedCard = null;
         if (cardsHolder != null)
+        {
             LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+            AnimateLayoutChanges();
+        }
     }
 
     public void ReturnCardToStart(CardView card)
@@ -214,6 +220,29 @@ public class Field : MonoBehaviour
             Destroy(placeholder);
         else
             DestroyImmediate(placeholder);
+    }
+
+    void CaptureLayoutPositions()
+    {
+        _positionsBeforeLayout.Clear();
+        if (cardsHolder == null) return;
+        for (int i = 0; i < cardsHolder.childCount; i++)
+        {
+            if (cardsHolder.GetChild(i).TryGetComponent<CardView>(out var card) && card != _draggedCard)
+                _positionsBeforeLayout[card] = card.transform.position;
+        }
+    }
+
+    void AnimateLayoutChanges()
+    {
+        foreach (var pair in _positionsBeforeLayout)
+        {
+            if (pair.Key == null) continue;
+            Vector3 offset = pair.Value - pair.Key.transform.position;
+            if (offset.sqrMagnitude > 0.01f)
+                pair.Key.ApplyLayoutWorldOffset(offset);
+        }
+        _positionsBeforeLayout.Clear();
     }
 
     CardView FindCardAtOrBefore(int startIndex, int direction)

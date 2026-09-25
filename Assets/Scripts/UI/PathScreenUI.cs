@@ -87,8 +87,9 @@ public class PathScreenUI : MonoBehaviour
             var label = buttonObject.GetComponentInChildren<TMP_Text>();
             if (label)
             {
+                string heading = GetNodeHeading(node, run);
                 label.text = node.revealed || node.completed
-                    ? $"{GetNodeSymbol(node.kind)}  {run.GetNodeLabel(node)}\n<size=70%>{run.GetNodeDesc(node)}</size>"
+                    ? $"{heading}\n<size=70%>{run.GetNodeDesc(node)}</size>"
                     : "?\n<size=70%>Unknown route</size>";
             }
 
@@ -125,6 +126,14 @@ public class PathScreenUI : MonoBehaviour
         image.raycastTarget = false;
     }
 
+    static string GetNodeHeading(PathNode node, RunManager run)
+    {
+        string label = run.GetNodeLabel(node);
+        return node.kind == MapNodeType.Combat || node.kind == MapNodeType.Elite
+            ? label
+            : $"{GetNodeSymbol(node.kind)}  {label}";
+    }
+
     static string GetNodeSymbol(MapNodeType kind) => kind switch
     {
         MapNodeType.Combat => "FIGHT",
@@ -140,7 +149,7 @@ public class PathScreenUI : MonoBehaviour
     static Color GetNodeColor(PathNode node)
     {
         if (node.completed) return new Color(0.24f, 0.52f, 0.34f);
-        if (!node.accessible) return new Color(0.18f, 0.21f, 0.27f);
+        if (!node.accessible && node.kind != MapNodeType.Elite) return new Color(0.18f, 0.21f, 0.27f);
         if (!node.revealed) return new Color(0.36f, 0.3f, 0.48f);
 
         return node.kind switch

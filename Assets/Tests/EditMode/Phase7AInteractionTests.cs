@@ -63,44 +63,28 @@ public sealed class Phase7AInteractionTests
     }
 
     [Test]
-    public void DefenseSelection_AllowsFinalOverblock_BlocksFurtherAdds_AndReopensAfterDeselect()
+    public void DefenseSelection_RequiresDistinctFullyBlockedAttacks_AndReopensAfterDeselect()
     {
-        var enemy = CreateEnemyRuntime("Defense Selection", 50, 20);
-        _combat.StartEnemy(enemy);
-        Assert.That(_combat.TryPlayCards(new[] { HandViews()[0] }, enemy), Is.True);
+        var type = EnemyTypeData.Create("Defense Selection", 50, 3, 0);
+        _created.Add(type);
+        var enemies = new[] { new EnemyRuntime(type, 1, 2), new EnemyRuntime(type, 2, 2) };
+        _combat.StartEncounter(enemies);
+        Assert.That(_combat.TryPlayCards(new[] { HandViews()[0] }, enemies[0]), Is.True);
+        var bonus = ScriptableObject.CreateInstance<RelicData>();
+        bonus.defenseBonus = 3;
+        _created.Add(bonus);
+        _cards.ownedArtifacts.Add(bonus);
 
-        var defenseArtifact = ScriptableObject.CreateInstance<RelicData>();
-        defenseArtifact.id = "selection-defense";
-        defenseArtifact.displayName = "Selection Defense";
-        defenseArtifact.damageMultiplier = 1;
-        defenseArtifact.defenseBonus = 3;
-        _created.Add(defenseArtifact);
-        _cards.ownedArtifacts.Add(defenseArtifact);
-
-        var candidates = HandViews()
-            .OrderBy(view => _combat.CalculateCardDefense(view.data))
-            .ToList();
-        var first = candidates[0];
-        var crossing = candidates[^1];
-        var extra = candidates[1];
-        int firstDefense = _combat.CalculateCardDefense(first.data);
-        int crossingDefense = _combat.CalculateCardDefense(crossing.data);
-        _combat.pendingDamage = firstDefense + crossingDefense - 1;
-
-        _cards.ToggleCardSelection(first);
-        Assert.That(_combat.CalculateSelectedDefense(_cards.SelectedCards), Is.LessThan(_combat.pendingDamage));
-
-        _cards.ToggleCardSelection(crossing);
-        Assert.That(_combat.CalculateSelectedDefense(_cards.SelectedCards), Is.GreaterThanOrEqualTo(_combat.pendingDamage));
-        int countAtRequiredBlock = _cards.SelectedCards.Count;
-
-        _cards.ToggleCardSelection(extra);
-        Assert.That(_cards.SelectedCards.Count, Is.EqualTo(countAtRequiredBlock), "Additional unselected cards must be rejected once enough block is selected.");
-
-        _cards.ToggleCardSelection(crossing);
-        Assert.That(_combat.CalculateSelectedDefense(_cards.SelectedCards), Is.LessThan(_combat.pendingDamage));
-        _cards.ToggleCardSelection(extra);
-        Assert.That(_cards.SelectedCards, Does.Contain(extra));
+        var candidates = HandViews().Where(view => _combat.CalculateCardDefense(view.data) >= 3).Take(3).ToArray();
+        Assert.That(candidates.Length, Is.EqualTo(3));
+        _cards.ToggleCardSelection(candidates[0]);
+        _cards.ToggleCardSelection(candidates[1]);
+        Assert.That(_cards.SelectedCards.Count, Is.EqualTo(2));
+        _cards.ToggleCardSelection(candidates[2]);
+        Assert.That(_cards.SelectedCards.Count, Is.EqualTo(2), "Only two pending attacks can be blocked.");
+        _cards.ToggleCardSelection(candidates[1]);
+        _cards.ToggleCardSelection(candidates[2]);
+        Assert.That(_cards.SelectedCards, Is.EqualTo(new[] { candidates[0], candidates[2] }));
     }
 
     [Test]
@@ -126,47 +110,35 @@ public sealed class Phase7AInteractionTests
         Assert.That(_cards.discardPile.Count, Is.EqualTo(1));
         Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
 
-        var defender = HandViews()[0];
-        int pendingBefore = _combat.pendingDamage;
-        int defense = _combat.CalculateCardDefense(defender.data);
+        var bonus = ScriptableObject.CreateInstance<RelicData>();
+        bonus.defenseBonus = 5;
+        _created.Add(bonus);
+        _cards.ownedArtifacts.Add(bonus);
+        var defender = HandViews().First(view => _combat.CalculateCardDefense(view.data) >= 5);
         _cards.ToggleCardSelection(defender);
         _cards.BeginCardDrag(defender);
 
         Assert.That(target.CanAccept(defender), Is.True);
         Assert.That(target.TryCommit(defender), Is.True);
         Assert.That(_cards.discardPile.Count, Is.EqualTo(2));
-        Assert.That(_combat.pendingDamage, Is.EqualTo(Mathf.Max(0, pendingBefore - defense)));
+        Assert.That(_combat.pendingDamage, Is.Zero);
     }
 
     [Test]
-    public void MultiCardDefense_IsAtomic_ConsumesEachCardOnce_AndSupportsPartialThenFullBlock()
+    public void MultiCardDefense_RejectsUnmatchedBatchWithoutConsumingCards()
     {
         var enemy = CreateEnemyRuntime("Defense Target", 50, 20);
         _combat.StartEnemy(enemy);
-        var attackCard = HandViews()[0];
-        Assert.That(_combat.TryPlayCards(new[] { attackCard }, enemy), Is.True);
-        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
-
+        Assert.That(_combat.TryPlayCards(new[] { HandViews()[0] }, enemy), Is.True);
         var remaining = HandViews();
         var firstSet = new[] { remaining[0], remaining[1] };
-        int firstDefense = firstSet.Sum(view => _combat.CalculateCardDefense(view.data));
-        int startingDamage = _combat.pendingDamage;
+        int handBefore = _cards.HandCount;
+        int discardedBefore = _cards.discardPile.Count;
 
-        Assert.That(_combat.TryDefendWithCards(firstSet), Is.True);
-        Assert.That(_combat.pendingDamage, Is.EqualTo(Mathf.Max(0, startingDamage - firstDefense)));
-        Assert.That(_cards.discardPile.Count, Is.EqualTo(3));
-
-        if (_combat.currentState == GameState.EnemyAttacking)
-        {
-            var secondSet = HandViews().ToArray();
-            int beforeSecond = _cards.discardPile.Count;
-            Assert.That(_combat.TryDefendWithCards(secondSet), Is.True);
-            Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
-            Assert.That(_combat.pendingDamage, Is.Zero);
-            Assert.That(_cards.discardPile.Count, Is.EqualTo(beforeSecond + secondSet.Length));
-        }
-
-        Assert.That(_cards.ownedCards.Count, Is.EqualTo(_cards.deck.Count + _cards.hand.Count + _cards.discardPile.Count));
+        Assert.That(_combat.TryDefendWithCards(firstSet), Is.False);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(20));
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(discardedBefore));
     }
 
     [Test]

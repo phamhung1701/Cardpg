@@ -14,10 +14,37 @@ public class EnemyDisplayUI : MonoBehaviour
 
     EnemyRuntime _boundEnemy;
     bool _hasExplicitBinding;
+    bool _isDisplayingBossCard;
+    Sprite _placeholderSprite;
+    Color _placeholderColor;
+    Image.Type _placeholderImageType;
+    bool _placeholderPreserveAspect;
+    TMP_Text _portraitGlyph;
+    Vector2 _portraitAnchorMin;
+    Vector2 _portraitAnchorMax;
+    Vector2 _portraitAnchoredPosition;
+    Vector2 _portraitSizeDelta;
 
     public EnemyRuntime DisplayedEnemy => _hasExplicitBinding
         ? _boundEnemy
         : CombatManager.Instance != null ? CombatManager.Instance.currentEnemy : null;
+
+    void Awake()
+    {
+        if (!portrait) return;
+
+        _placeholderSprite = portrait.sprite;
+        _placeholderColor = portrait.color;
+        _placeholderImageType = portrait.type;
+        _placeholderPreserveAspect = portrait.preserveAspect;
+        _portraitGlyph = portrait.GetComponentInChildren<TMP_Text>(true);
+
+        var rect = portrait.rectTransform;
+        _portraitAnchorMin = rect.anchorMin;
+        _portraitAnchorMax = rect.anchorMax;
+        _portraitAnchoredPosition = rect.anchoredPosition;
+        _portraitSizeDelta = rect.sizeDelta;
+    }
 
     public void Bind(EnemyRuntime enemy)
     {
@@ -65,6 +92,46 @@ public class EnemyDisplayUI : MonoBehaviour
             healthBar.maxValue = hasEnemy ? Mathf.Max(1, enemy.maxHp) : 1;
             healthBar.value = hasEnemy ? enemy.currentHp : 0;
         }
+
+        RefreshPortrait(enemy);
+    }
+
+    void RefreshPortrait(EnemyRuntime enemy)
+    {
+        if (!portrait) return;
+
+        CardData bossCard = enemy?.type?.sourceCard;
+        Sprite bossSprite = bossCard != null && bossCard.IsFaceCard
+            ? CardManager.Instance?.cardPrefab?.ResolveCardSprite(bossCard)
+            : null;
+        _isDisplayingBossCard = bossSprite != null;
+
+        var rect = portrait.rectTransform;
+        if (_isDisplayingBossCard)
+        {
+            portrait.sprite = bossSprite;
+            portrait.type = Image.Type.Simple;
+            portrait.preserveAspect = true;
+            portrait.color = Color.white;
+            rect.anchorMin = new Vector2(0.03f, 0.08f);
+            rect.anchorMax = new Vector2(0.30f, 0.92f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
+        }
+        else
+        {
+            portrait.sprite = _placeholderSprite;
+            portrait.type = _placeholderImageType;
+            portrait.preserveAspect = _placeholderPreserveAspect;
+            portrait.color = _placeholderColor;
+            rect.anchorMin = _portraitAnchorMin;
+            rect.anchorMax = _portraitAnchorMax;
+            rect.anchoredPosition = _portraitAnchoredPosition;
+            rect.sizeDelta = _portraitSizeDelta;
+        }
+
+        if (_portraitGlyph)
+            _portraitGlyph.gameObject.SetActive(!_isDisplayingBossCard);
     }
 
     void RefreshHp() => RefreshDisplay();
@@ -94,6 +161,12 @@ public class EnemyDisplayUI : MonoBehaviour
 
         if (portrait)
         {
+            if (_isDisplayingBossCard)
+            {
+                portrait.color = Color.white;
+                return;
+            }
+
             bool isSelectedTarget = DisplayedEnemy != null &&
                 ReferenceEquals(CombatManager.Instance?.currentEnemy, DisplayedEnemy);
             portrait.color = state == GameState.GameWon ? new Color(0.35f, 0.75f, 0.48f)
