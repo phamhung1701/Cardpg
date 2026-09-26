@@ -35,7 +35,13 @@ public sealed class PlayerRuntime : ICombatDamageTarget
 
     public int ModifyIncomingCombatDamage(DamageRequest request, CombatManager context, int damage)
     {
-        return Math.Max(0, damage);
+        // Run/Event HP costs use TakeDamage directly and never enter this combat pipeline.
+        if (context == null || request.Origin is not (
+                CombatDamageOrigin.Card or CombatDamageOrigin.EnemyAggregate or
+                CombatDamageOrigin.Recovery or CombatDamageOrigin.Reactive))
+            return Math.Max(0, damage);
+        return GameplayEffectResolver.ModifyIncomingCombatDamage(
+            new IncomingDamageEffectContext(request, context, CardManager.Instance, damage));
     }
 
     public int ApplyResolvedCombatDamage(int amount) => TakeDamage(amount);

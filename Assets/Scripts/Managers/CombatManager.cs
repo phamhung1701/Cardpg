@@ -17,7 +17,9 @@ public class CombatManager : Singleton<CombatManager>
 
     readonly List<EnemyRuntime> _enemies = new();
     readonly List<int> _pendingAttacks = new();
+    readonly Queue<PlayerTurnGrant> _queuedPlayerTurnGrants = new();
     int _attackCountAtStart;
+    int _completedPlayerTurnCount;
     public int PendingAttackCount => _pendingAttacks.Count;
     public int BlockedAttackCount => _attackCountAtStart - _pendingAttacks.Count;
     readonly HashSet<EnemyRuntime> _processedEnemyDeaths = new();
@@ -27,6 +29,8 @@ public class CombatManager : Singleton<CombatManager>
     long _nextActionId = 1;
     int _nextReactiveHitIndex;
     int _playerTurnNumber;
+    public int QueuedExtraPlayerTurns => _queuedPlayerTurnGrants.Count;
+    public int CompletedPlayerTurnCount => _completedPlayerTurnCount;
     bool _isResolvingAction;
     CombatActionContext _activeAction;
     CombatReactionPhase? _processingReactionPhase;
@@ -87,6 +91,8 @@ public class CombatManager : Singleton<CombatManager>
         _enemies.Clear();
         _pendingAttacks.Clear();
         _attackCountAtStart = 0;
+        _queuedPlayerTurnGrants.Clear();
+        _completedPlayerTurnCount = 0;
         var uniqueEnemies = new HashSet<EnemyRuntime>();
         for (int i = 0; i < enemies.Count; i++)
         {
@@ -103,6 +109,7 @@ public class CombatManager : Singleton<CombatManager>
         _playerTurnNumber = 0;
         _encounterResolved = false;
         player.ResetShield();
+        CardManager.Instance?.ResetArtifactEncounterEffectState();
         SetPendingDamage(0, true);
         var encounterAction = CreateAction(CombatActionOrigin.Legacy);
         for (int i = 0; i < _enemies.Count; i++)
@@ -116,6 +123,10 @@ public class CombatManager : Singleton<CombatManager>
         ProcessReactions(CombatReactionPhase.EncounterStarted);
 
         int drawn = CardManager.Instance.DrawToHand(1);
+        GameplayEffectResolver.EnqueueEncounterStart(
+            new EncounterStartEffectContext(encounterAction, player, this, CardManager.Instance,
+                _enemies, drawn), _reactions);
+        ProcessReactions(CombatReactionPhase.EncounterReady);
         OnEnemiesChanged?.Invoke();
         OnEnemyChanged?.Invoke();
         BeginPlayerTurn();
@@ -145,11 +156,30 @@ public class CombatManager : Singleton<CombatManager>
 
         return currentState switch
         {
-            GameState.PlayerTurn => selectedCards == null || selectedCards.Count < 2,
+            GameState.PlayerTurn => CanExtendPlayerSelection(selectedCards, candidate),
             GameState.EnemyAttacking => CanAddDefenseCard(selectedCards, candidate),
             _ => false
         };
     }
+
+    bool CanExtendPlayerSelection(IReadOnlyList<CardView> selectedCards, CardView candidate)
+    {
+        int count = selectedCards?.Count ?? 0;
+        if (count == 0) return true;
+        if (count >= 3) return false;
+        if (count == 1)
+        {
+            if (CanPairSelection(selectedCards, candidate)) return true;
+            // With one selected card, a second click either creates a legal pair/Hands set
+            // or replaces the ordinary single-card selection, matching existing click UX.
+            return true;
+        }
+        return GameplayEffectResolver.CanContinueSameRankSelection(selectedCards, candidate,
+            CardManager.Instance);
+    }
+
+    public bool CanExtendSameRankSelection(IReadOnlyList<CardView> selectedCards, CardView candidate) =>
+        GameplayEffectResolver.CanContinueSameRankSelection(selectedCards, candidate, CardManager.Instance);
 
     public bool CanPairSelection(IReadOnlyList<CardView> selectedCards, CardView candidate)
     {
@@ -240,9 +270,7 @@ public class CombatManager : Singleton<CombatManager>
     {
         return !GameplayInputGate.IsBlocked && !_isResolvingAction && currentState == GameState.PlayerTurn &&
             target != null && !target.IsDefeated && _enemies.Contains(target) && !_encounterResolved &&
-            cards != null && (cards.Count == 1 || (cards.Count == 2 &&
-                (cards[0]?.data?.Rank == CardData.Rank.Ace || cards[1]?.data?.Rank == CardData.Rank.Ace))) &&
-            AreValidHandViews(cards);
+            AreValidHandViews(cards) && GameplayEffectResolver.CanPlaySelection(cards, target, CardManager.Instance);
     }
 
     public bool TryPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
@@ -255,12 +283,12 @@ public class CombatManager : Singleton<CombatManager>
         if (hitCount <= 0 || !CanPlayCards(cards, target)) return false;
 
         var cardInstances = new CardInstance[cards.Count];
-        int damagePerHit = 0;
+        int aggregatedDamage = 0;
         var names = new List<string>(cards.Count);
         for (int i = 0; i < cards.Count; i++)
         {
             cardInstances[i] = cards[i].data;
-            damagePerHit += CalculateCardAttackDamage(cardInstances[i]);
+            aggregatedDamage += CalculateCardAttackDamage(cardInstances[i]);
             names.Add(cardInstances[i].DisplayName);
         }
         bool critical = false;
@@ -274,19 +302,25 @@ public class CombatManager : Singleton<CombatManager>
             card: cardInstances[0],
             targetEnemy: target,
             hitCount: hitCount);
+        int damagePerHit = GameplayEffectResolver.CalculateActionDamage(
+            new ActionDamageEffectContext(_activeAction, cardInstances, target, cm, aggregatedDamage,
+                GameplayEffectResolver.IsHandsMultiCardAction(cardInstances, cm)),
+            out int actionDamageCap);
         _nextReactiveHitIndex = hitCount;
 
         try
         {
             if (!cm.TryDiscardCards(cards)) return false;
 
-            if (cards.Count == 2)
+            if (cards.Count == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards))
             {
                 if (criticalChancePercent >= 100f) critical = true;
                 else if (criticalChancePercent > 0f && _criticalRandom != null)
                     critical = _criticalRandom.NextFloat() * 100f < criticalChancePercent;
             }
             if (critical) damagePerHit *= 2;
+            int remainingActionDamage = actionDamageCap < 0 ? -1 :
+                (int)Math.Min((long)actionDamageCap * (critical ? 2 : 1), int.MaxValue);
 
             bool reactionFailed = false;
             for (int cardIndex = 0; cardIndex < cards.Count && !reactionFailed; cardIndex++)
@@ -300,6 +334,10 @@ public class CombatManager : Singleton<CombatManager>
             for (int hitIndex = 0; hitIndex < hitCount && !reactionFailed; hitIndex++)
             {
                 if (target.IsDefeated || !_enemies.Contains(target)) break;
+                int requestedDamage = remainingActionDamage < 0
+                    ? damagePerHit : Math.Min(damagePerHit, remainingActionDamage);
+                if (requestedDamage <= 0 && remainingActionDamage == 0) break;
+                if (remainingActionDamage >= 0) remainingActionDamage -= requestedDamage;
 
                 var request = new DamageRequest(
                     _activeAction,
@@ -307,7 +345,7 @@ public class CombatManager : Singleton<CombatManager>
                     CombatDamageOrigin.Card,
                     player,
                     target,
-                    damagePerHit);
+                    requestedDamage);
                 var result = ResolveDamage(request);
                 totalHpLost += result.ActualHpLost;
                 resolvedHits++;
@@ -341,10 +379,16 @@ public class CombatManager : Singleton<CombatManager>
             CompletePlayerTurnForEnemies();
             if (_enemies.Count == 0)
             {
+                _queuedPlayerTurnGrants.Clear();
                 ResolveEncounter(EncounterResult.Victory);
                 return true;
             }
 
+            _completedPlayerTurnCount++;
+            GameplayEffectResolver.EnqueueCompletedActionTurnGrants(
+                new CompletedPlayerActionContext(_activeAction, player, this, cm,
+                    cardInstances, _completedPlayerTurnCount), _queuedPlayerTurnGrants);
+            if (BeginGrantedPlayerTurn()) return true;
             BeginEnemyAttack();
             return true;
         }
@@ -633,6 +677,15 @@ public class CombatManager : Singleton<CombatManager>
             new CardCommittedEffectContext(action, card, target, this, cards, cardOrder), _reactions);
     }
 
+    bool BeginGrantedPlayerTurn()
+    {
+        if (_queuedPlayerTurnGrants.Count == 0) return false;
+        var grant = _queuedPlayerTurnGrants.Dequeue();
+        Log($"{grant.SourceName} grants an extra player turn.");
+        BeginPlayerTurn();
+        return true;
+    }
+
     void BeginPlayerTurn()
     {
         SetState(GameState.PlayerTurn);
@@ -748,6 +801,7 @@ public class CombatManager : Singleton<CombatManager>
         UnsubscribeFromEnemies();
         _pendingAttacks.Clear();
         _attackCountAtStart = 0;
+        _queuedPlayerTurnGrants.Clear();
         SetPendingDamage(0);
 
         if (result == EncounterResult.Victory)
@@ -886,6 +940,8 @@ public class CombatManager : Singleton<CombatManager>
         _earnedGoldReward = 0;
         _processedEnemyDeaths.Clear();
         _reactions.Clear();
+        _completedPlayerTurnCount = 0;
+        _queuedPlayerTurnGrants.Clear();
         _nextActionId = 1;
         _nextReactiveHitIndex = 0;
         _playerTurnNumber = 0;

@@ -23,6 +23,7 @@ public class PathScreenUI : MonoBehaviour
             RunManager.Instance.OnHidePathScreen += Hide;
             RunManager.Instance.OnRunCompleted += HandleRunCompleted;
             RunManager.Instance.OnCycleStarted += HandleCycleStarted;
+            RunManager.Instance.OnMapRevealChanged += BuildMap;
         }
     }
 
@@ -34,6 +35,7 @@ public class PathScreenUI : MonoBehaviour
             RunManager.Instance.OnHidePathScreen -= Hide;
             RunManager.Instance.OnRunCompleted -= HandleRunCompleted;
             RunManager.Instance.OnCycleStarted -= HandleCycleStarted;
+            RunManager.Instance.OnMapRevealChanged -= BuildMap;
         }
     }
 

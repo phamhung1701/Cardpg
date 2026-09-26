@@ -91,7 +91,8 @@ public class ActionButtonsUI : MonoBehaviour
         {
             _primaryActionLabel.text = combat.currentState switch
             {
-                GameState.PlayerTurn when selectedCount == 2 => "PLAY ACE PAIR",
+                GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) => "PLAY ACE PAIR",
+                GameState.PlayerTurn when selectedCount >= 2 => $"PLAY SAME-RANK {selectedCount}",
                 GameState.PlayerTurn => "PLAY CARD",
                 GameState.EnemyAttacking when selectedCount > 0 => $"DEFEND WITH {selectedCount} CARD{(selectedCount == 1 ? string.Empty : "S")}",
                 GameState.EnemyAttacking => "SELECT CARDS TO DEFEND",
@@ -131,8 +132,10 @@ public class ActionButtonsUI : MonoBehaviour
             {
                 GameState.PlayerTurn when cards.HandCount == 0 =>
                     $"Hand empty: Recover takes {combat.TotalEnemyAttack} damage, then draws 1 card",
-                GameState.PlayerTurn when selectedCount == 2 =>
+                GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) =>
                     $"Ace pair: {cards.SelectedCards[0].data.DisplayName} + {cards.SelectedCards[1].data.DisplayName}  •  Press Play or drag to the enemy",
+                GameState.PlayerTurn when selectedCount >= 2 =>
+                    $"Same-rank set ({selectedCount} cards): {cards.SelectedCards[0].data.Rank}  •  Press Play or drag to the enemy",
                 GameState.PlayerTurn when hasSelected =>
                     $"Selected: {cards.selectedCard.data.DisplayName}  •  Press Play or drag to the enemy",
                 GameState.PlayerTurn => "Select a card, then press Play or drag it to the enemy",

@@ -40,6 +40,30 @@ public static class GameDataGenerator
         ConfigureCoreArtifact(diamond, "rel_003", GameplayEffectKind.Draw,
             GameplayEffectTrigger.CardCommitted, 2, CardData.Suit.Diamonds);
 
+        // Temporary prototype prices; the spreadsheet leaves prices blank.
+        ConfigureTypedArtifact(CreateArtifact("LeatherArmor", "rel_005", "Leather Armor", "ARMOR",
+            "Reduce each incoming combat damage instance by 3", 15), "rel_005", "Common",
+            new GameplayEffectDefinition { kind = GameplayEffectKind.IncomingCombatDamageReduction,
+                trigger = GameplayEffectTrigger.IncomingDamageCalculated, amount = 3 });
+        ConfigureTypedArtifact(CreateArtifact("Dagger", "rel_006", "Dagger", "DAGGER",
+            "Attacks gain +3 damage, then total action damage is capped at 10 before criticals", 15),
+            "rel_006", "Common",
+            new GameplayEffectDefinition { kind = GameplayEffectKind.FlatActionDamage,
+                trigger = GameplayEffectTrigger.ActionDamageCalculated, amount = 3 },
+            new GameplayEffectDefinition { kind = GameplayEffectKind.ActionDamageCap,
+                trigger = GameplayEffectTrigger.ActionDamageCalculated, amount = 10 });
+        ConfigureTypedArtifact(CreateArtifact("Tome", "rel_007", "Tome", "TOME",
+            "Draw 1 additional card after the baseline encounter draw", 18), "rel_007", "Common",
+            new GameplayEffectDefinition { kind = GameplayEffectKind.Draw,
+                trigger = GameplayEffectTrigger.EncounterStart, amount = 1 });
+        ConfigureTypedArtifact(CreateArtifact("Sword", "rel_023", "Sword", "SWORD",
+            "Played attacking cards with qualifying attack above 8 gain +10 damage", 25),
+            "rel_023", "Rare",
+            new GameplayEffectDefinition { kind = GameplayEffectKind.FlatAttack,
+                trigger = GameplayEffectTrigger.AttackCalculated, amount = 10,
+                conditions = new[] { new GameplayEffectCondition
+                { kind = GameplayConditionKind.AttackValueGreaterThan, value = 8 } } });
+
         var artisan = CreateArtifact("ArtisanTools", "artisan_tools", "Artisan Tools", "ENH", "Enhanced cards deal +3 damage", 25);
         artisan.requiresEnhancedCard = true;
         artisan.flatDamageBonus = 3;
@@ -124,6 +148,18 @@ public static class GameDataGenerator
         enhancement.price = price;
         EditorUtility.SetDirty(enhancement);
         return enhancement;
+    }
+
+    static void ConfigureTypedArtifact(RelicData artifact, string canonicalId, string rarity,
+        params GameplayEffectDefinition[] effects)
+    {
+        artifact.canonicalId = canonicalId;
+        artifact.rarity = rarity;
+        artifact.tier = 1;
+        artifact.upgradeFromId = "";
+        artifact.effects = effects;
+        artifact.ruleModifiers = System.Array.Empty<GameplayRuleModifierData>();
+        EditorUtility.SetDirty(artifact);
     }
 
     static void ConfigureCoreArtifact(RelicData artifact, string canonicalId,

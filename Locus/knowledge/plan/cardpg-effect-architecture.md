@@ -14,7 +14,7 @@ Implemented September 25, 2026 for the first canonical Artifact/Enhancement cont
 
 The architecture provides one typed foundation for effects sourced by owned Artifacts and card-local Enhancements. It separates immutable ScriptableObject definitions from run-owned mutable state, centralizes attack/block calculation for preview and execution, and routes reactive combat effects through deterministic queues. It intentionally avoids both ID/name dispatch and a generic scripting language.
 
-V1 migrates only canonical Tier I `rel_001`–`rel_004` and `enh_001`–`enh_004`. Tier upgrades, rarity distribution, extra turns, poker/rank actions, effective suits, overflow play, map effects, random effects, and the remaining workbook content are not implemented.
+V1 now includes canonical Tier I `rel_001`–`rel_013` plus `rel_023` and `enh_001`–`enh_004`. Typed turn-grant and same-rank multi-card rule modifiers are implemented only for rel_011–rel_013. Tier upgrades, rarity distribution, other poker/rank actions, effective suits, overflow play, and remaining workbook content are not implemented.
 
 ## System responsibilities
 
@@ -23,7 +23,7 @@ V1 migrates only canonical Tier I `rel_001`–`rel_004` and `enh_001`–`enh_004
   - `GameplayEffectResolver` is the shared modifier/reactive foundation for both Artifacts and Enhancements.
   - `ArtifactRuntimeInstance` owns one acquired Artifact definition plus run-local `GameplayEffectState`.
   - A `CardInstance` is the runtime source for its attached Enhancement and owns its own `GameplayEffectState`.
-  - `GameplayRuleModifierData` is a separate typed extension point for rule-changing mechanics; v1 has no rule subclasses or rule execution.
+  - `GameplayRuleModifierData` is a separate typed rule representation with inline `ExtraTurnRuleDefinition` and `SameRankMultiCardRuleDefinition` variants. CombatManager validates/executes only the rules required by Cheater, Hands and Dwarf; it is not a general scripting language.
 - `Assets/Scripts/Data/RelicData.cs`
   - Immutable Artifact authoring metadata: legacy runtime ID, canonical ID, display metadata, rarity, tier, parent canonical ID, capacity category, typed effects, and optional typed rule modifiers.
   - Existing legacy prototype hook fields remain only as a compatibility adapter for definitions without typed effects. If `effects` is non-empty, typed effects are authoritative.
@@ -38,7 +38,8 @@ V1 migrates only canonical Tier I `rel_001`–`rel_004` and `enh_001`–`enh_004
   - Card-local attack/block flats are resolved through the shared effect resolver.
 - `Assets/Scripts/Managers/CombatManager.cs`
   - Calls the shared resolver for attack/block preview and execution.
-  - Creates authoritative card-commit and player-turn-start contexts and uses `CombatReactionQueue` for reactive effects.
+  - Creates authoritative card-commit, player-turn-start and completed-player-action contexts and uses `CombatReactionQueue` for reactive effects.
+  - Owns the FIFO for distinct extra-turn grants and routes each grant through the same `BeginPlayerTurn` lifecycle as a normal turn.
   - All player-turn entry paths used by current combat call the same `BeginPlayerTurn` boundary, including encounter start, full defense, remaining-damage resolution and zero-attack retaliation.
 - `Assets/Scripts/Combat/CombatReactionQueue.cs`
   - Provides bounded deterministic ordering. V1 adds a `PlayerTurnStarted` phase.
@@ -54,7 +55,7 @@ V1 migrates only canonical Tier I `rel_001`–`rel_004` and `enh_001`–`enh_004
 
 Both source types expose the same effect definitions, source category, display metadata and runtime-state extension point. Artifact and Enhancement adapters are thin; there is no separate Relic effect engine and Enhancement effect engine.
 
-ScriptableObject definitions are not mutated during a run. Mutable future counters, charges and pity state belong in `ArtifactRuntimeInstance.State`; per-card accumulated Enhancement state such as future Devouring scaling belongs in `CardInstance.EffectState`. `GameplayEffectState` currently offers indexed counters as an extension point; none of the eight migrated effects needs mutable state.
+ScriptableObject definitions are not mutated during a run. Mutable counters, charges and pity state belong in `ArtifactRuntimeInstance.State`; per-card accumulated Enhancement state such as future Devouring scaling belongs in `CardInstance.EffectState`. `GameplayEffectState` currently offers indexed counters; Hammer node progress and Cheater's encounter-once state are run-owned examples. The four earlier core effects themselves do not need mutable state.
 
 ## Effect categories
 
@@ -66,8 +67,10 @@ Current typed kinds:
 - `AttackMultiplier`
 - `FlatBlock`
 - `BlockMultiplier`
+- `FlatActionDamage` and `ActionDamageCap` (action aggregate; cap is one budget across all hits)
+- `IncomingCombatDamageReduction` (each player combat hit, before Shield)
 
-They are evaluated without side effects or RNG and feed one authoritative calculation path used by UI previews and committed combat execution.
+Card-local/suit attack modifiers, thresholded bonuses, action damage, and incoming damage are distinct stages. Their evaluation is side-effect-free and consumes no RNG.
 
 ### Reactive effects
 
@@ -81,18 +84,23 @@ The compatibility adapter also maps the four still-supported prototype families 
 
 ### Rule modifiers
 
-Rule-changing mechanics do not pass through numeric/reactive `Apply` behavior. `GameplayRuleModifierData` is an intentionally empty typed base extension point stored separately on Artifact and Enhancement definitions. A future extra-turn, effective-suit, overflow or poker permission must have a dedicated typed rule and authoritative manager integration. No such mechanic is implemented here.
+Rule-changing mechanics do not pass through numeric/reactive `Apply` behavior. `GameplayRuleModifierData` is an inline typed definition with narrowly supported variants: `ExtraTurn` and `SameRankMultiCard`. The first is resolved only after an authoritative completed player action; the second participates in selection validation and classifies the resulting action. No name/ID branch is used. Other rule types remain unsupported until separately approved and integrated at their owning state-machine boundary.
 
 ## Implemented lifecycle contexts
 
 V1 introduces only boundaries required by the migrated content:
 
-- **AttackCalculated / DefenseCalculated:** side-effect-free card value calculation using the source CardInstance and owned Artifact sources.
+- **AttackCalculated / DefenseCalculated:** side-effect-free card value calculation using the source CardInstance and owned Artifact sources. Attack calculation uses a pre-threshold qualifying value; thresholded Sword bonuses are applied only afterward.
+- **ActionDamageCalculated:** sums committed cards, applies typed action-flat modifiers, and supplies the tightest action-total cap. Combat applies this cap as one pre-critical requested-damage budget across hits.
+- **IncomingDamageCalculated:** player-owned Artifact reductions are evaluated for each combat `DamageRequest` before `CombatResolver` checks Shield; direct Event/Run HP costs do not enter this pipeline.
+- **EncounterStart:** the existing baseline draw resolves first, then a separate bounded deterministic reaction phase processes Tome and any other authored encounter-start effects. Current Tome attempts Draw 1 after baseline, subject to hand capacity.
 - **CardCommitted:** once per committed card, not once per hit. Context carries action ID, card, target, card order, hit count, managers and a stable negative committed-card hit index. Heart, Diamond and Quickdraw use this boundary.
-- **PlayerTurnStart:** once whenever current combat authoritatively begins a player turn. Context carries action ID, player, managers and turn number. Enhancement sources are snapshotted from the authoritative `CardCollection.Hand` order. Mending uses this boundary.
-- **EncounterWon:** deterministic Artifact reward summary for existing Victory Draught and Golden Compass compatibility.
+- **MapReady:** RunManager supplies authoritative run/map state to typed reveal effects; Lantern reveals one eligible hidden node. The selection policy uses stable candidate identity/order, leaves topology and always-visible/Elite rules unchanged, and does not use combat RNG.
+- **NodeCompleted:** RunManager first commits node completion and its completed-node count, then resolves typed Artifact effects. Hammer advances its counter in run-owned Artifact state and, at each third completed node, deterministically chooses an eligible unenhanced owned card and an authored Common Enhancement through the dedicated Artifact/content seeded streams; application goes through CardManager's authoritative API. No eligible card is a no-op.
+- **CompletedPlayerAction:** after a legal attack action has fully resolved its card reactions, hits and enemy defeat checks, CombatManager snapshots committed CardInstances and completed-player-turn number and asks typed Artifact rules for turn grants. This is not a general event subscription.
+- **PlayerTurnStart:** every normal or granted player turn enters the same boundary; Healing Light/Mending therefore execute naturally without grant-specific calls.- **EncounterWon:** deterministic Artifact reward summary for existing Victory Draught and Golden Compass compatibility.
 
-Existing damage/hit/enemy lifecycle stays with `CombatActionContext`, `DamageRequest`, `DamageResult`, `CombatResolver` and `CombatReactionQueue`. Future HitResolved or EnemyKilled content should integrate there rather than subscribing uncontrolled listeners. EncounterStart, DefenseCommitted, DrawAttempt, NodeCompleted, HandEnter and HandLeave effect contexts are not implemented until approved content requires them.
+Existing damage/hit/enemy lifecycle stays with `CombatActionContext`, `DamageRequest`, `DamageResult`, `CombatResolver` and `CombatReactionQueue`. Future HitResolved or EnemyKilled content should integrate there rather than subscribing uncontrolled listeners. DefenseCommitted, DrawAttempt, HandEnter and HandLeave effect contexts remain unimplemented until approved content requires them.
 
 ## Deterministic ordering
 
@@ -103,6 +111,12 @@ No effect application relies on Unity object discovery, scene hierarchy, diction
 - Effects inside one source execute in serialized array order.
 - `CombatReactionQueue` orders by phase, source category (Artifact before Enhancement), source order, handler/effect index, priority, hit index and action ID, with a bounded operation limit.
 - Player-turn-start Artifacts use acquisition order; Mending Enhancement sources use authoritative hand-zone order, not Transform order.
+- Completed-action rule evaluation follows owned Artifact acquisition order, then each Artifact's serialized rule order. Each qualifying grant is appended separately to a FIFO; grants are not collapsed. A dequeued grant calls the ordinary PlayerTurnStart path. When Cheater and Dwarf both qualify, Cheater (first Artifact) grants first and Dwarf remains queued until that granted turn completes; terminal Victory/Defeat clears queued grants. Cheater's encounter counter lives on its `ArtifactRuntimeInstance.State` and is cleared at encounter start. Dwarf has no persistent counter: all committed ranks must be below Five, at most one grant per action, and each later qualifying action can grant again.
+- Hands selection derives from owned typed rule definitions, not UI state. Without Hands the existing one-card and two-card Ace-pair rules remain; with Hands, same-rank selections can reach three cards. Invalid rank extension/fourth card is rejected. A valid two-card Ace pair retains existing seeded critical behavior and is not a Hands action; a three-card same-rank action, including three Aces, is not a critical pair. Hands' 10 cap uses the existing action-total cap stage and composes with Dagger by the minimum effective cap; no duplicate cap application occurs.
+- Map and node effects resolve only after authoritative RunManager lifecycle boundaries. Lantern's deterministic reveal does not mutate topology or consume combat RNG. Hammer processes a node completion after the authoritative completed-node count is incremented, and random choices use dedicated explicitly named Artifact/content streams rather than combat-critical streams.
+- Encounter-start effects execute after the baseline draw in Artifact acquisition order and then hand Enhancement order. Incoming reductions iterate owned Artifact order; action flats sum deterministically and multiple caps use the minimum, independent of purchase order.
+
+
 - Numeric modifiers do not consume RNG. Reactive applicability checks do not consume RNG. Future random effects must request an explicitly named run-seeded stream and document whether consumption is once per action, source, card or hit.
 
 ## Conditions and filters
@@ -111,8 +125,9 @@ No effect application relies on Unity object discovery, scene hierarchy, diction
 
 - `CardSuit`
 - `EnhancedCard`
+- `AttackValueGreaterThan` (integer attack threshold; qualifying value is snapshotted after ordinary card-local/suit/base modifiers, before thresholded bonuses)
 
-All conditions must match. Enhancement source identity is enforced by the source adapter: a card-local effect applies only to its source CardInstance. Conditions are data and never compare display names or IDs. Additional rank, attack-threshold or HP-threshold conditions should be added only with approved content and the authoritative value/snapshot semantics defined.
+All conditions must match. Enhancement source identity is enforced by the source adapter: a card-local effect applies only to its source CardInstance. Conditions are data and never compare display names or IDs. Further rank or HP-threshold conditions require approved content and defined authoritative snapshots.
 
 ## Modifier ordering and preview parity
 
@@ -124,9 +139,12 @@ V1 ordering is:
 2. card-local flat Enhancement modifier;
 3. card-local multiplier, if a future Enhancement supplies one;
 4. matching Artifact multipliers;
-5. matching Artifact flat bonuses.
+5. matching Artifact flat bonuses;
+6. test attack-threshold conditions against the resulting pre-threshold value, then add qualifying bonuses (Sword cannot self-qualify);
+7. aggregate committed card damage, add action-flat modifiers and enforce a **single action-total cap** over requested damage across all hits;
+8. multiply by the existing critical result **after** the cap (a 10-point Dagger budget becomes 20 on a critical pair).
 
-This preserves the prior attack contract `(base + Enhancement flat) × Artifact multipliers + Artifact flats`. It also implements the approved defense contract `(base block + Hardened +3) ×2` for a qualifying Spade. Club Emblem multiplies only each qualifying Club card before Ace-pair card damage is summed. Ace-pair selection, critical roll and combined-damage timing are otherwise unchanged.
+This preserves the prior attack contract `(base + Enhancement flat) × Artifact multipliers + Artifact flats`. Defense remains `(base block + Hardened +3) ×2` for a qualifying Spade. Club Emblem multiplies only its qualifying card before Ace-pair damage is summed. Sword checks each committed card independently after ordinary card/suit modifiers, before its own +10, action caps and crits. Dagger's +3 and cap operate at action scope, never once per card; on a staged multi-hit action, each requested hit consumes the same budget even when Shield absorbs it. Incoming player combat damage is reduced per actual hit (Leather −3, floor zero) **before** Shield; direct Event HP costs bypass this combat path. Recover–Shield policy remains unchanged.
 
 ## Canonical Tier I content and legacy crosswalk
 
@@ -143,7 +161,19 @@ Unity GUIDs, asset paths, scene references and cached-offer runtime IDs were pre
 | `enh_003` Mending | `Assets/Data/Enhancements/Mending.asset` | `mending` | Heal 2 at each player-turn start while this CardInstance is in hand; no heal on play. |
 | `enh_004` Quickdraw | `Assets/Data/Enhancements/Quickdraw.asset` | `quickdraw` | Draw 1 when this CardInstance is committed. |
 
-All eight are Common, Tier 1, with no parent ID. Tier replacement, rarity distribution and pricing from the spreadsheet remain unimplemented. Existing prototype prices remain unchanged because the spreadsheet has no approved prices for these rows.
+The original eight core entries are Common, Tier 1, with no parent ID. Additional authored Artifacts are listed below. Tier replacement and rarity-based offer distribution remain unimplemented; `Sword` carries Rare metadata but is offered by the unchanged Shop system, which does not use rarity weighting. Spreadsheet prices are blank for the listed entries; all added prices are temporary prototype values, not canonical balance.
+
+| Canonical | Authored asset | Rarity / tier | Temporary Shop price | Typed behavior |
+| --- | --- | --- | --- | --- |
+| `rel_005` Leather Armor | `Assets/Data/Relics/LeatherArmor.asset` | Common / 1 | **15g** | Reduce each incoming player combat hit by 3, floor zero before Shield; no Event-cost reduction. |
+| `rel_006` Dagger | `Assets/Data/Relics/Dagger.asset` | Common / 1 | **15g** | +3 after card aggregation; cap the entire action at 10 before criticals. |
+| `rel_007` Tome | `Assets/Data/Relics/Tome.asset` | Common / 1 | **18g** | Encounter-start Draw 1 after baseline draw, respecting hand capacity. |
+| `rel_011` Cheater Emblem | `Assets/Data/Relics/CheaterEmblem.asset` | Common / 1 | **20g** | After first completed player turn per encounter, enqueue one extra turn. |
+| `rel_012` Hands Emblem | `Assets/Data/Relics/HandsEmblem.asset` | Common / 1 | **20g** | Allow 2–3 same-rank cards; apply action-total cap 10; no three-card Ace crit. |
+| `rel_013` Dwarf Emblem | `Assets/Data/Relics/DwarfEmblem.asset` | Common / 1 | **18g** | After an action where every committed rank is below Five, enqueue one extra turn. |
+| `rel_023` Sword | `Assets/Data/Relics/Sword.asset` | Rare / 1 | **25g** | Each played card whose pre-Sword modified attack exceeds 8 gains +10. |
+
+Prices in the added Artifact table are temporary prototype values because spreadsheet prices are blank; the rel_011–013 prices are **20g, 20g, and 18g**. The unchanged Shop does not use rarity weighting. These assets use canonical IDs as runtime `id`s, occupy Persistent slots, and are registered in the existing Game scene catalog. Rule data is serialized inline in each Artifact definition, not separate subassets. Existing assets' GUIDs/references are unchanged. `Assets/Editor/GameDataGenerator.cs` was not run for the content batches.
 
 ## Adding a simple Artifact
 
@@ -181,16 +211,16 @@ A rule must integrate with its owning manager's validation and execution boundar
 
 - **Counters/charges:** use source runtime `GameplayEffectState`; define reset scope and stable effect-key migration before content uses it. Current indexed counters are sufficient as an extension point but have no save/version migration contract.
 - **Devouring/per-card scaling:** store accumulated bonus on the stable CardInstance state, separated from the Enhancement asset so future replacement can preserve it if approved.
-- **Map/node hooks:** add a typed NodeCompleted/map context in RunManager with a named independent seeded stream. Do not let Artifacts query or mutate PathScreenUI.
-- **Extra turns:** route every grant through the authoritative player-turn-start boundary and add re-entry/runaway guards before authoring Cheater/Dwarf content.
-- **Poker/effective suit:** add dedicated action validation and effective-card context; do not mutate shared `CardData` or generalize the numeric resolver into a hand evaluator.
+- **Map/node hooks:** Lantern's typed `MapReady` reveal selects one eligible hidden node deterministically without changing topology; additional map lifecycle semantics remain out of scope. RunManager owns reveal state and uses its named independent map/content stream.
+- **Extra turns:** current typed queue supports Cheater's first-completed-player-turn-per-encounter and Dwarf's all-ranks-below-Five-per-action contracts. Other turn grants, suppression, stacking priorities and save/load migration require explicit design and focused state-machine handling; do not bypass PlayerTurnStart.
+- **Poker/effective suit:** Hands is the only implemented non-Ace multi-card rule (same rank, 2–3 cards, action cap 10). Add other combinations only through typed validation/action semantics; never infer a generic poker evaluator from Hands.
 - **Legacy compatibility:** legacy fields remain for the four non-migrated prototype Artifacts and tests that create definitions in memory. They are adapted into the shared resolver only when no typed effects exist. This is a migration bridge, not a second active path for canonical content.
-- **Unsupported v1 triggers:** no typed map, draw-attempt, hand-enter/leave, matched-defense, enemy-kill or hit-resolved content; no random effect; no rule modifier implementation; no tier upgrade/replacement UI; no save/load format.
+- **Unsupported v1 triggers/rules:** no typed draw-attempt, hand-enter/leave, matched-defense, enemy-kill or hit-resolved content; no other random effect; no effective-suit, overflow or further poker/rule execution; no tier upgrade/replacement UI or save/load format.
 
 ## Verification checkpoint
 
-- Focused `CoreGameplayEffectsTests`: **8/8 passed**.
-- Full EditMode suite: **160/160 passed**, zero failures/skips/inconclusive.
-- Discovered PlayMode Shield/multi-hit test: **1/1 passed**.
-- Game-scene smoke passed Club+Sharpened, Heart heal, fixed Diamond Draw 2, Quickdraw, Spade+Hardened ordering, no old Spade ATK reduction, Mending at player-turn starts and no Mending heal on play.
-- Console warnings/errors during final scene smoke: **0**.
+- First canonical core migration: focused **8/8**, full EditMode **160/160**, PlayMode **1/1**; historical checkpoint.
+- Four-Artifact batch: focused `ArtifactContentBatch1Tests` **11/11 passed**, full EditMode **171/171 passed** with zero failures/skips/inconclusive, and discovered PlayMode Shield/multi-hit **1/1 passed**.
+- Game-scene accelerated smoke: Tome hand 6→8 after baseline+additional draw; Leather converted 5 incoming to 2 HP loss, and a staged Shield consumed the remaining post-reduction hit; Dagger normal five dealt 8, Ace-pair capped critical dealt 20; Sword eight dealt 8, ten dealt 20 and Club+Sharpened five dealt 26. No natural twelve-map/economy playthrough is claimed.
+- Cheater/Hands/Dwarf batch: focused `ArtifactRuleBatchTests` **12/12**, full EditMode **194/194**, discovered PlayMode **1/1**. These are the last successful regression results before the Editor bridge disconnected; no fresh rerun was possible afterward.
+- Accelerated Game-scene smokes verified Cheater/Dwarf grants and combined FIFO order, repeat Dwarf eligibility, PlayerTurnStart healing, Hands selection/cap and Ace-pair separation. Last connected Console warning/error query: **0**. Smokes used staged encounters and programmatic UI events, not a natural full run.

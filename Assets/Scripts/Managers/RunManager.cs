@@ -43,6 +43,7 @@ public class RunManager : Singleton<RunManager>
     public event Action OnRunCompleted;
     public event Action<string> OnRunStarted;
     public event Action<string> OnCycleStarted;
+    public event Action OnMapRevealChanged;
     public event Action<CardInstance> OnBossRewardGranted;
 
     readonly List<EnemyTypeData> _generatedEnemyTypes = new();
@@ -52,6 +53,7 @@ public class RunManager : Singleton<RunManager>
     RunEventDefinition _activeEvent;
     CombatManager _subscribedCombatManager;
     RunRandomContext _randomContext;
+    int _completedNodeCount;
 
     public RunTimingStatistics Timing { get; } = new();
 
@@ -60,6 +62,7 @@ public class RunManager : Singleton<RunManager>
     public bool IsRunCompleted { get; private set; }
     public string RunSeed => runSeed;
     public int CurrentMapIndex => bossIndex;
+    public int CompletedNodeCount => _completedNodeCount;
     public PathNode ActiveNode => _activeNode;
     public RunEventDefinition ActiveEvent => _activeEvent;
     public EnemyTypeData CurrentBoss => bossIndex >= 0 && bossIndex < bossDeck.Count
@@ -192,6 +195,70 @@ public class RunManager : Singleton<RunManager>
     {
         currentPath.Clear();
         currentPath.AddRange(GenerateMapForIndex(mapIndex));
+        GameplayEffectResolver.ApplyMapReady(new MapReadyEffectContext(this, CardManager.Instance, mapIndex));
+    }
+
+    public void RefreshCurrentMapEffects()
+    {
+        if (_randomContext == null || currentPath.Count == 0) return;
+        if (GameplayEffectResolver.ApplyMapReady(
+            new MapReadyEffectContext(this, CardManager.Instance, CurrentMapIndex)))
+            OnMapRevealChanged?.Invoke();
+    }
+
+    // Only normally hidden, currently reachable Event/Risk information can be exposed.
+    // Nearest route depth, then row, then stable node ID wins. Graph links and accessibility stay intact.
+    internal bool TryRevealEligibleHiddenNode()
+    {
+        if (currentPath.Count == 0) return false;
+        var frontier = _activeNode != null && !_activeNode.completed
+            ? new[] { _activeNode }
+            : currentPath.Where(node => node.accessible && !node.completed)
+                .OrderBy(node => node.id).ToArray();
+        var pending = new Queue<PathNode>(frontier);
+        var visited = new HashSet<int>();
+        PathNode candidate = null;
+        while (pending.Count > 0)
+        {
+            var node = pending.Dequeue();
+            if (node == null || node.mapIndex != CurrentMapIndex || node.completed ||
+                !visited.Add(node.id)) continue;
+            if (node.hidden && !node.revealed &&
+                (node.kind == MapNodeType.Event || node.kind == MapNodeType.Risk) &&
+                (candidate == null || node.col < candidate.col ||
+                    (Mathf.Approximately(node.col, candidate.col) &&
+                        (node.row < candidate.row ||
+                            (Mathf.Approximately(node.row, candidate.row) && node.id < candidate.id)))))
+                candidate = node;
+            foreach (int nextId in node.next)
+            {
+                var next = FindNode(nextId);
+                if (next != null && !next.completed) pending.Enqueue(next);
+            }
+        }
+        if (candidate == null) return false;
+        candidate.revealed = true;
+        return true;
+    }
+
+    // These are run-authoritative node/content operations, invoked by typed effects only.
+    internal bool TryGrantRandomCommonEnhancement(int completedNodeCount)
+    {
+        var cards = CardManager.Instance;
+        if (_randomContext == null || cards == null) return false;
+        var eligible = cards.ownedCards
+            .Where(card => card != null && card.Enhancement == null)
+            .OrderBy(card => card.Id).ToArray();
+        var common = cards.enhancementCatalog
+            .Where(value => value != null && !string.IsNullOrWhiteSpace(value.canonicalId) &&
+                string.Equals(value.rarity, "Common", StringComparison.Ordinal))
+            .OrderBy(value => value.canonicalId, StringComparer.Ordinal).ToArray();
+        if (eligible.Length == 0 || common.Length == 0) return false;
+        var cardRandom = _randomContext.CreateStream("artifact-common-card", completedNodeCount);
+        var enhancementRandom = _randomContext.CreateStream("artifact-common-enhancement", completedNodeCount);
+        var card = eligible[cardRandom.NextInt(0, eligible.Length)];
+        var enhancement = common[enhancementRandom.NextInt(0, common.Length)];
+        return cards.ApplyEnhancement(card.Id, enhancement);
     }
 
     public void OnPathChosen(int id)
@@ -597,6 +664,7 @@ public class RunManager : Singleton<RunManager>
         if (resolvedNode == null || resolvedNode.completed) return;
 
         resolvedNode.completed = true;
+        _completedNodeCount++;
         foreach (var nextId in resolvedNode.next)
         {
             var next = FindNode(nextId);
@@ -604,6 +672,9 @@ public class RunManager : Singleton<RunManager>
             next.accessible = true;
             if (!next.hidden) next.revealed = true;
         }
+        GameplayEffectResolver.ApplyNodeCompleted(new NodeCompletedEffectContext(
+            this, CardManager.Instance, resolvedNode, _completedNodeCount));
+        RefreshCurrentMapEffects();
     }
 
     void ShowPathAfterNode()
@@ -693,6 +764,7 @@ public class RunManager : Singleton<RunManager>
         _generatedEnemyTypes.Clear();
         bossDeck.Clear();
         bossIndex = 0;
+        _completedNodeCount = 0;
         currentPath.Clear();
     }
 

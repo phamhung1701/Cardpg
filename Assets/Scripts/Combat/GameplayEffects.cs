@@ -1,28 +1,39 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public enum GameplayEffectKind
 {
-    FlatAttack,
-    AttackMultiplier,
-    FlatBlock,
-    BlockMultiplier,
-    Heal,
-    Draw,
-    BonusGold,
-    ReduceAttackByCardValue,
-    RecycleDiscardByCardValue,
-    DrawByCardValue
+    FlatAttack = 0,
+    AttackMultiplier = 1,
+    FlatBlock = 2,
+    BlockMultiplier = 3,
+    Heal = 4,
+    Draw = 5,
+    BonusGold = 6,
+    ReduceAttackByCardValue = 7,
+    RecycleDiscardByCardValue = 8,
+    DrawByCardValue = 9,
+    FlatActionDamage = 10,
+    ActionDamageCap = 11,
+    IncomingCombatDamageReduction = 12,
+    RevealMapNode = 13,
+    GrantRandomCommonEnhancement = 14
 }
 
 public enum GameplayEffectTrigger
 {
-    AttackCalculated,
-    DefenseCalculated,
-    CardCommitted,
-    PlayerTurnStart,
-    EncounterWon
+    AttackCalculated = 0,
+    DefenseCalculated = 1,
+    CardCommitted = 2,
+    PlayerTurnStart = 3,
+    EncounterWon = 4,
+    ActionDamageCalculated = 5,
+    IncomingDamageCalculated = 6,
+    EncounterStart = 7,
+    MapReady = 8,
+    NodeCompleted = 9
 }
 
 public enum GameplayEffectCategory
@@ -34,8 +45,39 @@ public enum GameplayEffectCategory
 
 public enum GameplayConditionKind
 {
-    CardSuit,
-    EnhancedCard
+    CardSuit = 0,
+    EnhancedCard = 1,
+    AttackValueGreaterThan = 2,
+    MultiCardAction = 3,
+    HandsMultiCardAction = 4
+}
+
+public enum GameplayRuleModifierKind
+{
+    ExtraTurn = 0,
+    SameRankMultiCard = 1
+}
+
+public enum ExtraTurnRuleTrigger
+{
+    FirstPlayerTurnCompleted = 0,
+    QualifyingPlayedActionCompleted = 1
+}
+
+[Serializable]
+public struct ExtraTurnRuleDefinition
+{
+    public ExtraTurnRuleTrigger trigger;
+    public bool oncePerEncounter;
+    public bool requireAllPlayedCardsBelowRank;
+    public CardData.Rank exclusiveRank;
+}
+
+[Serializable]
+public struct SameRankMultiCardRuleDefinition
+{
+    public bool requireMatchingRank;
+    [Min(2)] public int maximumCards;
 }
 
 [Serializable]
@@ -44,13 +86,18 @@ public struct GameplayEffectCondition
     public GameplayConditionKind kind;
     public CardData.Suit suit;
     public bool expected;
+    public int value;
 
-    public bool Matches(CardInstance card)
+    public bool Matches(CardInstance card, int attackValue = 0, int selectedCardCount = 1,
+        bool handsMultiCardAction = false)
     {
         return kind switch
         {
             GameplayConditionKind.CardSuit => card != null && card.Suit == suit,
             GameplayConditionKind.EnhancedCard => (card?.Enhancement != null) == expected,
+            GameplayConditionKind.AttackValueGreaterThan => attackValue > value,
+            GameplayConditionKind.MultiCardAction => (selectedCardCount > 1) == expected,
+            GameplayConditionKind.HandsMultiCardAction => handsMultiCardAction == expected,
             _ => false
         };
     }
@@ -58,9 +105,13 @@ public struct GameplayEffectCondition
 
 // Rule modifiers deliberately do not pass through numeric/reactive Apply paths.
 // Future typed subclasses own selection/turn/map permission behavior.
-public abstract class GameplayRuleModifierData : ScriptableObject
+[Serializable]
+public class GameplayRuleModifierData
 {
     public string ruleId;
+    public GameplayRuleModifierKind kind;
+    public ExtraTurnRuleDefinition extraTurn;
+    public SameRankMultiCardRuleDefinition sameRankMultiCard;
 }
 
 [Serializable]
@@ -74,15 +125,18 @@ public struct GameplayEffectDefinition
     public GameplayEffectCategory Category => kind switch
     {
         GameplayEffectKind.FlatAttack or GameplayEffectKind.AttackMultiplier or
-            GameplayEffectKind.FlatBlock or GameplayEffectKind.BlockMultiplier => GameplayEffectCategory.NumericModifier,
+            GameplayEffectKind.FlatBlock or GameplayEffectKind.BlockMultiplier or
+            GameplayEffectKind.FlatActionDamage or GameplayEffectKind.ActionDamageCap or
+            GameplayEffectKind.IncomingCombatDamageReduction => GameplayEffectCategory.NumericModifier,
         _ => GameplayEffectCategory.Reactive
     };
 
-    public bool Matches(CardInstance card)
+    public bool Matches(CardInstance card, int attackValue = 0, int selectedCardCount = 1,
+        bool handsMultiCardAction = false)
     {
         if (conditions == null) return true;
         for (int i = 0; i < conditions.Length; i++)
-            if (!conditions[i].Matches(card)) return false;
+            if (!conditions[i].Matches(card, attackValue, selectedCardCount, handsMultiCardAction)) return false;
         return true;
     }
 }
@@ -91,10 +145,14 @@ public struct GameplayEffectDefinition
 public sealed class GameplayEffectState
 {
     readonly Dictionary<int, int> _counters = new();
+    readonly Dictionary<int, int> _encounterCounters = new();
 
     public int GetCounter(int effectIndex) => _counters.TryGetValue(effectIndex, out int value) ? value : 0;
     public void SetCounter(int effectIndex, int value) => _counters[effectIndex] = value;
-    public void Clear() => _counters.Clear();
+    public int GetEncounterCounter(int ruleIndex) => _encounterCounters.TryGetValue(ruleIndex, out int value) ? value : 0;
+    public void SetEncounterCounter(int ruleIndex, int value) => _encounterCounters[ruleIndex] = value;
+    public void ClearEncounter() => _encounterCounters.Clear();
+    public void Clear() { _counters.Clear(); _encounterCounters.Clear(); }
 }
 
 public sealed class ArtifactRuntimeInstance
@@ -117,6 +175,44 @@ public readonly struct GameplayEffectSource
 
     public GameplayEffectSource(ArtifactRuntimeInstance artifact) { Artifact = artifact; Card = null; }
     public GameplayEffectSource(CardInstance card) { Artifact = null; Card = card; }
+}
+
+public readonly struct CompletedPlayerActionContext
+{
+    public CombatActionContext Action { get; }
+    public PlayerRuntime Player { get; }
+    public CombatManager Combat { get; }
+    public CardManager Cards { get; }
+    public IReadOnlyList<CardInstance> CommittedCards { get; }
+    public int CompletedPlayerTurn { get; }
+
+    public CompletedPlayerActionContext(CombatActionContext action, PlayerRuntime player,
+        CombatManager combat, CardManager cards, IReadOnlyList<CardInstance> committedCards,
+        int completedPlayerTurn)
+    {
+        Action = action;
+        Player = player;
+        Combat = combat;
+        Cards = cards;
+        CommittedCards = committedCards;
+        CompletedPlayerTurn = completedPlayerTurn;
+    }
+}
+
+public readonly struct PlayerTurnGrant
+{
+    public string SourceName { get; }
+    public long ActionId { get; }
+    public int SourceOrder { get; }
+    public int RuleOrder { get; }
+
+    public PlayerTurnGrant(string sourceName, long actionId, int sourceOrder, int ruleOrder)
+    {
+        SourceName = sourceName;
+        ActionId = actionId;
+        SourceOrder = sourceOrder;
+        RuleOrder = ruleOrder;
+    }
 }
 
 public readonly struct CardCommittedEffectContext
@@ -161,7 +257,97 @@ public readonly struct PlayerTurnStartEffectContext
     }
 }
 
-// The only execution/calculation foundation for Artifact and Enhancement effect sources.
+public readonly struct EncounterStartEffectContext
+{
+    public CombatActionContext Action { get; }
+    public PlayerRuntime Player { get; }
+    public CombatManager Combat { get; }
+    public CardManager Cards { get; }
+    public IReadOnlyList<EnemyRuntime> Enemies { get; }
+    public int BaselineCardsDrawn { get; }
+
+    public EncounterStartEffectContext(CombatActionContext action, PlayerRuntime player,
+        CombatManager combat, CardManager cards, IReadOnlyList<EnemyRuntime> enemies,
+        int baselineCardsDrawn)
+    {
+        Action = action;
+        Player = player;
+        Combat = combat;
+        Cards = cards;
+        Enemies = enemies;
+        BaselineCardsDrawn = baselineCardsDrawn;
+    }
+}
+
+public readonly struct ActionDamageEffectContext
+{
+    public CombatActionContext Action { get; }
+    public IReadOnlyList<CardInstance> Cards { get; }
+    public EnemyRuntime Target { get; }
+    public CardManager CardManager { get; }
+    public int AggregatedDamage { get; }
+    public bool IsHandsMultiCardAction { get; }
+
+    public ActionDamageEffectContext(CombatActionContext action, IReadOnlyList<CardInstance> cards,
+        EnemyRuntime target, CardManager cardManager, int aggregatedDamage, bool isHandsMultiCardAction = false)
+    {
+        Action = action;
+        Cards = cards;
+        Target = target;
+        CardManager = cardManager;
+        AggregatedDamage = aggregatedDamage;
+        IsHandsMultiCardAction = isHandsMultiCardAction;
+    }
+}
+
+public readonly struct IncomingDamageEffectContext
+{
+    public DamageRequest Request { get; }
+    public CombatManager Combat { get; }
+    public CardManager Cards { get; }
+    public int RawDamage { get; }
+
+    public IncomingDamageEffectContext(DamageRequest request, CombatManager combat,
+        CardManager cards, int rawDamage)
+    {
+        Request = request;
+        Combat = combat;
+        Cards = cards;
+        RawDamage = rawDamage;
+    }
+}
+
+public readonly struct MapReadyEffectContext
+{
+    public RunManager Run { get; }
+    public CardManager Cards { get; }
+    public int MapIndex { get; }
+
+    public MapReadyEffectContext(RunManager run, CardManager cards, int mapIndex)
+    {
+        Run = run;
+        Cards = cards;
+        MapIndex = mapIndex;
+    }
+}
+
+public readonly struct NodeCompletedEffectContext
+{
+    public RunManager Run { get; }
+    public CardManager Cards { get; }
+    public PathNode Node { get; }
+    public int CompletedNodeCount { get; }
+
+    public NodeCompletedEffectContext(RunManager run, CardManager cards,
+        PathNode node, int completedNodeCount)
+    {
+        Run = run;
+        Cards = cards;
+        Node = node;
+        CompletedNodeCount = completedNodeCount;
+    }
+}
+
 // Legacy fields feed this same foundation only when a definition has no authored effects.
 public static class GameplayEffectResolver
 {
@@ -232,15 +418,25 @@ public static class GameplayEffectResolver
     }
 
     static bool Applies(GameplayEffectSource source, GameplayEffectDefinition effect,
-        GameplayEffectTrigger trigger, CardInstance card)
+        GameplayEffectTrigger trigger, CardInstance card, int attackValue = 0,
+        int selectedCardCount = 1, bool handsMultiCardAction = false)
     {
         if (source.Artifact != null &&
             (source.Artifact.Definition.effects == null || source.Artifact.Definition.effects.Length == 0) &&
             trigger != GameplayEffectTrigger.EncounterWon &&
             !source.Artifact.Definition.Matches(card))
             return false;
-        return effect.trigger == trigger && effect.Matches(card) &&
+        return effect.trigger == trigger && effect.Matches(card, attackValue, selectedCardCount,
+            handsMultiCardAction) &&
             (source.Card == null || ReferenceEquals(source.Card, card));
+    }
+
+    static bool HasAttackThreshold(GameplayEffectDefinition effect)
+    {
+        if (effect.conditions == null) return false;
+        for (int i = 0; i < effect.conditions.Length; i++)
+            if (effect.conditions[i].kind == GameplayConditionKind.AttackValueGreaterThan) return true;
+        return false;
     }
 
     public static int CardLocalFlat(CardInstance card, GameplayEffectKind kind)
@@ -258,58 +454,437 @@ public static class GameplayEffectResolver
         return flat;
     }
 
-    public static int CalculateAttack(CardInstance card, CardManager cards) =>
-        CalculateValue(card, cards, false);
-
-    public static int CalculateBlock(CardInstance card, CardManager cards) =>
-        CalculateValue(card, cards, true);
-
-    static int CalculateValue(CardInstance card, CardManager cards, bool defense)
+    public static int CalculateAttack(CardInstance card, CardManager cards)
     {
         if (card == null) return 0;
-        var trigger = defense ? GameplayEffectTrigger.DefenseCalculated : GameplayEffectTrigger.AttackCalculated;
-        var flatKind = defense ? GameplayEffectKind.FlatBlock : GameplayEffectKind.FlatAttack;
-        var multiplyKind = defense ? GameplayEffectKind.BlockMultiplier : GameplayEffectKind.AttackMultiplier;
         int localFlat = 0, localMultiplier = 1, artifactFlat = 0, artifactMultiplier = 1;
         if (card.Enhancement != null)
-            Accumulate(new GameplayEffectSource(card), card, trigger, flatKind, multiplyKind,
-                ref localFlat, ref localMultiplier);
+            Accumulate(new GameplayEffectSource(card), card, GameplayEffectTrigger.AttackCalculated,
+                GameplayEffectKind.FlatAttack, GameplayEffectKind.AttackMultiplier,
+                ref localFlat, ref localMultiplier, includeThresholdEffects: false);
         if (cards != null)
             for (int i = 0; i < cards.ownedArtifacts.Count; i++)
             {
                 var artifact = cards.ownedArtifacts[i];
                 if (artifact == null) continue;
                 Accumulate(new GameplayEffectSource(cards.GetArtifactInstance(artifact)), card,
-                    trigger, flatKind, multiplyKind, ref artifactFlat, ref artifactMultiplier);
+                    GameplayEffectTrigger.AttackCalculated, GameplayEffectKind.FlatAttack,
+                    GameplayEffectKind.AttackMultiplier, ref artifactFlat, ref artifactMultiplier,
+                    includeThresholdEffects: false);
             }
-        // Card-local flats first, then multipliers, then Artifact flats; same path for preview and execution.
-        long value = ((long)card.BaseAttackValue + localFlat) * localMultiplier * artifactMultiplier + artifactFlat;
-        return (int)Math.Min(Math.Max(value, 0L), int.MaxValue);
+
+        int qualifyingValue = ClampToInt(((long)card.BaseAttackValue + localFlat) *
+            localMultiplier * artifactMultiplier + artifactFlat);
+        int conditionalFlat = 0, conditionalMultiplier = 1;
+        if (card.Enhancement != null)
+            Accumulate(new GameplayEffectSource(card), card, GameplayEffectTrigger.AttackCalculated,
+                GameplayEffectKind.FlatAttack, GameplayEffectKind.AttackMultiplier,
+                ref conditionalFlat, ref conditionalMultiplier, includeThresholdEffects: true,
+                attackValue: qualifyingValue);
+        if (cards != null)
+            for (int i = 0; i < cards.ownedArtifacts.Count; i++)
+            {
+                var artifact = cards.ownedArtifacts[i];
+                if (artifact == null) continue;
+                Accumulate(new GameplayEffectSource(cards.GetArtifactInstance(artifact)), card,
+                    GameplayEffectTrigger.AttackCalculated, GameplayEffectKind.FlatAttack,
+                    GameplayEffectKind.AttackMultiplier, ref conditionalFlat, ref conditionalMultiplier,
+                    includeThresholdEffects: true, attackValue: qualifyingValue);
+            }
+        return ClampToInt((long)qualifyingValue * conditionalMultiplier + conditionalFlat);
     }
+
+    public static int CalculateBlock(CardInstance card, CardManager cards) =>
+        CalculateBlockValue(card, cards);
+
+    static int CalculateBlockValue(CardInstance card, CardManager cards)
+    {
+        if (card == null) return 0;
+        int localFlat = 0, localMultiplier = 1, artifactFlat = 0, artifactMultiplier = 1;
+        if (card.Enhancement != null)
+            Accumulate(new GameplayEffectSource(card), card, GameplayEffectTrigger.DefenseCalculated,
+                GameplayEffectKind.FlatBlock, GameplayEffectKind.BlockMultiplier,
+                ref localFlat, ref localMultiplier, includeThresholdEffects: false);
+        if (cards != null)
+            for (int i = 0; i < cards.ownedArtifacts.Count; i++)
+            {
+                var artifact = cards.ownedArtifacts[i];
+                if (artifact == null) continue;
+                Accumulate(new GameplayEffectSource(cards.GetArtifactInstance(artifact)), card,
+                    GameplayEffectTrigger.DefenseCalculated, GameplayEffectKind.FlatBlock,
+                    GameplayEffectKind.BlockMultiplier, ref artifactFlat, ref artifactMultiplier,
+                    includeThresholdEffects: false);
+            }
+        return ClampToInt(((long)card.BaseAttackValue + localFlat) *
+            localMultiplier * artifactMultiplier + artifactFlat);
+    }
+
+    static int ClampToInt(long value) => (int)Math.Min(Math.Max(value, 0L), int.MaxValue);
 
     static void Accumulate(GameplayEffectSource source, CardInstance card,
         GameplayEffectTrigger trigger, GameplayEffectKind flatKind, GameplayEffectKind multiplierKind,
-        ref int flat, ref int multiplier)
+        ref int flat, ref int multiplier, bool includeThresholdEffects, int attackValue = 0)
     {
         for (int i = 0; i < EffectCount(source); i++)
         {
             var effect = EffectAt(source, i);
-            if (!Applies(source, effect, trigger, card)) continue;
+            if (HasAttackThreshold(effect) != includeThresholdEffects ||
+                !Applies(source, effect, trigger, card, attackValue)) continue;
             if (effect.kind == flatKind) flat += effect.amount;
-            else if (effect.kind == multiplierKind) multiplier = Mathf.Max(1, multiplier * Mathf.Max(1, effect.amount));
+            else if (effect.kind == multiplierKind)
+                multiplier = Mathf.Max(1, multiplier * Mathf.Max(1, effect.amount));
         }
     }
 
     public static int ModifyWithSingleArtifact(RelicData artifact, CardInstance card, int value, bool defense)
     {
         if (artifact == null) return value;
+        var source = new GameplayEffectSource(new ArtifactRuntimeInstance(artifact));
         int flat = 0, multiplier = 1;
-        Accumulate(new GameplayEffectSource(new ArtifactRuntimeInstance(artifact)), card,
-            defense ? GameplayEffectTrigger.DefenseCalculated : GameplayEffectTrigger.AttackCalculated,
+        var trigger = defense ? GameplayEffectTrigger.DefenseCalculated : GameplayEffectTrigger.AttackCalculated;
+        Accumulate(source, card, trigger,
             defense ? GameplayEffectKind.FlatBlock : GameplayEffectKind.FlatAttack,
             defense ? GameplayEffectKind.BlockMultiplier : GameplayEffectKind.AttackMultiplier,
-            ref flat, ref multiplier);
-        return Mathf.Max(0, value * multiplier + flat);
+            ref flat, ref multiplier, includeThresholdEffects: false);
+        int qualifyingValue = ClampToInt((long)value * multiplier + flat);
+        if (defense) return qualifyingValue;
+        int conditionalFlat = 0, conditionalMultiplier = 1;
+        Accumulate(source, card, trigger, GameplayEffectKind.FlatAttack,
+            GameplayEffectKind.AttackMultiplier, ref conditionalFlat, ref conditionalMultiplier,
+            includeThresholdEffects: true, attackValue: qualifyingValue);
+        return ClampToInt((long)qualifyingValue * conditionalMultiplier + conditionalFlat);
+    }
+
+    public static int CalculateActionDamage(ActionDamageEffectContext context, out int actionDamageCap)
+    {
+        long damage = Math.Max(0, context.AggregatedDamage);
+        damage += SumActionEffect(context, GameplayEffectKind.FlatActionDamage);
+        actionDamageCap = SmallestActionCap(context);
+        // The cap is a budget over the complete action, not one cap per card or hit.
+        // CombatManager applies the budget before critical multiplication and apportions it to hits.
+        return ClampToInt(damage);
+    }
+
+    static int SumActionEffect(ActionDamageEffectContext context, GameplayEffectKind kind)
+    {
+        int total = 0;
+        var manager = context.CardManager;
+        if (manager != null)
+            for (int i = 0; i < manager.ownedArtifacts.Count; i++)
+            {
+                var artifact = manager.ownedArtifacts[i];
+                if (artifact == null) continue;
+                total += SumSourceEffects(new GameplayEffectSource(manager.GetArtifactInstance(artifact)),
+                    GameplayEffectTrigger.ActionDamageCalculated, kind, null,
+                    context.Cards?.Count ?? 0, handsMultiCardAction: context.IsHandsMultiCardAction);
+            }
+        if (context.Cards != null)
+            for (int i = 0; i < context.Cards.Count; i++)
+            {
+                var card = context.Cards[i];
+                if (card?.Enhancement == null) continue;
+                total += SumSourceEffects(new GameplayEffectSource(card),
+                    GameplayEffectTrigger.ActionDamageCalculated, kind, card, context.Cards.Count,
+                    context.IsHandsMultiCardAction);
+            }
+        return total;
+    }
+
+    static int SmallestActionCap(ActionDamageEffectContext context)
+    {
+        int cap = -1;
+        var manager = context.CardManager;
+        if (manager != null)
+            for (int i = 0; i < manager.ownedArtifacts.Count; i++)
+            {
+                var artifact = manager.ownedArtifacts[i];
+                if (artifact == null) continue;
+                cap = MinSourceCap(new GameplayEffectSource(manager.GetArtifactInstance(artifact)), cap, null,
+                    context.Cards?.Count ?? 0, context.IsHandsMultiCardAction);
+            }
+        if (context.Cards != null)
+            for (int i = 0; i < context.Cards.Count; i++)
+            {
+                var card = context.Cards[i];
+                if (card?.Enhancement == null) continue;
+                cap = MinSourceCap(new GameplayEffectSource(card), cap, card, context.Cards.Count,
+                    context.IsHandsMultiCardAction);
+            }
+        return cap;
+    }
+
+    static int SumSourceEffects(GameplayEffectSource source, GameplayEffectTrigger trigger,
+        GameplayEffectKind kind, CardInstance card, int selectedCardCount = 1,
+        bool handsMultiCardAction = false)
+    {
+        int total = 0;
+        for (int i = 0; i < EffectCount(source); i++)
+        {
+            var effect = EffectAt(source, i);
+            if (effect.kind == kind && Applies(source, effect, trigger, card,
+                selectedCardCount: selectedCardCount, handsMultiCardAction: handsMultiCardAction)) total += effect.amount;
+        }
+        return total;
+    }
+
+    static int MinSourceCap(GameplayEffectSource source, int currentCap, CardInstance card,
+        int selectedCardCount, bool handsMultiCardAction)
+    {
+        for (int i = 0; i < EffectCount(source); i++)
+        {
+            var effect = EffectAt(source, i);
+            if (effect.kind != GameplayEffectKind.ActionDamageCap ||
+                !Applies(source, effect, GameplayEffectTrigger.ActionDamageCalculated, card,
+                    selectedCardCount: selectedCardCount, handsMultiCardAction: handsMultiCardAction)) continue;
+            currentCap = currentCap < 0 ? effect.amount : Math.Min(currentCap, effect.amount);
+        }
+        return currentCap;
+    }
+
+    public static int ModifyIncomingCombatDamage(IncomingDamageEffectContext context)
+    {
+        int damage = Math.Max(0, context.RawDamage);
+        var cards = context.Cards;
+        if (cards == null) return damage;
+        for (int i = 0; i < cards.ownedArtifacts.Count; i++)
+        {
+            var artifact = cards.ownedArtifacts[i];
+            if (artifact == null) continue;
+            var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
+            for (int j = 0; j < EffectCount(source); j++)
+            {
+                var effect = EffectAt(source, j);
+                if (effect.kind != GameplayEffectKind.IncomingCombatDamageReduction ||
+                    !Applies(source, effect, GameplayEffectTrigger.IncomingDamageCalculated, null)) continue;
+                damage = Math.Max(0, damage - Math.Max(0, effect.amount));
+            }
+        }
+        return damage;
+    }
+
+    public static void InitializeNodeCounters(GameplayEffectSource source, int completedNodeCount)
+    {
+        for (int i = 0; i < EffectCount(source); i++)
+            if (EffectAt(source, i).trigger == GameplayEffectTrigger.NodeCompleted)
+                source.State.SetCounter(i, completedNodeCount);
+    }
+
+    public static bool ApplyMapReady(MapReadyEffectContext context)
+    {
+        if (context.Run == null || context.Cards == null) return false;
+        bool changed = false;
+        for (int sourceOrder = 0; sourceOrder < context.Cards.ownedArtifacts.Count; sourceOrder++)
+        {
+            var artifact = context.Cards.ownedArtifacts[sourceOrder];
+            if (artifact == null) continue;
+            var source = new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact));
+            for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
+            {
+                var effect = EffectAt(source, effectIndex);
+                if (effect.kind != GameplayEffectKind.RevealMapNode ||
+                    !Applies(source, effect, GameplayEffectTrigger.MapReady, null) ||
+                    source.State.GetCounter(effectIndex) == context.MapIndex + 1)
+                    continue;
+                if (!context.Run.TryRevealEligibleHiddenNode()) continue;
+                source.State.SetCounter(effectIndex, context.MapIndex + 1);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    public static void ApplyNodeCompleted(NodeCompletedEffectContext context)
+    {
+        if (context.Run == null || context.Cards == null || context.Node == null ||
+            !context.Node.completed) return;
+        for (int sourceOrder = 0; sourceOrder < context.Cards.ownedArtifacts.Count; sourceOrder++)
+        {
+            var artifact = context.Cards.ownedArtifacts[sourceOrder];
+            if (artifact == null) continue;
+            var source = new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact));
+            for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
+            {
+                var effect = EffectAt(source, effectIndex);
+                if (effect.kind != GameplayEffectKind.GrantRandomCommonEnhancement ||
+                    !Applies(source, effect, GameplayEffectTrigger.NodeCompleted, null)) continue;
+                source.State.SetCounter(effectIndex, context.CompletedNodeCount);
+                if (effect.amount > 0 && context.CompletedNodeCount % effect.amount == 0)
+                    context.Run.TryGrantRandomCommonEnhancement(context.CompletedNodeCount);
+            }
+        }
+    }
+
+    public static void EnqueueEncounterStart(EncounterStartEffectContext context,
+        CombatReactionQueue queue)
+    {
+        for (int i = 0; i < context.Cards.ownedArtifacts.Count; i++)
+        {
+            var artifact = context.Cards.ownedArtifacts[i];
+            if (artifact != null)
+                EnqueueEncounterSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
+                    null, context, queue, i);
+        }
+        for (int i = 0; i < context.Cards.hand.Count; i++)
+        {
+            var card = context.Cards.hand[i];
+            if (card?.Enhancement != null)
+                EnqueueEncounterSource(new GameplayEffectSource(card), card, context, queue, i);
+        }
+    }
+
+    static void EnqueueEncounterSource(GameplayEffectSource source, CardInstance card,
+        EncounterStartEffectContext context, CombatReactionQueue queue, int sourceOrder)
+    {
+        for (int i = 0; i < EffectCount(source); i++)
+        {
+            var effect = EffectAt(source, i);
+            if (!Applies(source, effect, GameplayEffectTrigger.EncounterStart, card)) continue;
+            int effectIndex = i;
+            queue.Enqueue(context.Action.ActionId, -1, CombatReactionPhase.EncounterReady,
+                source.Category, sourceOrder, effectIndex,
+                () => ApplyReactive(source, effect, context.Combat, context.Cards, card, null));
+        }
+    }
+
+    public static bool CanContinueSameRankSelection(IReadOnlyList<CardView> selected,
+        CardView candidate, CardManager cards)
+    {
+        if (selected == null || candidate?.data == null || cards == null) return false;
+        int count = selected.Count + 1;
+        if (count < 2) return false;
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        {
+            var artifact = cards.ownedArtifacts[artifactIndex];
+            if (artifact?.ruleModifiers == null) continue;
+            for (int ruleIndex = 0; ruleIndex < artifact.ruleModifiers.Length; ruleIndex++)
+            {
+                var rule = artifact.ruleModifiers[ruleIndex];
+                if (rule == null || rule.kind != GameplayRuleModifierKind.SameRankMultiCard ||
+                    count > Math.Max(2, rule.sameRankMultiCard.maximumCards)) continue;
+                if (!rule.sameRankMultiCard.requireMatchingRank) return true;
+                var rank = selected.Count > 0 ? selected[0]?.data?.Rank : candidate.data.Rank;
+                if (rank != candidate.data.Rank) continue;
+                bool allMatch = true;
+                for (int i = 1; i < selected.Count; i++)
+                    if (selected[i]?.data == null || selected[i].data.Rank != rank) { allMatch = false; break; }
+                if (allMatch) return true;
+            }
+        }
+        return false;
+    }
+
+    public static bool IsHandsMultiCardAction(IReadOnlyList<CardInstance> cards, CardManager manager)
+    {
+        if (cards == null || cards.Count < 2 || cards.Count > 3 || manager == null || cards[0] == null) return false;
+        // A legal two-card Ace action retains its existing Ace-pair semantics, even A+A.
+        if (cards.Count == 2 && cards.Any(card => card?.Rank == CardData.Rank.Ace)) return false;
+        for (int i = 1; i < cards.Count; i++)
+            if (cards[i] == null || cards[i].Rank != cards[0].Rank) return false;
+        return HasHandsRule(manager, cards.Count);
+    }
+
+    static bool HasHandsRule(CardManager manager, int cardCount)
+    {
+        for (int i = 0; i < manager.ownedArtifacts.Count; i++)
+        {
+            var rules = manager.ownedArtifacts[i]?.ruleModifiers;
+            if (rules == null) continue;
+            for (int j = 0; j < rules.Length; j++)
+                if (rules[j] != null && rules[j].kind == GameplayRuleModifierKind.SameRankMultiCard &&
+                    cardCount <= Math.Max(2, rules[j].sameRankMultiCard.maximumCards)) return true;
+        }
+        return false;
+    }
+
+    public static bool IsSameRankMultiCardAction(IReadOnlyList<CardView> cards, CardManager manager)
+    {
+        if (cards == null || cards.Count < 2 || manager == null || cards[0]?.data == null) return false;
+        for (int i = 1; i < cards.Count; i++)
+            if (cards[i]?.data == null || cards[i].data.Rank != cards[0].data.Rank) return false;
+        for (int i = 0; i < manager.ownedArtifacts.Count; i++)
+        {
+            var rules = manager.ownedArtifacts[i]?.ruleModifiers;
+            if (rules == null) continue;
+            for (int j = 0; j < rules.Length; j++)
+            {
+                var rule = rules[j];
+                if (rule == null || rule.kind != GameplayRuleModifierKind.SameRankMultiCard ||
+                    cards.Count > Math.Max(2, rule.sameRankMultiCard.maximumCards)) continue;
+                if (!rule.sameRankMultiCard.requireMatchingRank) return true;
+                bool allMatch = true;
+                for (int cardIndex = 1; cardIndex < cards.Count; cardIndex++)
+                    if (cards[cardIndex]?.data == null || cards[cardIndex].data.Rank != cards[0].data.Rank)
+                    { allMatch = false; break; }
+                if (allMatch) return true;
+            }
+        }
+        return false;
+    }
+
+    public static void EnqueueCompletedActionTurnGrants(CompletedPlayerActionContext context,
+        Queue<PlayerTurnGrant> grants)
+    {
+        var cards = context.Cards;
+        if (cards == null || context.CommittedCards == null || grants == null) return;
+        for (int sourceOrder = 0; sourceOrder < cards.ownedArtifacts.Count; sourceOrder++)
+        {
+            var artifact = cards.ownedArtifacts[sourceOrder];
+            if (artifact == null) continue;
+            var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
+            EnqueueExtraTurnRules(source, artifact.ruleModifiers, context, grants, sourceOrder);
+        }
+        // If a future Enhancement carries a rule modifier, it follows Artifact sources
+        // and the committed-card order, without a separate rule engine.
+        for (int cardOrder = 0; cardOrder < context.CommittedCards.Count; cardOrder++)
+        {
+            var card = context.CommittedCards[cardOrder];
+            if (card?.Enhancement == null) continue;
+            EnqueueExtraTurnRules(new GameplayEffectSource(card), card.Enhancement.ruleModifiers,
+                context, grants, cards.ownedArtifacts.Count + cardOrder);
+        }
+    }
+
+    static void EnqueueExtraTurnRules(GameplayEffectSource source,
+        GameplayRuleModifierData[] rules, CompletedPlayerActionContext context,
+        Queue<PlayerTurnGrant> grants, int sourceOrder)
+    {
+        if (rules == null) return;
+        for (int ruleOrder = 0; ruleOrder < rules.Length; ruleOrder++)
+        {
+            var rule = rules[ruleOrder];
+            if (rule == null || rule.kind != GameplayRuleModifierKind.ExtraTurn) continue;
+            var ruleData = rule.extraTurn;
+            bool qualifies = ruleData.trigger switch
+            {
+                ExtraTurnRuleTrigger.FirstPlayerTurnCompleted => context.CompletedPlayerTurn == 1,
+                ExtraTurnRuleTrigger.QualifyingPlayedActionCompleted =>
+                    context.CommittedCards.Count > 0 && (!ruleData.requireAllPlayedCardsBelowRank ||
+                        context.CommittedCards.All(card => card != null && card.Rank < ruleData.exclusiveRank)),
+                _ => false
+            };
+            if (!qualifies) continue;
+            if (ruleData.oncePerEncounter)
+            {
+                if (source.State.GetEncounterCounter(ruleOrder) != 0) continue;
+                source.State.SetEncounterCounter(ruleOrder, 1);
+            }
+            grants.Enqueue(new PlayerTurnGrant(source.DisplayName, context.Action.ActionId,
+                sourceOrder, ruleOrder));
+        }
+    }
+
+    public static bool CanPlayAsAcePair(IReadOnlyList<CardView> cards)
+    {
+        return cards != null && cards.Count == 2 && cards[0]?.data != null && cards[1]?.data != null &&
+            (cards[0].data.Rank == CardData.Rank.Ace || cards[1].data.Rank == CardData.Rank.Ace);
+    }
+
+    public static bool CanPlaySelection(IReadOnlyList<CardView> cards, EnemyRuntime target,
+        CardManager manager)
+    {
+        if (target == null || target.IsDefeated || cards == null || cards.Count == 0 || cards.Count > 3) return false;
+        if (!cards.All(card => card != null && card.data != null)) return false;
+        return cards.Count == 1 || CanPlayAsAcePair(cards) || IsSameRankMultiCardAction(cards, manager);
     }
 
     public static void EnqueueCardCommitted(CardCommittedEffectContext context, CombatReactionQueue queue)

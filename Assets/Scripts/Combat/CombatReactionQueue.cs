@@ -5,6 +5,7 @@ using UnityEngine;
 public enum CombatReactionPhase
 {
     EncounterStarted,
+    EncounterReady,
     CardCommitted,
     HitResolved,
     CardResolved,

@@ -100,7 +100,12 @@ public class CardManager : Singleton<CardManager>
         if (!SpendGold(price)) return false;
         relics.Add(artifact.id);
         ownedArtifacts.Add(artifact);
-        _artifactInstances.Add(artifact, new ArtifactRuntimeInstance(artifact));
+        var instance = new ArtifactRuntimeInstance(artifact);
+        _artifactInstances.Add(artifact, instance);
+        var run = RunManager.Instance;
+        GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(instance),
+            run != null ? run.CompletedNodeCount : 0);
+        run?.RefreshCurrentMapEffects();
         OnBuildChanged?.Invoke();
         return true;
     }
@@ -111,6 +116,14 @@ public class CardManager : Singleton<CardManager>
         if (!_artifactInstances.TryGetValue(artifact, out var instance))
             _artifactInstances.Add(artifact, instance = new ArtifactRuntimeInstance(artifact));
         return instance;
+    }
+
+    public void ResetArtifactEncounterEffectState()
+    {
+        foreach (var artifact in ownedArtifacts)
+            GetArtifactInstance(artifact)?.State.ClearEncounter();
+        foreach (var card in ownedCards)
+            card?.EffectState.ClearEncounter();
     }
 
     public CardInstance FindOwnedCard(int cardId)
@@ -296,7 +309,9 @@ public class CardManager : Singleton<CardManager>
         if (combat == null || !combat.CanAddCardToSelection(_selectedCards, card))
             return;
 
-        if (combat.ShouldReplaceSelectionOnAdd && !combat.CanPairSelection(_selectedCards, card))
+        if (combat.ShouldReplaceSelectionOnAdd &&
+            !combat.CanPairSelection(_selectedCards, card) &&
+            !combat.CanExtendSameRankSelection(_selectedCards, card))
             ClearSelection(false);
 
         _selectedCards.Add(card);
