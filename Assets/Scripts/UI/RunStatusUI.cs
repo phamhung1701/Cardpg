@@ -87,7 +87,7 @@ public class RunStatusUI : MonoBehaviour
                 foreach (var card in cards.ownedCards)
                     if (card.Enhancement != null) enhancedCount++;
                 pileSummaryLabel.text =
-                    $"Draw  {cards.deck.Count}    Discard  {cards.discardPile.Count}    Hand  {cards.HandCount}/{CardManager.HAND_SIZE}    Artifacts  {cards.ArtifactSlotsUsed}/{cards.ArtifactCapacity}    Enhanced  {enhancedCount}";
+                    $"Draw  {cards.deck.Count}    Discard  {cards.discardPile.Count}    Hand  {cards.HandCount}/{cards.HandCapacity}    Artifacts  {cards.ArtifactSlotsUsed}/{cards.ArtifactCapacity}    Enhanced  {enhancedCount}";
             }
         }
 

@@ -17,6 +17,7 @@ public class CombatManager : Singleton<CombatManager>
 
     readonly List<EnemyRuntime> _enemies = new();
     readonly List<int> _pendingAttacks = new();
+    readonly List<EnemyRuntime> _pendingAttackSources = new();
     readonly Queue<PlayerTurnGrant> _queuedPlayerTurnGrants = new();
     int _attackCountAtStart;
     int _completedPlayerTurnCount;
@@ -66,6 +67,20 @@ public class CombatManager : Singleton<CombatManager>
 
     bool _encounterResolved;
 
+    readonly struct DefenseAssignment
+    {
+        public CardInstance BlockingCard { get; }
+        public int CardOrder { get; }
+        public int AttackIndex { get; }
+
+        public DefenseAssignment(CardInstance blockingCard, int cardOrder, int attackIndex)
+        {
+            BlockingCard = blockingCard;
+            CardOrder = cardOrder;
+            AttackIndex = attackIndex;
+        }
+    }
+
     public void ConfigurePlayer(int maxHealth)
     {
         _configuredPlayerMaxHealth = maxHealth;
@@ -90,6 +105,7 @@ public class CombatManager : Singleton<CombatManager>
         CardManager.Instance?.CancelCardInteractions();
         _enemies.Clear();
         _pendingAttacks.Clear();
+        _pendingAttackSources.Clear();
         _attackCountAtStart = 0;
         _queuedPlayerTurnGrants.Clear();
         _completedPlayerTurnCount = 0;
@@ -203,11 +219,11 @@ public class CombatManager : Singleton<CombatManager>
         blockedCount = 0;
         remainingDamage = pendingDamage;
         if (cards == null || cards.Count == 0 || !AreValidHandViews(cards)) return false;
-        var matched = MatchDefenseCards(cards);
+        var matched = MatchDefenseAssignments(cards);
         if (matched == null) return false;
         blockedCount = matched.Count;
         for (int i = 0; i < matched.Count; i++)
-            remainingDamage -= _pendingAttacks[matched[i]];
+            remainingDamage -= _pendingAttacks[matched[i].AttackIndex];
         return true;
     }
 
@@ -217,12 +233,12 @@ public class CombatManager : Singleton<CombatManager>
         var proposed = new List<CardView>((selectedCards?.Count ?? 0) + 1);
         if (selectedCards != null) proposed.AddRange(selectedCards);
         proposed.Add(candidate);
-        return AreValidHandViews(proposed) && MatchDefenseCards(proposed) != null;
+        return AreValidHandViews(proposed) && MatchDefenseAssignments(proposed) != null;
     }
 
     // Strongest cards are assigned to the strongest remaining attack they can fully cover.
     // Equal values keep their original hand/encounter order for deterministic ties.
-    List<int> MatchDefenseCards(IReadOnlyList<CardView> cards)
+    List<DefenseAssignment> MatchDefenseAssignments(IReadOnlyList<CardView> cards)
     {
         if (cards.Count > _pendingAttacks.Count) return null;
         var cardOrder = new List<int>(cards.Count);
@@ -240,13 +256,13 @@ public class CombatManager : Singleton<CombatManager>
             return comparison != 0 ? comparison : a.CompareTo(b);
         });
 
-        var matched = new List<int>(cards.Count);
+        var matched = new List<DefenseAssignment>(cards.Count);
         foreach (int cardIndex in cardOrder)
         {
             int defense = CalculateCardDefense(cards[cardIndex].data);
             int attackIndex = attackOrder.FindIndex(index => _pendingAttacks[index] <= defense);
             if (attackIndex < 0) return null;
-            matched.Add(attackOrder[attackIndex]);
+            matched.Add(new DefenseAssignment(cards[cardIndex].data, cardIndex, attackOrder[attackIndex]));
             attackOrder.RemoveAt(attackIndex);
         }
         return matched;
@@ -293,6 +309,11 @@ public class CombatManager : Singleton<CombatManager>
         }
         bool critical = false;
         var cm = CardManager.Instance;
+        bool isAcePair = cards.Count == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards);
+        bool hasCriticalChanceOverride = GameplayEffectResolver.TryGetCriticalChanceOverride(
+            cardInstances, cm, out float criticalChanceOverride);
+        float actionCriticalChance = hasCriticalChanceOverride
+            ? criticalChanceOverride : criticalChancePercent;
 
         _isResolvingAction = true;
         _reactions.Clear();
@@ -312,17 +333,22 @@ public class CombatManager : Singleton<CombatManager>
         {
             if (!cm.TryDiscardCards(cards)) return false;
 
-            if (cards.Count == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards))
+            var handSnapshot = new List<CardInstance>(cm.hand);
+            GameplayEffectResolver.EnqueueAttackCommitted(
+                new AttackCommittedEffectContext(_activeAction, cardInstances, handSnapshot,
+                    target, this, cm), _reactions);
+            bool reactionFailed = !ProcessReactions(CombatReactionPhase.AttackCommitted);
+
+            if (!reactionFailed && (isAcePair || hasCriticalChanceOverride))
             {
-                if (criticalChancePercent >= 100f) critical = true;
-                else if (criticalChancePercent > 0f && _criticalRandom != null)
-                    critical = _criticalRandom.NextFloat() * 100f < criticalChancePercent;
+                if (actionCriticalChance >= 100f) critical = true;
+                else if (actionCriticalChance > 0f && _criticalRandom != null)
+                    critical = _criticalRandom.NextFloat() * 100f < actionCriticalChance;
             }
             if (critical) damagePerHit *= 2;
             int remainingActionDamage = actionDamageCap < 0 ? -1 :
                 (int)Math.Min((long)actionDamageCap * (critical ? 2 : 1), int.MaxValue);
 
-            bool reactionFailed = false;
             for (int cardIndex = 0; cardIndex < cards.Count && !reactionFailed; cardIndex++)
             {
                 EnqueueCardCommittedEffects(_activeAction, cardInstances[cardIndex], target, cm, cardIndex);
@@ -415,7 +441,7 @@ public class CombatManager : Singleton<CombatManager>
     {
         return !GameplayInputGate.IsBlocked && !_isResolvingAction && currentState == GameState.EnemyAttacking &&
             target != null && !target.IsDefeated && _enemies.Contains(target) && !_encounterResolved &&
-            cards != null && cards.Count > 0 && AreValidHandViews(cards) && MatchDefenseCards(cards) != null;
+            cards != null && cards.Count > 0 && AreValidHandViews(cards) && MatchDefenseAssignments(cards) != null;
     }
 
     public bool TryDefendWithCards(IReadOnlyList<CardView> cards)
@@ -427,29 +453,64 @@ public class CombatManager : Singleton<CombatManager>
     {
         if (!CanDefendWithCards(cards, target)) return false;
 
-        var matched = MatchDefenseCards(cards);
+        var assignments = MatchDefenseAssignments(cards);
+        if (assignments == null) return false;
         var names = new List<string>(cards.Count);
         for (int i = 0; i < cards.Count; i++)
             names.Add(cards[i].data.DisplayName);
 
-        if (!CardManager.Instance.TryDiscardCards(cards)) return false;
-
-        int blockedDamage = 0;
-        matched.Sort();
-        for (int i = matched.Count - 1; i >= 0; i--)
+        _isResolvingAction = true;
+        _reactions.Clear();
+        _activeAction = CreateAction(CombatActionOrigin.PlayerDefense, sourcePlayer: player);
+        _nextReactiveHitIndex = 0;
+        try
         {
-            blockedDamage += _pendingAttacks[matched[i]];
-            _pendingAttacks.RemoveAt(matched[i]);
-        }
-        SetPendingDamage(pendingDamage - blockedDamage);
-        Log($"Defended with {string.Join(", ", names)}: blocked {matched.Count} attack(s) ({blockedDamage} damage). Remaining: {pendingDamage}");
+            var cardManager = CardManager.Instance;
+            if (cardManager == null || !cardManager.TryDiscardCards(cards)) return false;
 
-        if (pendingDamage <= 0)
-        {
-            BeginPlayerTurn();
-            Log("Defended! Your turn.");
+            assignments.Sort((left, right) => left.AttackIndex.CompareTo(right.AttackIndex));
+            int blockedDamage = 0;
+            for (int blockOrder = 0; blockOrder < assignments.Count; blockOrder++)
+            {
+                var assignment = assignments[blockOrder];
+                int attackIndex = assignment.AttackIndex;
+                int attackDamage = _pendingAttacks[attackIndex];
+                var attacker = _pendingAttackSources[attackIndex];
+                blockedDamage += attackDamage;
+                GameplayEffectResolver.EnqueueAttackBlocked(
+                    new AttackBlockedEffectContext(_activeAction, assignment.BlockingCard, attacker,
+                        attackDamage, blockOrder, this, cardManager), _reactions);
+            }
+
+            for (int i = assignments.Count - 1; i >= 0; i--)
+            {
+                int attackIndex = assignments[i].AttackIndex;
+                _pendingAttacks.RemoveAt(attackIndex);
+                _pendingAttackSources.RemoveAt(attackIndex);
+            }
+            SetPendingDamage(pendingDamage - blockedDamage);
+            Log($"Defended with {string.Join(", ", names)}: blocked {assignments.Count} attack(s) ({blockedDamage} damage). Remaining: {pendingDamage}");
+
+            bool reactionsCompleted = ProcessReactions(CombatReactionPhase.AttackBlocked);
+            if (reactionsCompleted)
+                ProcessReactions(CombatReactionPhase.HitResolved);
+            if (!_encounterResolved && _enemies.Count == 0)
+                ResolveEncounter(EncounterResult.Victory);
+            if (_encounterResolved) return true;
+
+            if (pendingDamage <= 0)
+            {
+                BeginPlayerTurn();
+                Log("Defended! Your turn.");
+            }
+            return true;
         }
-        return true;
+        finally
+        {
+            _activeAction = null;
+            _isResolvingAction = false;
+            _reactions.Clear();
+        }
     }
 
     public void TakeRemainingDamage()
@@ -460,6 +521,7 @@ public class CombatManager : Singleton<CombatManager>
 
         int damage = pendingDamage;
         _pendingAttacks.Clear();
+        _pendingAttackSources.Clear();
         SetPendingDamage(0);
         ResolvePlayerDamageAction(
             CombatActionOrigin.EnemyRetaliation,
@@ -498,11 +560,15 @@ public class CombatManager : Singleton<CombatManager>
     void BeginEnemyAttack()
     {
         _pendingAttacks.Clear();
+        _pendingAttackSources.Clear();
         for (int i = 0; i < _enemies.Count; i++)
         {
             var enemy = _enemies[i];
             if (enemy != null && !enemy.IsDefeated && enemy.currentAttack > 0)
+            {
                 _pendingAttacks.Add(enemy.currentAttack);
+                _pendingAttackSources.Add(enemy);
+            }
         }
         _attackCountAtStart = _pendingAttacks.Count;
         int total = 0;
@@ -615,17 +681,20 @@ public class CombatManager : Singleton<CombatManager>
         int amount,
         int sourceOrder,
         int handlerOrder,
-        int priority = 0)
+        int priority = 0,
+        CombatReactionSourceCategory sourceCategory = CombatReactionSourceCategory.Core)
     {
         if (!_isResolvingAction || _activeAction == null || target == null ||
-            _processingReactionPhase != CombatReactionPhase.HitResolved)
+            (_processingReactionPhase != CombatReactionPhase.HitResolved &&
+             _processingReactionPhase != CombatReactionPhase.AttackBlocked))
             return false;
+        var phase = _processingReactionPhase.Value;
         int hitIndex = _nextReactiveHitIndex++;
         return _reactions.Enqueue(
             _activeAction.ActionId,
             hitIndex,
-            CombatReactionPhase.HitResolved,
-            CombatReactionSourceCategory.Core,
+            phase,
+            sourceCategory,
             sourceOrder,
             handlerOrder,
             () =>
@@ -800,6 +869,7 @@ public class CombatManager : Singleton<CombatManager>
         CardManager.Instance?.CancelCardInteractions();
         UnsubscribeFromEnemies();
         _pendingAttacks.Clear();
+        _pendingAttackSources.Clear();
         _attackCountAtStart = 0;
         _queuedPlayerTurnGrants.Clear();
         SetPendingDamage(0);
@@ -935,6 +1005,7 @@ public class CombatManager : Singleton<CombatManager>
         UnsubscribeFromEnemies();
         _enemies.Clear();
         _pendingAttacks.Clear();
+        _pendingAttackSources.Clear();
         _attackCountAtStart = 0;
         currentEnemy = null;
         _earnedGoldReward = 0;

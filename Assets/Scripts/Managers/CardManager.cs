@@ -35,6 +35,7 @@ public class CardManager : Singleton<CardManager>
     public IReadOnlyList<CardInstance> hand => _cards.Hand;
     public IReadOnlyList<CardInstance> discardPile => _cards.DiscardPile;
     public int HandCount => _cards.HandCount;
+    public int HandCapacity => GameplayEffectResolver.CalculateHandCapacity(HAND_SIZE, this);
     public IReadOnlyList<CardView> SelectedCards => _selectedCards;
     public CardView ActiveDragCard => _activeDragCard;
     public int ArtifactCapacity => BASE_ARTIFACT_CAPACITY;
@@ -218,7 +219,7 @@ public class CardManager : Singleton<CardManager>
     public int DrawToHand(int count)
     {
         int previousHandCount = _cards.HandCount;
-        int drawn = _cards.DrawToHand(count, HAND_SIZE);
+        int drawn = _cards.DrawToHand(count, HandCapacity);
         if (drawn <= 0) return 0;
 
         if (CanCreateViews())
@@ -231,8 +232,8 @@ public class CardManager : Singleton<CardManager>
         return drawn;
     }
 
-    public void DealHand() => DrawToHand(HAND_SIZE);
-    public void RefillHand() => DrawToHand(HAND_SIZE);
+    public void DealHand() => DrawToHand(HandCapacity);
+    public void RefillHand() => DrawToHand(HandCapacity);
 
     public int ReturnRandomDiscardToDeck(int count)
     {

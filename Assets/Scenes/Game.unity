@@ -2547,11 +2547,17 @@ MonoBehaviour:
   - {fileID: 11400000, guid: a30a9db0bf5b33948ab5eafb477a1166, type: 2}
   - {fileID: 11400000, guid: 3e45744af2f1e494195eba5988613f5a, type: 2}
   - {fileID: 11400000, guid: 82aa752a17ba8294197b7a321896e383, type: 2}
+  - {fileID: 11400000, guid: 36f0dd9f7d0472e4fafcebe2a451851e, type: 2}
+  - {fileID: 11400000, guid: e8b6daeb5d1fe0c4c819d7d5e0808989, type: 2}
+  - {fileID: 11400000, guid: 8fac1f1bd9997c443aa84ab8f5a6de5e, type: 2}
+  - {fileID: 11400000, guid: 68b662950342e344bbd315c67afd56c9, type: 2}
   enhancementCatalog:
   - {fileID: 11400000, guid: df3c7ab7238098c479e6077dcb8fbee9, type: 2}
   - {fileID: 11400000, guid: 6b373811d1407e5499cb6fed5706a76c, type: 2}
   - {fileID: 11400000, guid: 5f2d505e6a2512f429ed2a97008ba12a, type: 2}
   - {fileID: 11400000, guid: bcea3c0cbee2f5242947d351966db23c, type: 2}
+  - {fileID: 11400000, guid: 6102c9bcb0ab9e147ab35686f9a0d8e7, type: 2}
+  - {fileID: 11400000, guid: a63f5d6d5c7e7cc4b827606e4e1637d0, type: 2}
   playerMaxHealth: 30
   runContentCatalog: {fileID: 11400000, guid: f208b378a791811468b53e10fc68185c, type: 2}
   thiefType: {fileID: 11400000, guid: 4cf02a4bcf7b3ac4aa246a0da053d4eb, type: 2}

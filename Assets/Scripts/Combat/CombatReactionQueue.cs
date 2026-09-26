@@ -11,7 +11,9 @@ public enum CombatReactionPhase
     CardResolved,
     EnemyDefeated,
     EncounterResolved,
-    PlayerTurnStarted
+    PlayerTurnStarted,
+    AttackBlocked = 15,
+    AttackCommitted = 16
 }
 
 public enum CombatReactionSourceCategory
