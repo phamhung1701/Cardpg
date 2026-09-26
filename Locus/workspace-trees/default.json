@@ -3,8 +3,8 @@
   "presetId": "default",
   "name": "Default",
   "projectId": "unity-b0df33a559c07c8804cc787b",
-  "revision": 52,
-  "lastOperationId": "738e3cb1-1cad-40bb-8d23-780932de2943",
+  "revision": 55,
+  "lastOperationId": "b8911337-33b9-4492-92a4-b82d129c5611",
   "nodes": [
     {
       "nodeId": "resource:system:5b058c3b-63ff-4e12-bdc5-7b818347ec97",
@@ -638,6 +638,36 @@
       "hidden": false,
       "sourceKind": "knowledge",
       "position": 12
+    },
+    {
+      "nodeId": "resource:session:b68ed406-b894-41af-970c-77c03993ad87",
+      "projectId": "unity-b0df33a559c07c8804cc787b",
+      "nodeKind": "resource",
+      "parentNodeId": "resource:session:1e6987ec-410c-4204-87a6-a85cf5c200dc",
+      "resourceKind": "session",
+      "resourceId": "1b286556-d4ad-4bce-912a-f8c7ed076003",
+      "hidden": false,
+      "position": 1
+    },
+    {
+      "nodeId": "resource:session:4fc83d22-7f73-4c95-8a6a-6b435209cc26",
+      "projectId": "unity-b0df33a559c07c8804cc787b",
+      "nodeKind": "resource",
+      "parentNodeId": "resource:session:1e6987ec-410c-4204-87a6-a85cf5c200dc",
+      "resourceKind": "session",
+      "resourceId": "a783124f-6dea-4ba3-9264-72ee9c608438",
+      "hidden": false,
+      "position": 2
+    },
+    {
+      "nodeId": "resource:session:1de54c89-8b12-4eb4-9cc8-776ccfece359",
+      "projectId": "unity-b0df33a559c07c8804cc787b",
+      "nodeKind": "resource",
+      "parentNodeId": "resource:session:1e6987ec-410c-4204-87a6-a85cf5c200dc",
+      "resourceKind": "session",
+      "resourceId": "d33c144a-7307-4b8f-a464-ee50931621a0",
+      "hidden": false,
+      "position": 3
     }
   ],
   "itemStates": []
