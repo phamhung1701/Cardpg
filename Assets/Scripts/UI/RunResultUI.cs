@@ -20,11 +20,14 @@ public class RunResultUI : MonoBehaviour
     public Button mainMenuButton;
 
     string _lastBossRewardName;
+    AttackCardPresentationUI _presentation;
+    bool _pendingVictoryResult;
 
     public static bool IsShowingResult { get; private set; }
 
     void OnEnable()
     {
+        EnsurePresentationSubscription();
         if (CombatManager.Instance != null)
         {
             CombatManager.Instance.OnEncounterResult += HandleEncounterResult;
@@ -58,7 +61,29 @@ public class RunResultUI : MonoBehaviour
         if (retrySameSeedButton) retrySameSeedButton.onClick.RemoveListener(RetrySameSeed);
         if (newRunButton) newRunButton.onClick.RemoveListener(NewRun);
         if (mainMenuButton) mainMenuButton.onClick.RemoveListener(MainMenu);
+        UnsubscribeFromPresentation();
         HideAll();
+    }
+
+    void EnsurePresentationSubscription()
+    {
+        var current = AttackCardPresentationUI.Instance;
+        if (_presentation == current) return;
+        UnsubscribeFromPresentation();
+        _presentation = current;
+        if (_presentation != null)
+        {
+            _presentation.OnPresentationCompleted += HandlePresentationCompleted;
+            _presentation.OnPresentationCancelled += HandlePresentationCancelled;
+        }
+    }
+
+    void UnsubscribeFromPresentation()
+    {
+        if (_presentation == null) return;
+        _presentation.OnPresentationCompleted -= HandlePresentationCompleted;
+        _presentation.OnPresentationCancelled -= HandlePresentationCancelled;
+        _presentation = null;
     }
 
     void HandleEncounterResult(EncounterResult result)
@@ -77,7 +102,25 @@ public class RunResultUI : MonoBehaviour
                 : string.Empty;
     }
 
-    void HandleRunCompleted() => ShowResult(true);
+    void HandleRunCompleted()
+    {
+        EnsurePresentationSubscription();
+        if (_presentation != null && _presentation.IsBusy)
+        {
+            _pendingVictoryResult = true;
+            return;
+        }
+        ShowResult(true);
+    }
+
+    void HandlePresentationCompleted()
+    {
+        if (!_pendingVictoryResult) return;
+        _pendingVictoryResult = false;
+        ShowResult(true);
+    }
+
+    void HandlePresentationCancelled() => _pendingVictoryResult = false;
 
     void HandleEnemyChanged()
     {
@@ -85,7 +128,11 @@ public class RunResultUI : MonoBehaviour
             rewardBanner.SetActive(false);
     }
 
-    void HandleRunStarted(string _) => HideAll();
+    void HandleRunStarted(string _)
+    {
+        _pendingVictoryResult = false;
+        HideAll();
+    }
 
     public void RetrySameSeed()
     {
@@ -176,6 +223,7 @@ public class RunResultUI : MonoBehaviour
 
     void HideAll()
     {
+        _pendingVictoryResult = false;
         _lastBossRewardName = null;
         if (rewardBanner) rewardBanner.SetActive(false);
         if (coordinator != null && coordinator.IsTop(this)) coordinator.Pop(this);

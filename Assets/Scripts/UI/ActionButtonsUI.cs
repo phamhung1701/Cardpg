@@ -171,32 +171,55 @@ public class ActionButtonsUI : MonoBehaviour
 
         var selection = cards.GetSelectedCardsSnapshot();
         if (combat.currentState == GameState.PlayerTurn)
-            combat.TryPlayCards(selection, combat.currentEnemy);
+            TryPlaySelectedCards(cards, combat);
         else if (combat.currentState == GameState.EnemyAttacking)
-            combat.TryDefendWithCards(selection);
+        {
+            var presentation = AttackCardPresentationUI.Instance;
+            if (presentation != null)
+                presentation.TryDefendCards(selection, combat.currentEnemy);
+            else
+                combat.TryDefendWithCards(selection);
+        }
     }
 
     void OnPlayClicked()
+    {
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        if (cards != null && combat != null && combat.currentState == GameState.PlayerTurn)
+            TryPlaySelectedCards(cards, combat);
+    }
+
+    static void TryPlaySelectedCards(CardManager cards, CombatManager combat)
+    {
+        var selected = cards.GetSelectedCardsSnapshot();
+        var presentation = AttackCardPresentationUI.Instance;
+        if (presentation != null)
+            presentation.TryPlayCards(selected, combat.currentEnemy);
+        else
+            combat.TryPlayCards(selected, combat.currentEnemy);
+    }
+
+    void OnBlockClicked()
+    {
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        if (cards != null && combat != null && combat.currentState == GameState.EnemyAttacking)
         {
-            var cards = CardManager.Instance;
-            var combat = CombatManager.Instance;
-            if (cards != null && combat != null && combat.currentState == GameState.PlayerTurn)
-                combat.TryPlayCards(cards.GetSelectedCardsSnapshot(), combat.currentEnemy);
+            var selected = cards.GetSelectedCardsSnapshot();
+            var presentation = AttackCardPresentationUI.Instance;
+            if (presentation != null)
+                presentation.TryDefendCards(selected, combat.currentEnemy);
+            else
+                combat.TryDefendWithCards(selected);
         }
+    }
 
-        void OnBlockClicked()
-        {
-            var cards = CardManager.Instance;
-            var combat = CombatManager.Instance;
-            if (cards != null && combat != null && combat.currentState == GameState.EnemyAttacking)
-                combat.TryDefendWithCards(cards.GetSelectedCardsSnapshot());
-        }
+    void OnRankSortClicked() => (handField != null ? handField : CardManager.Instance?.handField)?.SortByRank();
+    void OnSuitSortClicked() => (handField != null ? handField : CardManager.Instance?.handField)?.SortBySuit();
 
-        void OnRankSortClicked() => (handField != null ? handField : CardManager.Instance?.handField)?.SortByRank();
-        void OnSuitSortClicked() => (handField != null ? handField : CardManager.Instance?.handField)?.SortBySuit();
-
-        // Kept for existing serialized UnityEvent bindings and interaction characterization.
-        void OnDiscardClicked() => OnBlockClicked();
+    // Kept for existing serialized UnityEvent bindings and interaction characterization.
+    void OnDiscardClicked() => OnBlockClicked();
 
     void OnTakeDamageClicked() => CombatManager.Instance?.TakeRemainingDamage();
     void OnRecoverClicked() => CombatManager.Instance?.Recover();

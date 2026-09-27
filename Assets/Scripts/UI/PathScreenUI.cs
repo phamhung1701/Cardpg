@@ -10,6 +10,10 @@ public class PathScreenUI : MonoBehaviour
     public GameObject nodeButtonPrefab;
     public TMP_Text headerText;
 
+    AttackCardPresentationUI _presentation;
+    bool _pendingMapShow;
+    bool _pendingRunCompleted;
+
     [Header("Map Settings")]
     public float colSpacing = 200f;
     public float rowSpacing = 120f;
@@ -17,11 +21,13 @@ public class PathScreenUI : MonoBehaviour
 
     void OnEnable()
     {
+        EnsurePresentationSubscription();
         if (RunManager.Instance != null)
         {
             RunManager.Instance.OnShowPathScreen += Show;
             RunManager.Instance.OnHidePathScreen += Hide;
             RunManager.Instance.OnRunCompleted += HandleRunCompleted;
+            RunManager.Instance.OnRunStarted += HandleRunStarted;
             RunManager.Instance.OnCycleStarted += HandleCycleStarted;
             RunManager.Instance.OnMapRevealChanged += BuildMap;
         }
@@ -34,9 +40,59 @@ public class PathScreenUI : MonoBehaviour
             RunManager.Instance.OnShowPathScreen -= Show;
             RunManager.Instance.OnHidePathScreen -= Hide;
             RunManager.Instance.OnRunCompleted -= HandleRunCompleted;
+            RunManager.Instance.OnRunStarted -= HandleRunStarted;
             RunManager.Instance.OnCycleStarted -= HandleCycleStarted;
             RunManager.Instance.OnMapRevealChanged -= BuildMap;
         }
+        UnsubscribeFromPresentation();
+        _pendingMapShow = _pendingRunCompleted = false;
+    }
+
+    void EnsurePresentationSubscription()
+    {
+        var current = AttackCardPresentationUI.Instance;
+        if (_presentation == current) return;
+        UnsubscribeFromPresentation();
+        _presentation = current;
+        if (_presentation != null)
+        {
+            _presentation.OnPresentationCompleted += HandlePresentationCompleted;
+            _presentation.OnPresentationCancelled += HandlePresentationCancelled;
+        }
+    }
+
+    void UnsubscribeFromPresentation()
+    {
+        if (_presentation == null) return;
+        _presentation.OnPresentationCompleted -= HandlePresentationCompleted;
+        _presentation.OnPresentationCancelled -= HandlePresentationCancelled;
+        _presentation = null;
+    }
+
+    void HandlePresentationCompleted()
+    {
+        if (_pendingRunCompleted)
+        {
+            _pendingRunCompleted = false;
+            ShowRunCompleted();
+        }
+        else if (_pendingMapShow)
+        {
+            _pendingMapShow = false;
+            ShowImmediately();
+        }
+    }
+
+    void HandlePresentationCancelled()
+    {
+        _pendingMapShow = _pendingRunCompleted = false;
+        if (panel) panel.SetActive(false);
+    }
+
+    void HandleRunStarted(string _)
+    {
+        _pendingMapShow = _pendingRunCompleted = false;
+        if (panel) panel.SetActive(false);
     }
 
     void HandleCycleStarted(string header)
@@ -48,17 +104,45 @@ public class PathScreenUI : MonoBehaviour
     void HandleRunCompleted()
     {
         if (headerText) headerText.text = "VICTORY!";
+        EnsurePresentationSubscription();
+        if (_presentation != null && _presentation.IsBusy)
+        {
+            _pendingRunCompleted = true;
+            _pendingMapShow = false;
+            if (panel) panel.SetActive(false);
+            return;
+        }
+        ShowRunCompleted();
+    }
+
+    void ShowRunCompleted()
+    {
+        if (headerText) headerText.text = "VICTORY!";
         if (panel) panel.SetActive(true);
     }
 
     void Show()
     {
+        EnsurePresentationSubscription();
+        if (_presentation != null && _presentation.IsBusy)
+        {
+            _pendingMapShow = true;
+            if (panel) panel.SetActive(false);
+            return;
+        }
+        ShowImmediately();
+    }
+
+    void ShowImmediately()
+    {
+        _pendingMapShow = false;
         BuildMap();
         if (panel) panel.SetActive(true);
     }
 
     void Hide()
     {
+        _pendingMapShow = _pendingRunCompleted = false;
         if (panel) panel.SetActive(false);
     }
 

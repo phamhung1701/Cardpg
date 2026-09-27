@@ -64,10 +64,15 @@ public class CardActionDropTarget : MonoBehaviour, IPointerEnterHandler, IPointe
         var combat = CombatManager.Instance;
         var selection = cards.GetSelectedCardsSnapshot();
         var target = ResolveEnemyTarget();
+        var presentation = AttackCardPresentationUI.Instance;
         bool committed = combat.currentState switch
         {
-            GameState.PlayerTurn => combat.TryPlayCards(selection, target),
-            GameState.EnemyAttacking => combat.TryDefendWithCards(selection, target),
+            GameState.PlayerTurn => presentation != null
+                ? presentation.TryPlayCards(selection, target, draggedCard)
+                : combat.TryPlayCards(selection, target),
+            GameState.EnemyAttacking => presentation != null
+                ? presentation.TryDefendCards(selection, target)
+                : combat.TryDefendWithCards(selection, target),
             _ => false
         };
         ResetFeedback();
