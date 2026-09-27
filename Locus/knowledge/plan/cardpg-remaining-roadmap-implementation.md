@@ -10,6 +10,8 @@ aiEditMode: inherit
 
 **Final approved-scope checkpoint (September 24, 2026).** Read `CARDPG_DEVELOPMENT.md`, `AGENTS.md`, and `Locus/knowledge/plan/cardpg-roadmap-resume.md` for baseline and historical context. Verify actual code/tests and `git status --short --branch` before any future work; the worktree remains substantially user-owned/dirty. This plan is **complete for all currently approved implementation and regression gates**; deferred design/content options below are not approved next tasks.
 
+**Separate September 26, 2026 combat-UI authorization:** the requested one-batch Combat UI/UX Revamp is complete without reopening the historical 7D/7E/frontend gates. Game-scene layout, fan/hover/drag/sorts, shared enemy row, remaining-deck viewer, icon-only Artifact rail, action bar and HP/defense area are documented in `CARDPG_DEVELOPMENT.md` and the latest `Locus/knowledge/plan/cardpg-roadmap-resume.md` checkpoint. Full EditMode 230/230 and discovered PlayMode 1/1 passed; programmatic Game-scene combat/UI smoke and 837×471 screenshots passed as scoped there. Human mouse input and other aspect ratios remain Pending. No enemy death animations or unrelated presentation work were started. Preserve the original zero-depth/current-Shop-placement decision and all gameplay-authoritative boundaries below.
+
 ## Status and order (September 24, 2026)
 
 | Stage | Status | Gate to advance |

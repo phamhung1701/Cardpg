@@ -10,7 +10,18 @@ public class Field : MonoBehaviour
     [Header("Hand Motion")]
     [Min(0f)] public float reorderThreshold = 18f;
 
+    [Header("Fan Layout")]
+    public float maximumSpacing = -18f;
+    [Min(0f)] public float minimumVisibleStep = 28f;
+    [Min(0f)] public float fanRise = 14f;
+    [Range(0f, 20f)] public float fanAngle = 8f;
+
     GameObject _dragPlaceholder;
+    HorizontalLayoutGroup _layoutGroup;
+    readonly List<CardView> _orderedCards = new();
+    float _lastHolderWidth = -1f;
+    int _lastChildCount = -1;
+
     CardView _draggedCard;
     int _dragOriginalIndex;
     readonly Dictionary<CardView, Vector3> _positionsBeforeLayout = new();
@@ -62,9 +73,11 @@ public class Field : MonoBehaviour
         slotLayout.flexibleHeight = sourceLayout != null ? sourceLayout.flexibleHeight : -1;
         slotLayout.layoutPriority = sourceLayout != null ? sourceLayout.layoutPriority : 1;
 
-        LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+        Reflow();
         return _dragPlaceholder;
     }
+
+    public void RefreshLayout() => Reflow();
 
     public void UpdateVisualDrag(CardView card, Vector2 screenPosition, Camera eventCamera)
     {
@@ -72,7 +85,6 @@ public class Field : MonoBehaviour
             !RectTransformUtility.RectangleContainsScreenPoint(cardsHolder, screenPosition, eventCamera))
             return;
 
-        LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
         int slotIndex = _dragPlaceholder.transform.GetSiblingIndex();
         int targetIndex = slotIndex;
         var left = FindCardAtOrBefore(slotIndex - 1, -1);
@@ -90,7 +102,7 @@ public class Field : MonoBehaviour
         if (targetIndex == slotIndex) return;
         CaptureLayoutPositions();
         _dragPlaceholder.transform.SetSiblingIndex(targetIndex);
-        LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+        Reflow();
         AnimateLayoutChanges();
     }
 
@@ -118,7 +130,7 @@ public class Field : MonoBehaviour
 
         DestroyPlaceholder();
         _draggedCard = null;
-        LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+        Reflow();
         if (card != null)
             card.ApplyLayoutWorldOffset(releaseWorldPosition - card.transform.position);
     }
@@ -131,7 +143,7 @@ public class Field : MonoBehaviour
         _draggedCard = null;
         if (cardsHolder != null)
         {
-            LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+            Reflow();
             AnimateLayoutChanges();
         }
     }
@@ -142,6 +154,7 @@ public class Field : MonoBehaviour
 
         card.transform.SetParent(cardsHolder, true);
         card.transform.SetSiblingIndex(Mathf.Clamp(card.index, 0, cardsHolder.childCount - 1));
+        Reflow();
     }
 
     public void SetNewCard(CardView card, CardView left, CardView right)
@@ -181,17 +194,21 @@ public class Field : MonoBehaviour
         targetIndex = Mathf.Clamp(targetIndex, 0, cardsHolder.childCount - 1);
         card.transform.SetSiblingIndex(targetIndex);
         card.index = card.transform.GetSiblingIndex();
+        Reflow();
     }
 
     public void AddCard(CardView card, CardInstance data)
     {
         if (card == null || cardsHolder == null) return;
 
+        CaptureLayoutPositions();
         card.transform.SetParent(cardsHolder, false);
         card.transform.SetAsLastSibling();
         card.homeField = this;
         card.index = card.transform.GetSiblingIndex();
         card.Setup(data);
+        Reflow();
+        AnimateLayoutChanges();
     }
 
     public void ClearCards()
@@ -207,6 +224,87 @@ public class Field : MonoBehaviour
             child.SetParent(null, false);
             Destroy(child.gameObject);
         }
+        Reflow();
+    }
+
+    // Presentation only: CardCollection's hand and combat selection order remain untouched.
+    public void SortByRank() => SortHand(true);
+    public void SortBySuit() => SortHand(false);
+
+    void SortHand(bool rankFirst)
+    {
+        if (cardsHolder == null || _draggedCard != null) return;
+        _orderedCards.Clear();
+        for (int i = 0; i < cardsHolder.childCount; i++)
+            if (cardsHolder.GetChild(i).TryGetComponent<CardView>(out var card) &&
+                card.homeField == this && card.data != null)
+                _orderedCards.Add(card);
+
+        CaptureLayoutPositions();
+        // List.Sort is not stable; current order breaks identical rank/suit ties.
+        var originalOrder = new Dictionary<CardView, int>(_orderedCards.Count);
+        for (int i = 0; i < _orderedCards.Count; i++) originalOrder[_orderedCards[i]] = i;
+        _orderedCards.Sort((a, b) =>
+        {
+            int primary = rankFirst ? ((int)a.data.Rank).CompareTo((int)b.data.Rank)
+                : ((int)a.data.Suit).CompareTo((int)b.data.Suit);
+            int secondary = rankFirst ? ((int)a.data.Suit).CompareTo((int)b.data.Suit)
+                : ((int)a.data.Rank).CompareTo((int)b.data.Rank);
+            return primary != 0 ? primary : secondary != 0 ? secondary
+                : originalOrder[a].CompareTo(originalOrder[b]);
+        });
+        for (int i = 0; i < _orderedCards.Count; i++)
+            _orderedCards[i].transform.SetSiblingIndex(i);
+        Reflow();
+        AnimateLayoutChanges();
+    }
+
+    void LateUpdate()
+    {
+        if (cardsHolder == null) return;
+        if (_lastChildCount == cardsHolder.childCount &&
+            Mathf.Abs(_lastHolderWidth - cardsHolder.rect.width) < 0.1f) return;
+        CaptureLayoutPositions();
+        Reflow();
+        AnimateLayoutChanges();
+    }
+
+    void Reflow()
+    {
+        if (cardsHolder == null) return;
+        _layoutGroup = cardsHolder.GetComponent<HorizontalLayoutGroup>();
+        int count = cardsHolder.childCount;
+        if (_layoutGroup != null && count > 1)
+        {
+            float totalWidth = 0f;
+            float narrowestWidth = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                var child = cardsHolder.GetChild(i) as RectTransform;
+                if (child == null) continue;
+                float width = Mathf.Max(child.rect.width, LayoutUtility.GetPreferredWidth(child));
+                totalWidth += width;
+                narrowestWidth = Mathf.Min(narrowestWidth, width);
+            }
+            float usableWidth = Mathf.Max(0f, cardsHolder.rect.width -
+                _layoutGroup.padding.left - _layoutGroup.padding.right);
+            float spacing = Mathf.Min(maximumSpacing, (usableWidth - totalWidth) / (count - 1));
+            _layoutGroup.spacing = Mathf.Max(minimumVisibleStep - narrowestWidth, spacing);
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
+        int cardIndex = 0;
+        int cardCount = CardCount;
+        for (int i = 0; i < count; i++)
+        {
+            if (!cardsHolder.GetChild(i).TryGetComponent<CardView>(out var card)) continue;
+            float t = cardCount > 1 ? (2f * cardIndex / (cardCount - 1) - 1f) : 0f;
+            card.SetFanPose(new Vector2(0f, fanRise * (1f - t * t)), -fanAngle * t);
+            card.index = i;
+            cardIndex++;
+        }
+        _lastHolderWidth = cardsHolder.rect.width;
+        _lastChildCount = count;
     }
 
     void DestroyPlaceholder()

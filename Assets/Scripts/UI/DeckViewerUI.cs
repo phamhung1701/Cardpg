@@ -77,8 +77,8 @@ public class DeckViewerUI : MonoBehaviour
         var cards = CardManager.Instance;
         if (cards == null) return;
 
-        if (deckText) deckText.text = FormatPile(cards.deck, "DRAW PILE");
-        if (discardText) discardText.text = $"{FormatPile(cards.discardPile, "DISCARD PILE")}\n\n{FormatBuild(cards)}";
+        if (deckText) deckText.text = FormatPile(cards.deck, "REMAINING DRAW DECK");
+        if (discardText) discardText.gameObject.SetActive(false);
     }
 
     void CloseForRunStart(string _) => Close();
@@ -129,24 +129,26 @@ public class DeckViewerUI : MonoBehaviour
 
     static string FormatPile(IReadOnlyList<CardInstance> pile, string label)
     {
-        var counts = new Dictionary<string, int>();
-        foreach (var card in pile)
-        {
-            string key = card.SuitSymbol;
-            if (!counts.ContainsKey(key)) counts[key] = 0;
-            counts[key]++;
-        }
-
         var lines = new List<string> { $"<b>{label}  •  {pile.Count}</b>" };
         if (pile.Count == 0)
         {
-            lines.Add("Empty");
+            lines.Add("No cards remaining in the draw deck");
         }
         else
         {
-            foreach (var suit in new[] { "♣", "♦", "♥", "♠" })
-                if (counts.TryGetValue(suit, out int count))
-                    lines.Add($"{suit}  {count}");
+            // Four compact columns keep a full draw deck scannable without changing its order.
+            for (int i = 0; i < pile.Count; i += 4)
+            {
+                var row = new List<string>(4);
+                for (int j = i; j < Mathf.Min(i + 4, pile.Count); j++)
+                {
+                    var card = pile[j];
+                    row.Add(card.Enhancement == null
+                        ? card.DisplayName
+                        : $"{card.DisplayName} ({card.Enhancement.displayName})");
+                }
+                lines.Add(string.Join("     ", row));
+            }
         }
         return string.Join("\n", lines);
     }

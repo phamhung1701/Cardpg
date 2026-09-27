@@ -6,6 +6,10 @@ public class ActionButtonsUI : MonoBehaviour
 {
     [Header("References")]
     public Button playButton;
+    public Button blockButton;
+    public Button rankSortButton;
+    public Button suitSortButton;
+    public Field handField;
     public Button takeDamageButton;
     public Button recoverButton;
     public TMP_Text playerHealthLabel;
@@ -33,7 +37,10 @@ public class ActionButtonsUI : MonoBehaviour
 
         _primaryActionLabel = playButton != null ? playButton.GetComponentInChildren<TMP_Text>(true) : null;
 
-        if (playButton) playButton.onClick.AddListener(OnPrimaryActionClicked);
+        if (playButton) playButton.onClick.AddListener(OnPlayClicked);
+        if (blockButton) blockButton.onClick.AddListener(OnBlockClicked);
+        if (rankSortButton) rankSortButton.onClick.AddListener(OnRankSortClicked);
+        if (suitSortButton) suitSortButton.onClick.AddListener(OnSuitSortClicked);
         if (takeDamageButton) takeDamageButton.onClick.AddListener(OnTakeDamageClicked);
         if (recoverButton) recoverButton.onClick.AddListener(OnRecoverClicked);
 
@@ -55,7 +62,10 @@ public class ActionButtonsUI : MonoBehaviour
             CardManager.Instance.OnDeckChanged -= HandleDeckChanged;
         }
 
-        if (playButton) playButton.onClick.RemoveListener(OnPrimaryActionClicked);
+        if (playButton) playButton.onClick.RemoveListener(OnPlayClicked);
+        if (blockButton) blockButton.onClick.RemoveListener(OnBlockClicked);
+        if (rankSortButton) rankSortButton.onClick.RemoveListener(OnRankSortClicked);
+        if (suitSortButton) suitSortButton.onClick.RemoveListener(OnSuitSortClicked);
         if (takeDamageButton) takeDamageButton.onClick.RemoveListener(OnTakeDamageClicked);
         if (recoverButton) recoverButton.onClick.RemoveListener(OnRecoverClicked);
     }
@@ -86,7 +96,10 @@ public class ActionButtonsUI : MonoBehaviour
         bool canTakeDamage = isDefense && combat.pendingDamage > 0;
         bool canRecover = combat.currentState == GameState.PlayerTurn && cards.HandCount == 0;
 
-        if (playButton) playButton.interactable = isDefense ? canDefend : canPlay;
+        if (playButton) playButton.interactable = combat.currentState == GameState.PlayerTurn && canPlay;
+        if (blockButton) blockButton.interactable = isDefense && canDefend;
+        if (rankSortButton) rankSortButton.interactable = cards.HandCount > 1;
+        if (suitSortButton) suitSortButton.interactable = cards.HandCount > 1;
         if (_primaryActionLabel)
         {
             _primaryActionLabel.text = combat.currentState switch
@@ -94,8 +107,7 @@ public class ActionButtonsUI : MonoBehaviour
                 GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) => "PLAY ACE PAIR",
                 GameState.PlayerTurn when selectedCount >= 2 => $"PLAY SAME-RANK {selectedCount}",
                 GameState.PlayerTurn => "PLAY CARD",
-                GameState.EnemyAttacking when selectedCount > 0 => $"DEFEND WITH {selectedCount} CARD{(selectedCount == 1 ? string.Empty : "S")}",
-                GameState.EnemyAttacking => "SELECT CARDS TO DEFEND",
+                GameState.EnemyAttacking => "PLAY",
                 _ => "CARD ACTION"
             };
         }
@@ -143,7 +155,7 @@ public class ActionButtonsUI : MonoBehaviour
                     $"{selectedCount} selected  •  Blocks {blocked} of {combat.PendingAttackCount} pending attacks  •  Remaining damage {remaining}",
                 GameState.EnemyAttacking when hasSelected =>
                     "Selected cards cannot each block a distinct pending attack",
-                GameState.EnemyAttacking => "Select a card that fully blocks one attack, or Take Remaining Damage",
+                GameState.EnemyAttacking => "Select cards to Block attacks, or Take Damage",
                 GameState.GameWon => "Encounter cleared — choose the next route",
                 GameState.GameOver => "The run has ended",
                 _ => "Choose an available route on the map"
@@ -164,8 +176,27 @@ public class ActionButtonsUI : MonoBehaviour
             combat.TryDefendWithCards(selection);
     }
 
-    void OnPlayClicked() => OnPrimaryActionClicked();
-    void OnDiscardClicked() => OnPrimaryActionClicked();
+    void OnPlayClicked()
+        {
+            var cards = CardManager.Instance;
+            var combat = CombatManager.Instance;
+            if (cards != null && combat != null && combat.currentState == GameState.PlayerTurn)
+                combat.TryPlayCards(cards.GetSelectedCardsSnapshot(), combat.currentEnemy);
+        }
+
+        void OnBlockClicked()
+        {
+            var cards = CardManager.Instance;
+            var combat = CombatManager.Instance;
+            if (cards != null && combat != null && combat.currentState == GameState.EnemyAttacking)
+                combat.TryDefendWithCards(cards.GetSelectedCardsSnapshot());
+        }
+
+        void OnRankSortClicked() => (handField != null ? handField : CardManager.Instance?.handField)?.SortByRank();
+        void OnSuitSortClicked() => (handField != null ? handField : CardManager.Instance?.handField)?.SortBySuit();
+
+        // Kept for existing serialized UnityEvent bindings and interaction characterization.
+        void OnDiscardClicked() => OnBlockClicked();
 
     void OnTakeDamageClicked() => CombatManager.Instance?.TakeRemainingDamage();
     void OnRecoverClicked() => CombatManager.Instance?.Recover();

@@ -59,6 +59,13 @@ public class CardView : MonoBehaviour,
     float _scaleVelocity;
     float _targetRaise;
     float _targetScale = 1f;
+    Vector2 _fanOffset;
+    Vector2 _presentFanOffset;
+    Vector2 _fanVelocity;
+    float _fanRotation;
+    float _visualRotation;
+    float _rotationVelocity;
+    Canvas _visualCanvas;
 
     public State CurrentState => _state;
     public bool IsSelected => _isSelected;
@@ -169,11 +176,20 @@ public class CardView : MonoBehaviour,
 
     void ApplyState(State state)
     {
+        EnsureVisualSorting();
+        if (_visualCanvas != null)
+            _visualCanvas.sortingOrder = state switch
+            {
+                State.Drag => 21,
+                State.Click => 3,
+                State.Hover => 2,
+                _ => 1
+            };
         _targetRaise = state switch
         {
             State.Hover => hoverRaise,
             State.Click => selectedRaise,
-            State.Drag => 0f,
+            State.Drag => 0f, // Keep the dragged card centered on the pointer.
             _ => 0f
         };
         _targetScale = state switch
@@ -194,6 +210,17 @@ public class CardView : MonoBehaviour,
         if (stateLabel) stateLabel.text = state == State.Click ? _selectionOrder.ToString() : string.Empty;
     }
 
+    void EnsureVisualSorting()
+    {
+        if (visualRoot == null || _visualCanvas != null) return;
+        _visualCanvas = visualRoot.GetComponent<Canvas>();
+        if (_visualCanvas == null) _visualCanvas = visualRoot.gameObject.AddComponent<Canvas>();
+        _visualCanvas.overrideSorting = true;
+        // A nested sorting canvas needs its own raycaster for card art and text to stay clickable.
+        if (!visualRoot.TryGetComponent<GraphicRaycaster>(out _))
+            visualRoot.gameObject.AddComponent<GraphicRaycaster>();
+    }
+
     void LateUpdate()
     {
         if (visualRoot == null) return;
@@ -207,8 +234,21 @@ public class CardView : MonoBehaviour,
         _visualScale = Mathf.SmoothDamp(
             _visualScale, _targetScale, ref _scaleVelocity,
             scaleSmoothTime, Mathf.Infinity, deltaTime);
-        visualRoot.anchoredPosition = _layoutOffset + _stateOffset;
+        _visualRotation = Mathf.SmoothDampAngle(_visualRotation,
+            _isDragging ? 0f : _fanRotation, ref _rotationVelocity,
+            layoutSmoothTime, Mathf.Infinity, deltaTime);
+        _presentFanOffset = Vector2.SmoothDamp(_presentFanOffset,
+            _isDragging ? Vector2.zero : _fanOffset, ref _fanVelocity,
+            layoutSmoothTime, Mathf.Infinity, deltaTime);
+        visualRoot.anchoredPosition = _layoutOffset + _stateOffset + _presentFanOffset;
+        visualRoot.localRotation = Quaternion.Euler(0f, 0f, _visualRotation);
         visualRoot.localScale = Vector3.one * _visualScale;
+    }
+
+    public void SetFanPose(Vector2 offset, float rotation)
+    {
+        _fanOffset = offset;
+        _fanRotation = rotation;
     }
 
     public void ApplyLayoutWorldOffset(Vector3 worldOffset)
@@ -265,8 +305,20 @@ public class CardView : MonoBehaviour,
 
         transform.SetParent(manager.dragCanvas.transform, true);
         transform.SetAsLastSibling();
+        _dragHomeField.RefreshLayout();
+        _layoutOffset = Vector2.zero;
+        _layoutVelocity = Vector2.zero;
         _stateOffset = Vector2.zero;
         _stateVelocity = Vector2.zero;
+        _visualRotation = 0f;
+        _rotationVelocity = 0f;
+        _presentFanOffset = Vector2.zero;
+        _fanVelocity = Vector2.zero;
+        if (visualRoot != null)
+        {
+            visualRoot.anchoredPosition = Vector2.zero;
+            visualRoot.localRotation = Quaternion.identity;
+        }
         MoveToPointer(eventData);
 
         if (canvasGroup) canvasGroup.blocksRaycasts = false;
@@ -331,6 +383,8 @@ public class CardView : MonoBehaviour,
         _stateVelocity = Vector2.zero;
         _visualScale = 1f;
         _scaleVelocity = 0f;
+        _presentFanOffset = Vector2.zero;
+        _fanVelocity = Vector2.zero;
         RefreshState();
     }
 
@@ -339,7 +393,8 @@ public class CardView : MonoBehaviour,
         var dragRect = transform.parent as RectTransform;
         if (dragRect != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(
                 dragRect, eventData.position, eventData.pressEventCamera, out var pointerWorld))
-            transform.position = pointerWorld;
+            transform.position += pointerWorld - (transform as RectTransform).TransformPoint(
+                (transform as RectTransform).rect.center);
     }
 
     CardActionDropTarget FindDropTarget(PointerEventData eventData)

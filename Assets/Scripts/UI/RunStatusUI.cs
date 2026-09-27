@@ -79,7 +79,7 @@ public class RunStatusUI : MonoBehaviour
         {
             if (cards == null)
             {
-                pileSummaryLabel.text = "Draw  —    Discard  —    Hand  —";
+                pileSummaryLabel.text = "Hand  —";
             }
             else
             {
@@ -87,7 +87,7 @@ public class RunStatusUI : MonoBehaviour
                 foreach (var card in cards.ownedCards)
                     if (card.Enhancement != null) enhancedCount++;
                 pileSummaryLabel.text =
-                    $"Draw  {cards.deck.Count}    Discard  {cards.discardPile.Count}    Hand  {cards.HandCount}/{cards.HandCapacity}    Artifacts  {cards.ArtifactSlotsUsed}/{cards.ArtifactCapacity}    Enhanced  {enhancedCount}";
+                    $"Hand  {cards.HandCount}/{cards.HandCapacity}    Draw  {cards.deck.Count}    Enhanced  {enhancedCount}";
             }
         }
 
