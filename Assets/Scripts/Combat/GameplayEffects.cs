@@ -558,7 +558,29 @@ public static class GameplayEffectResolver
                     GameplayEffectKind.AttackMultiplier, ref conditionalFlat, ref conditionalMultiplier,
                     includeThresholdEffects: true, attackValue: qualifyingValue);
             }
-        return ClampToInt((long)qualifyingValue * conditionalMultiplier + conditionalFlat);
+        int resolved = ClampToInt((long)qualifyingValue * conditionalMultiplier + conditionalFlat);
+        if (cards != null)
+            for (int i = 0; i < cards.ownedArtifacts.Count; i++)
+            {
+                var artifact = cards.ownedArtifacts[i];
+                if (artifact == null) continue;
+                switch (artifact.specialRule)
+                {
+                    case ArtifactSpecialRule.RareClub when card.MatchesSuit(CardData.Suit.Clubs):
+                        resolved = ClampToInt((long)resolved * 2);
+                        break;
+                    case ArtifactSpecialRule.GlassCommon:
+                        resolved = ClampToInt((long)resolved + 5);
+                        break;
+                    case ArtifactSpecialRule.GlassRare:
+                        resolved = ClampToInt((long)resolved * 2);
+                        break;
+                    case ArtifactSpecialRule.GlassEpic when CombatManager.Instance?.player?.currentHealth == 1:
+                        resolved = ClampToInt((long)resolved * 3);
+                        break;
+                }
+            }
+        return resolved;
     }
 
     static int SumMimickedInHandAttackBonuses(CardInstance target, CardManager cards)
@@ -850,6 +872,7 @@ public static class GameplayEffectResolver
             if (artifact == null) continue;
             capacity += SumSourceEffects(new GameplayEffectSource(cards.GetArtifactInstance(artifact)),
                 GameplayEffectTrigger.HandCapacityCalculated, GameplayEffectKind.HandSizeBonus, null);
+            if (artifact.specialRule == ArtifactSpecialRule.RareArsenal) capacity += 3;
         }
         for (int i = 0; i < cards.hand.Count; i++)
         {
@@ -866,18 +889,32 @@ public static class GameplayEffectResolver
         int damage = Math.Max(0, context.RawDamage);
         var cards = context.Cards;
         if (cards == null) return damage;
-        for (int i = 0; i < cards.ownedArtifacts.Count; i++)
+        long reductions = 0;
+        bool arsenal = false;
+        bool glassCommon = false;
+        bool glassRare = false;
+        foreach (var artifact in cards.ownedArtifacts)
         {
-            var artifact = cards.ownedArtifacts[i];
             if (artifact == null) continue;
             var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
             for (int j = 0; j < EffectCount(source); j++)
             {
                 var effect = EffectAt(source, j);
-                if (effect.kind != GameplayEffectKind.IncomingCombatDamageReduction ||
-                    !Applies(source, effect, GameplayEffectTrigger.IncomingDamageCalculated, null)) continue;
-                damage = Math.Max(0, damage - Math.Max(0, effect.amount));
+                if (effect.kind == GameplayEffectKind.IncomingCombatDamageReduction &&
+                    Applies(source, effect, GameplayEffectTrigger.IncomingDamageCalculated, null))
+                    reductions += Math.Max(0, effect.amount);
             }
+            if (context.Request.Origin != CombatDamageOrigin.EnemyAggregate) continue;
+            arsenal |= artifact.specialRule == ArtifactSpecialRule.RareArsenal;
+            glassCommon |= artifact.specialRule == ArtifactSpecialRule.GlassCommon;
+            glassRare |= artifact.specialRule == ArtifactSpecialRule.GlassRare;
+        }
+        damage = ClampToInt(Math.Max(0L, damage - reductions));
+        if (context.Request.Origin == CombatDamageOrigin.EnemyAggregate)
+        {
+            if (glassCommon) damage = ClampToInt((long)damage + 5);
+            else if (glassRare) damage = ClampToInt((long)damage * 2);
+            if (arsenal) damage = ClampToInt(((long)damage * 3 + 1) / 2);
         }
         return damage;
     }
@@ -1113,8 +1150,19 @@ public static class GameplayEffectResolver
         {
             var artifact = context.Cards.ownedArtifacts[i];
             if (artifact != null)
+            {
                 EnqueueCommittedSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
                     context, queue, i);
+                if (artifact.specialRule == ArtifactSpecialRule.RareHeart && context.Card.MatchesSuit(CardData.Suit.Hearts))
+                    queue.Enqueue(context.Action.ActionId, context.HitIndex, CombatReactionPhase.CardCommitted,
+                        CombatReactionSourceCategory.Artifact, i, int.MaxValue - 1,
+                        () => { int before = context.Combat.player.currentHealth; context.Combat.HealPlayer(3);
+                            if (before * 2 < context.Combat.player.maxHealth) context.Cards.AddGold(3); });
+                if (artifact.specialRule == ArtifactSpecialRule.RareDiamond && context.Card.MatchesSuit(CardData.Suit.Diamonds))
+                    queue.Enqueue(context.Action.ActionId, context.HitIndex, CombatReactionPhase.CardCommitted,
+                        CombatReactionSourceCategory.Artifact, i, int.MaxValue,
+                        () => context.Cards.DrawToHand(2));
+            }
         }
         if (context.Card.Enhancement != null)
             EnqueueCommittedSource(new GameplayEffectSource(context.Card), context, queue, 0);
@@ -1214,6 +1262,27 @@ public static class GameplayEffectResolver
                 () => ApplyReactive(source, effect, context.Combat, context.Cards,
                     context.BlockingCard, context.AttackedEnemy, sourceOrder, capturedIndex));
         }
+        if (source.Artifact?.Definition.specialRule == ArtifactSpecialRule.RareRetaliation)
+        {
+            int block = context.Combat.CalculateCardDefense(context.BlockingCard);
+            int attack = context.BlockedAttackDamage;
+            int retaliation = CalculateRetaliationDamage(block, attack);
+            if (retaliation > 0)
+                queue.Enqueue(context.Action.ActionId, int.MinValue + context.BlockOrder,
+                    CombatReactionPhase.AttackBlocked, source.Category, sourceOrder, int.MaxValue,
+                    () => context.Combat.QueueReactiveDamage(context.Combat.player, context.AttackedEnemy,
+                        retaliation, sourceOrder, int.MaxValue, sourceCategory: source.Category));
+        }
+    }
+
+    public static int CalculateRetaliationDamage(int committedBlock, int incomingAttack)
+    {
+        int block = Math.Max(0, committedBlock);
+        int attack = Math.Max(0, incomingAttack);
+        int actuallyBlocked = Math.Min(block, attack);
+        if (actuallyBlocked <= 0) return 0;
+        return (long)block * 2 > (long)attack * 3
+            ? ClampToInt((long)actuallyBlocked * 2) : actuallyBlocked;
     }
 
     public static void EnqueueAttackCommitted(AttackCommittedEffectContext context,

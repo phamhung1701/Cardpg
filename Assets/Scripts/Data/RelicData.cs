@@ -6,6 +6,19 @@ public enum ArtifactCapacityCategory
     NonSlot = 1
 }
 
+public enum ArtifactSpecialRule
+{
+    None = 0,
+    RareClub = 1,
+    RareHeart = 2,
+    RareDiamond = 3,
+    RareArsenal = 4,
+    GlassCommon = 5,
+    GlassRare = 6,
+    GlassEpic = 7,
+    RareRetaliation = 8
+}
+
 [CreateAssetMenu(fileName = "Artifact", menuName = "Game/Artifact Data")]
 public class RelicData : ScriptableObject
 {
@@ -30,6 +43,7 @@ public class RelicData : ScriptableObject
     [Header("Typed Gameplay Effects")]
     public GameplayEffectDefinition[] effects = System.Array.Empty<GameplayEffectDefinition>();
     public GameplayRuleModifierData[] ruleModifiers = System.Array.Empty<GameplayRuleModifierData>();
+    public ArtifactSpecialRule specialRule;
 
     [Header("Legacy Prototype Hooks (used only without typed effects)")]
     public bool restrictToSuit;

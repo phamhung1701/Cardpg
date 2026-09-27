@@ -301,6 +301,15 @@ public class CardManager : Singleton<CardManager>
     {
         if (artifact == null || string.IsNullOrWhiteSpace(artifact.id)) return "Artifact unavailable";
         if (HasArtifact(artifact)) return "Already owned";
+        if (artifact.tier > 1)
+        {
+            var predecessor = ownedArtifacts.FirstOrDefault(value => value != null &&
+                value.canonicalId == artifact.upgradeFromId);
+            if (predecessor == null) return "Requires immediate predecessor";
+            return ArtifactUpgradeResolver.CanReplace(predecessor, artifact, ownedArtifacts, relicCatalog, out var reason)
+                ? string.Empty : reason;
+        }
+        if (!string.IsNullOrEmpty(artifact.upgradeFromId)) return "Upgrade cannot be acquired standalone";
         return artifact.OccupiesCapacitySlot && ArtifactSlotsUsed >= ArtifactCapacity
             ? "Artifact Capacity Full" : string.Empty;
     }
@@ -312,9 +321,19 @@ public class CardManager : Singleton<CardManager>
     public bool BuyArtifact(RelicData artifact, int price)
     {
         if (price < 0 || !string.IsNullOrEmpty(GetArtifactAcquisitionUnavailableReason(artifact))) return false;
+        var predecessor = artifact.tier > 1
+            ? ownedArtifacts.FirstOrDefault(value => value != null && value.canonicalId == artifact.upgradeFromId)
+            : null;
         if (!SpendGold(price)) return false;
+        if (predecessor != null)
+        {
+            int index = ownedArtifacts.IndexOf(predecessor);
+            ownedArtifacts[index] = artifact;
+            relics.Remove(predecessor.id);
+            _artifactInstances.Remove(predecessor);
+        }
+        else ownedArtifacts.Add(artifact);
         relics.Add(artifact.id);
-        ownedArtifacts.Add(artifact);
         var instance = new ArtifactRuntimeInstance(artifact);
         _artifactInstances.Add(artifact, instance);
         var run = RunManager.Instance;

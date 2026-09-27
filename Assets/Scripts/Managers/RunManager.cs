@@ -591,13 +591,22 @@ public class RunManager : Singleton<RunManager>
 
         int context = unchecked(_activeNode.mapIndex * 397 ^ _activeNode.id);
         var artifacts = cards.relicCatalog
-            .Where(artifact => artifact != null && !cards.HasArtifact(artifact))
+            .Where(artifact => artifact != null && !cards.HasArtifact(artifact) &&
+                string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(artifact)))
             .OrderBy(artifact => artifact.id, StringComparer.Ordinal)
             .ToList();
         artifacts.Shuffle(_randomContext.CreateStream("shop-artifacts", context));
 
         int artifactSlots = Mathf.Min(2, maximumOffers);
-        foreach (var artifact in artifacts.Take(artifactSlots))
+        var artifactOffers = new List<RelicData>(artifactSlots);
+        var eligibleUpgrade = artifacts.FirstOrDefault(artifact => artifact.tier > 1);
+        if (eligibleUpgrade != null) artifactOffers.Add(eligibleUpgrade);
+        foreach (var artifact in artifacts)
+        {
+            if (artifactOffers.Count >= artifactSlots) break;
+            if (!artifactOffers.Contains(artifact)) artifactOffers.Add(artifact);
+        }
+        foreach (var artifact in artifactOffers)
         {
             _activeShopOffers.Add(new ShopOffer
             {
@@ -615,7 +624,7 @@ public class RunManager : Singleton<RunManager>
             context,
             false);
 
-        foreach (var artifact in artifacts.Skip(artifactSlots))
+        foreach (var artifact in artifacts.Where(artifact => !artifactOffers.Contains(artifact)))
         {
             if (_activeShopOffers.Count >= maximumOffers) break;
             _activeShopOffers.Add(new ShopOffer
@@ -656,7 +665,8 @@ public class RunManager : Singleton<RunManager>
     void PrepareAllDevShopOffers(CardManager cards)
     {
         foreach (var artifact in cards.relicCatalog
-            .Where(value => value != null && !cards.HasArtifact(value))
+            .Where(value => value != null && !cards.HasArtifact(value) &&
+                string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(value)))
             .OrderBy(value => value.id, StringComparer.Ordinal))
         {
             _activeShopOffers.Add(new ShopOffer
