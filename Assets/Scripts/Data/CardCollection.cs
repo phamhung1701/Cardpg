@@ -64,6 +64,15 @@ public sealed class CardCollection
         return true;
     }
 
+    public bool RemoveOwnedCard(CardInstance card)
+    {
+        if (card == null || !_ownedCards.Remove(card)) return false;
+        _deck.Remove(card);
+        _hand.Remove(card);
+        _discardPile.Remove(card);
+        return true;
+    }
+
     public void Clear()
     {
         _ownedCards.Clear();

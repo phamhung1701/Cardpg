@@ -49,11 +49,15 @@ public class RunManager : Singleton<RunManager>
     readonly List<EnemyTypeData> _generatedEnemyTypes = new();
     readonly List<ShopOffer> _activeShopOffers = new();
     readonly List<ShopOffer> _activeUpgradeOffers = new();
+    readonly HashSet<ShopOfferKind> _usedSpecialShopOffers = new();
+    readonly HashSet<string> _purchasedConsumablesInShop = new(StringComparer.Ordinal);
+    readonly HashSet<int> _consumableDropResolvedContexts = new();
     PathNode _activeNode;
     RunEventDefinition _activeEvent;
     CombatManager _subscribedCombatManager;
     RunRandomContext _randomContext;
     int _completedNodeCount;
+    int _pendingInvestments;
 
     public RunTimingStatistics Timing { get; } = new();
 
@@ -63,6 +67,7 @@ public class RunManager : Singleton<RunManager>
     public string RunSeed => runSeed;
     public int CurrentMapIndex => bossIndex;
     public int CompletedNodeCount => _completedNodeCount;
+    public int PendingInvestmentCount => _pendingInvestments;
     public PathNode ActiveNode => _activeNode;
     public RunEventDefinition ActiveEvent => _activeEvent;
     public EnemyTypeData CurrentBoss => bossIndex >= 0 && bossIndex < bossDeck.Count
@@ -206,11 +211,27 @@ public class RunManager : Singleton<RunManager>
             OnMapRevealChanged?.Invoke();
     }
 
-    // Only normally hidden, currently reachable Event/Risk information can be exposed.
-    // Nearest route depth, then row, then stable node ID wins. Graph links and accessibility stay intact.
+    // Shares Lantern's policy: reachable hidden Event/Risk only, ordered by route depth, row, then stable node ID.
+    internal bool CanRevealEligibleHiddenNode() => FindEligibleHiddenNodeToReveal() != null;
+
     internal bool TryRevealEligibleHiddenNode()
     {
-        if (currentPath.Count == 0) return false;
+        var candidate = FindEligibleHiddenNodeToReveal();
+        if (candidate == null) return false;
+        candidate.revealed = true;
+        return true;
+    }
+
+    internal bool TryRevealHiddenNodeFromEvent()
+    {
+        if (!TryRevealEligibleHiddenNode()) return false;
+        OnMapRevealChanged?.Invoke();
+        return true;
+    }
+
+    PathNode FindEligibleHiddenNodeToReveal()
+    {
+        if (currentPath.Count == 0) return null;
         var frontier = _activeNode != null && !_activeNode.completed
             ? new[] { _activeNode }
             : currentPath.Where(node => node.accessible && !node.completed)
@@ -236,9 +257,7 @@ public class RunManager : Singleton<RunManager>
                 if (next != null && !next.completed) pending.Enqueue(next);
             }
         }
-        if (candidate == null) return false;
-        candidate.revealed = true;
-        return true;
+        return candidate;
     }
 
     // These are run-authoritative node/content operations, invoked by typed effects only.
@@ -286,6 +305,7 @@ public class RunManager : Singleton<RunManager>
                 StartEncounter(node);
                 break;
             case MapNodeType.Shop:
+                ResolvePendingInvestments(node);
                 PrepareShopOffers();
                 OnShowShop?.Invoke();
                 break;
@@ -446,11 +466,24 @@ public class RunManager : Singleton<RunManager>
             if (!cards.ownedCards.Any(card => card != null && card.Enhancement == null))
                 return "No eligible cards";
         }
+        else if (offer.kind == ShopOfferKind.Consumable)
+        {
+            if (offer.consumable == null || !offer.consumable.shopAvailable ||
+                !cards.consumableCatalog.Contains(offer.consumable)) return "Consumable unavailable";
+            if (_purchasedConsumablesInShop.Contains(offer.consumable.id)) return "Already purchased this Shop visit";
+            if (!cards.CanAddConsumable(offer.consumable)) return "Backpack Full";
+        }
+        else if (offer.kind == ShopOfferKind.Investment || offer.kind == ShopOfferKind.Guidance)
+        {
+            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased this Shop visit";
+            if (offer.kind == ShopOfferKind.Guidance && !CanRevealEligibleHiddenNode())
+                return "No eligible hidden node to reveal";
+        }
         else return "Offer unavailable";
 
-        return cards.gold < offer.price
-            ? $"Need {offer.price}g (have {cards.gold}g)"
-            : string.Empty;
+        return cards.CanAfford(offer.price)
+            ? string.Empty
+            : $"Need {offer.price}g (have {cards.gold}g)";
     }
 
     public string GetEnhancementTargetUnavailableReason(int cardId)
@@ -465,8 +498,33 @@ public class RunManager : Singleton<RunManager>
     {
         if (GameplayInputGate.IsBlocked || !CanPurchaseShopOffer(stableId)) return false;
         var offer = _activeShopOffers.First(candidate => candidate.StableId == stableId);
-        return offer.kind == ShopOfferKind.Artifact &&
-            CardManager.Instance.BuyArtifact(offer.artifact, offer.price);
+        var cards = CardManager.Instance;
+        if (offer.kind == ShopOfferKind.Artifact) return cards.BuyArtifact(offer.artifact, offer.price);
+        if (offer.kind == ShopOfferKind.Consumable)
+        {
+            if (!cards.BuyConsumable(offer.consumable, offer.price)) return false;
+            _purchasedConsumablesInShop.Add(offer.consumable.id);
+            return true;
+        }
+        if (offer.kind == ShopOfferKind.Investment)
+        {
+            if (!cards.SpendGold(offer.price)) return false;
+            _pendingInvestments++;
+            _usedSpecialShopOffers.Add(offer.kind);
+            return true;
+        }
+        if (offer.kind == ShopOfferKind.Guidance)
+        {
+            if (!CanRevealEligibleHiddenNode() || !cards.SpendGold(offer.price)) return false;
+            if (!TryRevealHiddenNodeFromEvent())
+            {
+                cards.AddGold(offer.price);
+                return false;
+            }
+            _usedSpecialShopOffers.Add(offer.kind);
+            return true;
+        }
+        return false;
     }
 
     public bool PurchaseShopEnhancement(string stableId, int cardId)
@@ -501,12 +559,35 @@ public class RunManager : Singleton<RunManager>
         return true;
     }
 
+    void ResolvePendingInvestments(PathNode shopNode)
+    {
+        if (_pendingInvestments <= 0 || shopNode == null || CardManager.Instance == null) return;
+        if (_randomContext == null) _randomContext = new RunRandomContext(runSeed);
+        int context = unchecked(shopNode.mapIndex * 7919 ^ shopNode.id);
+        var random = _randomContext.CreateStream("shop-investment", context);
+        int successfulReturns = 0;
+        for (int i = 0; i < _pendingInvestments; i++)
+            if (random.NextInt(0, 2) == 0) successfulReturns++;
+        _pendingInvestments = 0;
+        if (successfulReturns > 0) CardManager.Instance.AddGold(successfulReturns * 15);
+    }
+
     void PrepareShopOffers(int maximumOffers = 4)
     {
         _activeShopOffers.Clear();
+        _usedSpecialShopOffers.Clear();
+        _purchasedConsumablesInShop.Clear();
         var cards = CardManager.Instance;
-        if (_activeNode == null || _activeNode.kind != MapNodeType.Shop || cards == null || maximumOffers <= 0)
+        if (_activeNode == null || _activeNode.kind != MapNodeType.Shop || cards == null)
             return;
+#if UNITY_EDITOR
+        if (DevModeRuntime.UnlimitedShopOffers)
+        {
+            PrepareAllDevShopOffers(cards);
+            return;
+        }
+#endif
+        if (maximumOffers <= 0) return;
 
         int context = unchecked(_activeNode.mapIndex * 397 ^ _activeNode.id);
         var artifacts = cards.relicCatalog
@@ -544,7 +625,63 @@ public class RunManager : Singleton<RunManager>
                 price = artifact.price
             });
         }
+        AddConsumableOffers(cards, context);
+        AddSpecialShopOffers();
     }
+
+    void AddConsumableOffers(CardManager cards, int context)
+    {
+        var consumables = cards.consumableCatalog
+            .Where(value => value != null && value.shopAvailable)
+            .OrderBy(value => value.id, StringComparer.Ordinal)
+            .ToList();
+        if (consumables.Count == 0) return;
+        consumables.Shuffle(_randomContext.CreateStream("shop-consumables", context));
+        var consumable = consumables[0];
+        _activeShopOffers.Add(new ShopOffer
+        {
+            kind = ShopOfferKind.Consumable,
+            consumable = consumable,
+            price = consumable.price
+        });
+    }
+
+    void AddSpecialShopOffers()
+    {
+        _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Investment, price = 5 });
+        _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Guidance, price = 5 });
+    }
+
+#if UNITY_EDITOR
+    void PrepareAllDevShopOffers(CardManager cards)
+    {
+        foreach (var artifact in cards.relicCatalog
+            .Where(value => value != null && !cards.HasArtifact(value))
+            .OrderBy(value => value.id, StringComparer.Ordinal))
+        {
+            _activeShopOffers.Add(new ShopOffer
+            {
+                kind = ShopOfferKind.Artifact,
+                artifact = artifact,
+                price = artifact.price
+            });
+        }
+
+        int slot = 0;
+        foreach (var enhancement in cards.enhancementCatalog
+            .Where(value => value != null)
+            .OrderBy(value => value.id, StringComparer.Ordinal))
+        {
+            _activeShopOffers.Add(new ShopOffer
+            {
+                kind = ShopOfferKind.Enhancement,
+                enhancement = enhancement,
+                slot = slot++,
+                price = enhancement.price
+            });
+        }
+    }
+#endif
 
     void PrepareUpgradeOffers(int maximumOffers = 3)
     {
@@ -606,24 +743,206 @@ public class RunManager : Singleton<RunManager>
 
     public string GetEventOptionUnavailableReason(int choiceIndex)
     {
-        if (_activeEvent == null || choiceIndex < 0 || choiceIndex >= _activeEvent.choices.Length)
+        if (_activeEvent == null || _activeEvent.choices == null ||
+            choiceIndex < 0 || choiceIndex >= _activeEvent.choices.Length)
             return "Choice unavailable";
+
+        var choice = _activeEvent.choices[choiceIndex];
+        if (choice == null) return "Choice unavailable";
+        if (choice.interaction == RunEventChoiceInteraction.ChooseEnhancementTarget ||
+            choice.interaction == RunEventChoiceInteraction.DiscardTwoForRandomEnhancement)
+        {
+            var cards = CardManager.Instance;
+            if (cards == null || !cards.ownedCards.Any(card => card != null && card.Enhancement == null))
+                return "No eligible cards to enhance";
+            if (!GetEventEnhancements().Any()) return "No enhancements available";
+            if (choice.interaction == RunEventChoiceInteraction.DiscardTwoForRandomEnhancement &&
+                cards.hand.Count < 2)
+                return "Need at least 2 cards in hand";
+            return string.Empty;
+        }
+
+        if (choice.interaction == RunEventChoiceInteraction.DiscardCardsForTotalValue)
+        {
+            var cards = CardManager.Instance;
+            if (cards == null) return "Choice unavailable";
+            return HasHandCombinationForValue(cards, choice.requiredDiscardValue)
+                ? string.Empty
+                : $"No hand combination totals {choice.requiredDiscardValue}";
+        }
+
         return RunEffectResolver.GetFailureReason(
-            _activeEvent.choices[choiceIndex],
-            CardManager.Instance,
-            CombatManager.Instance);
+            choice, CardManager.Instance, CombatManager.Instance, this);
     }
 
-    public bool ChooseEventOption(int choiceIndex)
-    {
-        if (GameplayInputGate.IsBlocked || !CanChooseEventOption(choiceIndex)) return false;
-        if (!RunEffectResolver.Apply(_activeEvent.choices[choiceIndex], CardManager.Instance, CombatManager.Instance))
-            return false;
+    public IReadOnlyList<CardEnhancementData> GetEventEnhancementsForChoice(int choiceIndex) =>
+        IsActiveEventChoice(choiceIndex, RunEventChoiceInteraction.ChooseEnhancementTarget)
+            ? GetEventEnhancements()
+            : Array.Empty<CardEnhancementData>();
 
+    public bool ChooseEventEnhancementTarget(int choiceIndex, int cardId, CardEnhancementData enhancement)
+    {
+        if (GameplayInputGate.IsBlocked || !IsActiveEventChoice(choiceIndex,
+                RunEventChoiceInteraction.ChooseEnhancementTarget) || enhancement == null ||
+            !GetEventEnhancements().Contains(enhancement) ||
+            !string.IsNullOrEmpty(GetEnhancementTargetUnavailableReason(cardId))) return false;
+
+        if (!CardManager.Instance.ApplyEnhancement(cardId, enhancement)) return false;
+        CompleteEventChoice();
+        return true;
+    }
+
+    public bool ChooseEventDiscardAndReward(int choiceIndex, IReadOnlyList<int> cardIds)
+    {
+        var cards = CardManager.Instance;
+        if (GameplayInputGate.IsBlocked || cards == null || !IsActiveEventChoice(choiceIndex,
+                RunEventChoiceInteraction.DiscardTwoForRandomEnhancement) || cardIds == null ||
+            cardIds.Count != 2 || cardIds[0] == cardIds[1] ||
+            !string.IsNullOrEmpty(GetEventOptionUnavailableReason(choiceIndex))) return false;
+
+        CardInstance target = null;
+        foreach (var card in cards.ownedCards)
+            if (card != null && card.Enhancement == null && (target == null || card.Id < target.Id))
+                target = card;
+        var enhancements = GetEventEnhancements();
+        if (target == null || enhancements.Length == 0) return false;
+
+        var random = CreateEventRandom(choiceIndex);
+        var enhancement = enhancements[random.NextInt(0, enhancements.Length)];
+        target = cards.ownedCards
+            .Where(card => card != null && card.Enhancement == null)
+            .OrderBy(card => card.Id)
+            .ElementAt(random.NextInt(0, cards.ownedCards.Count(card => card != null && card.Enhancement == null)));
+
+        if (!cards.TryDiscardCardsByIds(cardIds)) return false;
+        if (!cards.ApplyEnhancement(target.Id, enhancement))
+        {
+            Debug.LogError("RunManager: random event enhancement could not be applied after validated discard.", this);
+            return false;
+        }
+        CompleteEventChoice();
+        return true;
+    }
+
+    static bool HasHandCombinationForValue(CardManager cards, int requiredValue)
+    {
+        if (cards == null || requiredValue <= 0) return false;
+        var reachable = new bool[requiredValue + 1];
+        reachable[0] = true;
+        foreach (var card in cards.hand)
+        {
+            int value = card != null ? card.BaseAttackValue : 0;
+            if (value <= 0 || value > requiredValue) continue;
+            for (int total = requiredValue; total >= value; total--)
+                if (reachable[total - value]) reachable[total] = true;
+        }
+        return reachable[requiredValue];
+    }
+
+    public bool CanChooseEventDiscardForTotalValue(int choiceIndex, IReadOnlyList<int> cardIds)
+    {
+        var cards = CardManager.Instance;
+        if (!IsActiveEventChoice(choiceIndex, RunEventChoiceInteraction.DiscardCardsForTotalValue) ||
+            cards == null || cardIds == null || cardIds.Count == 0 ||
+            !string.IsNullOrEmpty(GetEventOptionUnavailableReason(choiceIndex))) return false;
+
+        int requiredValue = _activeEvent.choices[choiceIndex].requiredDiscardValue;
+        int total = 0;
+        var unique = new HashSet<int>();
+        for (int i = 0; i < cardIds.Count; i++)
+        {
+            int id = cardIds[i];
+            if (!unique.Add(id)) return false;
+            var card = cards.FindOwnedCard(id);
+            if (card == null || !cards.hand.Contains(card)) return false;
+            total += card.BaseAttackValue;
+            if (total > requiredValue) return false;
+        }
+        return total == requiredValue;
+    }
+
+    public bool ChooseEventDiscardForTotalValue(int choiceIndex, IReadOnlyList<int> cardIds)
+    {
+        var cards = CardManager.Instance;
+        if (GameplayInputGate.IsBlocked || cards == null ||
+            !CanChooseEventDiscardForTotalValue(choiceIndex, cardIds) ||
+            !cards.TryDiscardCardsByIds(cardIds)) return false;
+        CompleteEventChoice();
+        return true;
+    }
+
+    bool IsActiveEventChoice(int choiceIndex, RunEventChoiceInteraction interaction) =>
+        _activeEvent != null && _activeEvent.choices != null && choiceIndex >= 0 &&
+        choiceIndex < _activeEvent.choices.Length && _activeEvent.choices[choiceIndex] != null &&
+        _activeEvent.choices[choiceIndex].interaction == interaction &&
+        _activeNode != null && !_activeNode.completed;
+
+    internal bool TryGrantRandomSwampReward()
+    {
+        var cards = CardManager.Instance;
+        if (cards == null) return false;
+        var random = CreateEventRandom(0, "swamp-event-reward");
+        int rewardType = random.NextInt(0, 3);
+        if (rewardType == 0)
+        {
+            var artifacts = cards.relicCatalog
+                .Where(value => value != null &&
+                    string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(value)))
+                .OrderBy(value => value.canonicalId, StringComparer.Ordinal)
+                .ThenBy(value => value.id, StringComparer.Ordinal).ToArray();
+            if (artifacts.Length > 0)
+                cards.BuyArtifact(artifacts[random.NextInt(0, artifacts.Length)], 0);
+            return true;
+        }
+
+        if (rewardType == 1)
+        {
+            var enhancements = GetEventEnhancements();
+            var eligibleCards = cards.ownedCards
+                .Where(card => card != null && card.Enhancement == null)
+                .OrderBy(card => card.Id).ToArray();
+            if (enhancements.Length > 0 && eligibleCards.Length > 0)
+            {
+                var enhancement = enhancements[random.NextInt(0, enhancements.Length)];
+                var card = eligibleCards[random.NextInt(0, eligibleCards.Length)];
+                cards.ApplyEnhancement(card.Id, enhancement);
+            }
+        }
+        return true;
+    }
+
+    CardEnhancementData[] GetEventEnhancements() => CardManager.Instance == null
+        ? Array.Empty<CardEnhancementData>()
+        : CardManager.Instance.enhancementCatalog.Where(value => value != null)
+            .OrderBy(value => value.canonicalId, StringComparer.Ordinal)
+            .ThenBy(value => value.id, StringComparer.Ordinal).ToArray();
+
+    IRandomSource CreateEventRandom(int choiceIndex, string streamName = "run-event-enhancement")
+    {
+        if (_randomContext == null) _randomContext = new RunRandomContext(runSeed);
+        int nodeId = _activeNode != null ? _activeNode.id : 0;
+        int mapIndex = _activeNode != null ? _activeNode.mapIndex : 0;
+        int context = unchecked(mapIndex * 7919 ^ nodeId * 397 ^ choiceIndex);
+        return _randomContext.CreateStream(streamName, context);
+    }
+
+    void CompleteEventChoice()
+    {
         OnHideEvent?.Invoke();
         _activeEvent = null;
         CompleteActiveNode();
         ShowPathAfterNode();
+    }
+
+    public bool ChooseEventOption(int choiceIndex)
+    {
+        if (GameplayInputGate.IsBlocked || !CanChooseEventOption(choiceIndex) ||
+            _activeEvent.choices[choiceIndex].interaction != RunEventChoiceInteraction.Immediate) return false;
+        if (!RunEffectResolver.Apply(
+                _activeEvent.choices[choiceIndex], CardManager.Instance, CombatManager.Instance, this))
+            return false;
+
+        CompleteEventChoice();
         return true;
     }
 
@@ -650,11 +969,32 @@ public class RunManager : Singleton<RunManager>
         }
 
         bool wasBoss = _activeNode.kind == MapNodeType.Boss;
+        TryGrantConsumableDropForNode(_activeNode);
         CompleteActiveNode();
         if (wasBoss)
             HandleBossVictory();
         else
             ShowPathAfterNode();
+    }
+
+    internal bool TryGrantConsumableDropForNode(PathNode node)
+    {
+        var cards = CardManager.Instance;
+        if (node == null || cards == null || _randomContext == null) return false;
+        int context = unchecked(node.mapIndex * 7919 ^ node.id);
+        if (!_consumableDropResolvedContexts.Add(context)) return false;
+        var candidates = cards.consumableCatalog
+            .Where(value => value != null && value.dropAvailable && value.dropChance > 0f &&
+                value.effectType != ConsumableEffectType.ApplyEnhancement)
+            .OrderBy(value => value.id, StringComparer.Ordinal).ToArray();
+        if (candidates.Length == 0) return false;
+        var random = _randomContext.CreateStream("consumable-drops", context);
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            if (random.NextFloat() >= Mathf.Clamp01(candidates[i].dropChance)) continue;
+            return cards.AddConsumable(candidates[i]);
+        }
+        return false;
     }
 
     void CompleteActiveNode()
@@ -765,6 +1105,10 @@ public class RunManager : Singleton<RunManager>
         bossDeck.Clear();
         bossIndex = 0;
         _completedNodeCount = 0;
+        _pendingInvestments = 0;
+        _usedSpecialShopOffers.Clear();
+        _purchasedConsumablesInShop.Clear();
+        _consumableDropResolvedContexts.Clear();
         currentPath.Clear();
     }
 

@@ -10,6 +10,7 @@ public class GameController : MonoBehaviour
     public CardView cardPrefab;
     public RelicData[] relicCatalog;
     public CardEnhancementData[] enhancementCatalog;
+    public ConsumableData[] consumableCatalog;
 
     [Header("Player Prototype Balance")]
     [Min(1)] public int playerMaxHealth = 30;
@@ -37,7 +38,7 @@ public class GameController : MonoBehaviour
         var cards = GetOrCreate<CardManager>();
         var combat = GetOrCreate<CombatManager>();
         var run = GetOrCreate<RunManager>();
-        cards.Configure(handField, dragCanvas, cardPrefab, relicCatalog, enhancementCatalog);
+        cards.Configure(handField, dragCanvas, cardPrefab, relicCatalog, enhancementCatalog, consumableCatalog);
         combat.ConfigurePlayer(playerMaxHealth);
         run.thiefType = thiefType;
         run.goblinType = goblinType;

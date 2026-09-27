@@ -51,7 +51,7 @@ public class RelicData : ScriptableObject
     public bool Matches(CardInstance card)
     {
         if (card == null) return false;
-        if (restrictToSuit && card.Suit != affectedSuit) return false;
+        if (restrictToSuit && !card.MatchesSuit(affectedSuit)) return false;
         return !requiresEnhancedCard || card.Enhancement != null;
     }
 

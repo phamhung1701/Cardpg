@@ -6,7 +6,8 @@ public enum CombatDamageOrigin
     EnemyAggregate,
     Recovery,
     Reactive,
-    Legacy
+    Legacy,
+    Consumable
 }
 
 public readonly struct DamageRequest

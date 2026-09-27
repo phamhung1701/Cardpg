@@ -22,7 +22,13 @@ public enum GameplayEffectKind
     GrantRandomCommonEnhancement = 14,
     CriticalChanceOverride = 15,
     CounterDamage = 16,
-    HandSizeBonus = 17
+    HandSizeBonus = 17,
+    VampiricActionDamage = 18,
+    ExplosiveAreaDamage = 19,
+    PermanentKillAttack = 20,
+    WildSuit = 21,
+    DestroyBlockingCard = 22,
+    MimicInHandEffects = 23
 }
 
 public enum GameplayEffectTrigger
@@ -103,7 +109,7 @@ public struct GameplayEffectCondition
     {
         return kind switch
         {
-            GameplayConditionKind.CardSuit => card != null && card.Suit == suit,
+            GameplayConditionKind.CardSuit => card != null && card.MatchesSuit(suit),
             GameplayConditionKind.CardRank => card != null && card.Rank == rank,
             GameplayConditionKind.EnhancedCard => (card?.Enhancement != null) == expected,
             GameplayConditionKind.AttackValueGreaterThan => attackValue > value,
@@ -140,7 +146,7 @@ public struct GameplayEffectDefinition
             GameplayEffectKind.FlatActionDamage or GameplayEffectKind.ActionDamageCap or
             GameplayEffectKind.IncomingCombatDamageReduction or
             GameplayEffectKind.CriticalChanceOverride or
-            GameplayEffectKind.HandSizeBonus => GameplayEffectCategory.NumericModifier,
+            GameplayEffectKind.HandSizeBonus or GameplayEffectKind.VampiricActionDamage => GameplayEffectCategory.NumericModifier,
         _ => GameplayEffectCategory.Reactive
     };
 
@@ -522,6 +528,7 @@ public static class GameplayEffectResolver
                 GameplayEffectKind.FlatAttack, GameplayEffectKind.AttackMultiplier,
                 ref localFlat, ref localMultiplier, includeThresholdEffects: false);
         localFlat += SumInHandAttackBonuses(card, cards);
+        localFlat += SumMimickedInHandAttackBonuses(card, cards);
         if (cards != null)
             for (int i = 0; i < cards.ownedArtifacts.Count; i++)
             {
@@ -533,7 +540,7 @@ public static class GameplayEffectResolver
                     includeThresholdEffects: false);
             }
 
-        int qualifyingValue = ClampToInt(((long)card.BaseAttackValue + localFlat) *
+        int qualifyingValue = ClampToInt(((long)card.BaseAttackValue + card.PermanentAttackBonus + localFlat) *
             localMultiplier * artifactMultiplier + artifactFlat);
         int conditionalFlat = 0, conditionalMultiplier = 1;
         if (card.Enhancement != null)
@@ -552,6 +559,26 @@ public static class GameplayEffectResolver
                     includeThresholdEffects: true, attackValue: qualifyingValue);
             }
         return ClampToInt((long)qualifyingValue * conditionalMultiplier + conditionalFlat);
+    }
+
+    static int SumMimickedInHandAttackBonuses(CardInstance target, CardManager cards)
+    {
+        if (target == null || cards == null) return 0;
+        int repetitions = 0;
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        {
+            var artifact = cards.ownedArtifacts[artifactIndex];
+            if (artifact == null) continue;
+            var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
+            for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
+            {
+                var effect = EffectAt(source, effectIndex);
+                if (effect.kind == GameplayEffectKind.MimicInHandEffects &&
+                    effect.trigger == GameplayEffectTrigger.CardCommitted && effect.Matches(target))
+                    repetitions += Mathf.Max(1, effect.amount);
+            }
+        }
+        return repetitions * SumInHandAttackBonuses(target, cards);
     }
 
     static int SumInHandAttackBonuses(CardInstance target, CardManager cards)
@@ -639,6 +666,7 @@ public static class GameplayEffectResolver
     {
         long damage = Math.Max(0, context.AggregatedDamage);
         damage += SumActionEffect(context, GameplayEffectKind.FlatActionDamage);
+        damage += SumActionEffect(context, GameplayEffectKind.VampiricActionDamage);
         actionDamageCap = SmallestActionCap(context);
         // The cap is a budget over the complete action, not one cap per card or hit.
         // CombatManager applies the budget before critical multiplication and apportions it to hits.
@@ -692,6 +720,49 @@ public static class GameplayEffectResolver
             found = true;
         }
     }
+
+    public static int GetVampiricHealthCost(IReadOnlyList<CardInstance> cards)
+    {
+        if (cards == null) return 0;
+        int cost = 0;
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var card = cards[i];
+            if (card?.Enhancement == null) continue;
+            var source = new GameplayEffectSource(card);
+            for (int j = 0; j < EffectCount(source); j++)
+            {
+                var effect = EffectAt(source, j);
+                if (effect.kind == GameplayEffectKind.VampiricActionDamage &&
+                    effect.trigger == GameplayEffectTrigger.ActionDamageCalculated && effect.Matches(card))
+                    cost += Math.Max(0, effect.amount);
+            }
+        }
+        return cost;
+    }
+
+    public static bool HasEnhancementEffect(CardInstance card, GameplayEffectKind kind)
+    {
+        if (card?.Enhancement == null) return false;
+        var source = new GameplayEffectSource(card);
+        for (int i = 0; i < EffectCount(source); i++)
+        {
+            var effect = EffectAt(source, i);
+            if (effect.kind == kind) return true;
+        }
+        return false;
+    }
+
+    public static bool HasExplosiveEffect(IReadOnlyList<CardInstance> cards)
+    {
+        if (cards == null) return false;
+        for (int i = 0; i < cards.Count; i++)
+            if (HasEnhancementEffect(cards[i], GameplayEffectKind.ExplosiveAreaDamage)) return true;
+        return false;
+    }
+
+    public static bool IsLethalEnchantment(CardInstance card) =>
+        HasEnhancementEffect(card, GameplayEffectKind.CriticalChanceOverride);
 
     static int SumActionEffect(ActionDamageEffectContext context, GameplayEffectKind kind)
     {
@@ -1055,12 +1126,55 @@ public static class GameplayEffectResolver
         for (int i = 0; i < EffectCount(source); i++)
         {
             var effect = EffectAt(source, i);
+            if (source.Artifact != null && effect.kind == GameplayEffectKind.MimicInHandEffects)
+            {
+                if (!Applies(source, effect, GameplayEffectTrigger.CardCommitted, context.Card)) continue;
+                int mimicEffectIndex = i;
+                queue.Enqueue(context.Action.ActionId, context.HitIndex,
+                    CombatReactionPhase.CardCommitted, source.Category, sourceOrder, mimicEffectIndex,
+                    () => EnqueueMimickedInHandEffects(context, queue, sourceOrder));
+                continue;
+            }
             if (!Applies(source, effect, GameplayEffectTrigger.CardCommitted, context.Card)) continue;
             int effectIndex = i;
             queue.Enqueue(context.Action.ActionId, context.HitIndex, CombatReactionPhase.CardCommitted,
                 source.Category, sourceOrder, effectIndex,
                 () => ApplyReactive(source, effect, context.Combat, context.Cards, context.Card, context.Target));
         }
+    }
+
+    static void EnqueueMimickedInHandEffects(CardCommittedEffectContext context,
+        CombatReactionQueue queue, int mimicSourceOrder)
+    {
+        var cards = context.Cards;
+        for (int handIndex = 0; handIndex < cards.hand.Count; handIndex++)
+        {
+            var card = cards.hand[handIndex];
+            if (card?.Enhancement == null) continue;
+            var source = new GameplayEffectSource(card);
+            for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
+            {
+                var effect = EffectAt(source, effectIndex);
+                if (!IsMimicRetriggerableHandEffect(effect) || !effect.Matches(card)) continue;
+                int capturedIndex = effectIndex;
+                int sourceOrder = cards.ownedArtifacts.Count + handIndex + mimicSourceOrder;
+                queue.Enqueue(context.Action.ActionId, context.HitIndex,
+                    CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Enhancement,
+                    sourceOrder, capturedIndex,
+                    () => ApplyReactive(source, effect, context.Combat, cards, card, context.Target,
+                        sourceOrder, capturedIndex));
+            }
+        }
+    }
+
+    static bool IsMimicRetriggerableHandEffect(GameplayEffectDefinition effect)
+    {
+        if (effect.Category != GameplayEffectCategory.Reactive ||
+            effect.trigger is not (GameplayEffectTrigger.AttackCommitted or GameplayEffectTrigger.PlayerTurnStart or
+                GameplayEffectTrigger.EncounterStart)) return false;
+        return effect.kind is GameplayEffectKind.Heal or GameplayEffectKind.Draw or
+            GameplayEffectKind.BonusGold or GameplayEffectKind.ReduceAttackByCardValue or
+            GameplayEffectKind.RecycleDiscardByCardValue or GameplayEffectKind.DrawByCardValue;
     }
 
     public static void EnqueueAttackBlocked(AttackBlockedEffectContext context,
@@ -1087,8 +1201,13 @@ public static class GameplayEffectResolver
         for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
         {
             var effect = EffectAt(source, effectIndex);
-            if (effect.kind != GameplayEffectKind.CounterDamage ||
-                !Applies(source, effect, GameplayEffectTrigger.AttackBlocked, context.BlockingCard)) continue;
+            if (!Applies(source, effect, GameplayEffectTrigger.AttackBlocked, context.BlockingCard)) continue;
+            if (effect.kind == GameplayEffectKind.DestroyBlockingCard)
+            {
+                if (source.Artifact == null || source.State.GetEncounterCounter(effectIndex) != 0) continue;
+                source.State.SetEncounterCounter(effectIndex, 1);
+            }
+            else if (effect.kind != GameplayEffectKind.CounterDamage) continue;
             int capturedIndex = effectIndex;
             queue.Enqueue(context.Action.ActionId, int.MinValue + context.BlockOrder, CombatReactionPhase.AttackBlocked,
                 source.Category, sourceOrder, capturedIndex,
@@ -1232,6 +1351,12 @@ public static class GameplayEffectResolver
                 if (combat.QueueReactiveDamage(combat.player, target, amount, sourceOrder,
                     handlerOrder, sourceCategory: source.Category))
                     combat.LogEffect($"{source.DisplayName}: Counterattacked {target.DisplayName} for {amount} damage.");
+                break;
+            case GameplayEffectKind.DestroyBlockingCard:
+                if (card == null || cards == null) break;
+                string destroyedName = card.DisplayName;
+                if (cards.DestroyOwnedCard(card))
+                    combat.LogEffect($"{source.DisplayName}: destroyed {destroyedName} after blocking.");
                 break;
         }
     }

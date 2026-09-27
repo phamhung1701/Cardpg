@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56ede82db3e0bdd49bbf245bd4ba24ac, type: 3}
+  m_Name: MysteriousStranger
+  m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
+  id: evt_008
+  category: 3
+  title: Mysterious Stranger
+  description: A mysterious stranger offers you a questionable trade.
+  choices:
+  - label: Accept
+    description: Discard 2 cards; a random Enhancement will be applied to a random
+      eligible owned card.
+    effects: []
+    interaction: 2
+  - label: Refuse
+    description: Nothing happens.
+    effects: []
+    interaction: 0

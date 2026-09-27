@@ -24,9 +24,15 @@ MonoBehaviour:
   events:
   - {fileID: 11400000, guid: 4ed5f24787fc86045b2615d7a7537eab, type: 2}
   - {fileID: 11400000, guid: 486a63daea298c24b9ec4a409597bdb4, type: 2}
+  - {fileID: 11400000, guid: 39f8b444336372e40944025c54b0f3be, type: 2}
+  - {fileID: 11400000, guid: 22f3abdd0059b6d49aa16fe176d960fa, type: 2}
+  - {fileID: 11400000, guid: 8ba7239db54849741aff3543a59d18eb, type: 2}
+  - {fileID: 11400000, guid: 42d480071c7d26647869148db5b88a5e, type: 2}
   upgrades:
   - {fileID: 11400000, guid: af4901c5f021e884aa87aaa71e35557d, type: 2}
   - {fileID: 11400000, guid: 4ade2889dc70e934ebe3749a5cd12801, type: 2}
   risks:
   - {fileID: 11400000, guid: d7f1d345f0b01cd40a1398e33e30a111, type: 2}
   - {fileID: 11400000, guid: 06cc4a77c49f79a45b5e48421015bc87, type: 2}
+  - {fileID: 11400000, guid: 9ad8fd364bddeed49b28f46cf63aba01, type: 2}
+  - {fileID: 11400000, guid: 2aa05c43ec43e4a4ab5a2c0705834396, type: 2}

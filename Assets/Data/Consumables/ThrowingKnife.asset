@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed72689996f2666428bae8ae88656bf6, type: 3}
+  m_Name: ThrowingKnife
+  m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
+  id: throwing_knife
+  canonicalId: con_002
+  displayName: Throwing Knife
+  icon: DMG
+  description: Deal 5 damage to the selected enemy during your turn.
+  price: 5
+  uses: 1
+  effectType: 1
+  healAmount: 0
+  damageAmount: 5
+  enhancementToApply: {fileID: 0}
+  shopAvailable: 1
+  dropAvailable: 1
+  eventAvailable: 0
+  dropChance: 0.1

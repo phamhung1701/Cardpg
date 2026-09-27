@@ -5,7 +5,8 @@ public enum CombatActionOrigin
     Recovery,
     Reactive,
     Legacy,
-    PlayerDefense = 5
+    PlayerDefense = 5,
+    Consumable = 6
 }
 
 public sealed class CombatActionContext

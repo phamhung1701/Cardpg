@@ -151,7 +151,7 @@ public sealed class Phase6RegressionTests
     }
 
     [Test]
-    public void EmptyShop_RemainsCompletableExactlyOnce()
+    public void ShopWithNoCatalogOffers_ShowsSpecialDealsAndRemainsCompletableExactlyOnce()
     {
         _cards.Configure(null, null, null, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
         _run.StartRunWithSeed("PHASE6-EMPTY-SHOP");
@@ -161,7 +161,9 @@ public sealed class Phase6RegressionTests
         _run.OnShowPathScreen += () => showPathCount++;
         _run.OnPathChosen(shop.id);
 
-        Assert.That(_run.GetCurrentShopOffers(), Is.Empty);
+        Assert.That(_run.GetCurrentShopOffers(), Has.Count.EqualTo(2));
+        CollectionAssert.AreEquivalent(new[] { ShopOfferKind.Investment, ShopOfferKind.Guidance },
+            _run.GetCurrentShopOffers().Select(offer => offer.kind));
         _run.OnShopDone();
         _run.OnShopDone();
 

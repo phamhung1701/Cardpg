@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class CardManager : Singleton<CardManager>
 {
     public const int HAND_SIZE = 8;
     public const int BASE_ARTIFACT_CAPACITY = 5;
+    public const int BACKPACK_CAPACITY = 3;
 
     [Header("References")]
     public Field handField;
@@ -15,6 +17,7 @@ public class CardManager : Singleton<CardManager>
     [Header("Build Progression Catalogs")]
     public List<RelicData> relicCatalog = new();
     public List<CardEnhancementData> enhancementCatalog = new();
+    public List<ConsumableData> consumableCatalog = new();
 
     [Header("Runtime State")]
     public int gold;
@@ -27,6 +30,7 @@ public class CardManager : Singleton<CardManager>
     readonly List<CardView> _selectedCards = new();
     readonly List<CardData> _generatedDefinitions = new();
     readonly Dictionary<RelicData, ArtifactRuntimeInstance> _artifactInstances = new();
+    readonly List<ConsumableData> _backpack = new(BACKPACK_CAPACITY);
     CardView _activeDragCard;
     int _nextCardId = 1;
 
@@ -34,8 +38,22 @@ public class CardManager : Singleton<CardManager>
     public IReadOnlyList<CardInstance> deck => _cards.Deck;
     public IReadOnlyList<CardInstance> hand => _cards.Hand;
     public IReadOnlyList<CardInstance> discardPile => _cards.DiscardPile;
+    public IReadOnlyList<ConsumableData> Backpack => _backpack;
+    public int BackpackSlotsUsed => _backpack.Count;
+    public bool IsBackpackFull => _backpack.Count >= BACKPACK_CAPACITY;
     public int HandCount => _cards.HandCount;
     public int HandCapacity => GameplayEffectResolver.CalculateHandCapacity(HAND_SIZE, this);
+    public bool HasInfiniteMoney
+    {
+        get
+        {
+#if UNITY_EDITOR
+            return DevModeRuntime.InfiniteMoney;
+#else
+            return false;
+#endif
+        }
+    }
     public IReadOnlyList<CardView> SelectedCards => _selectedCards;
     public CardView ActiveDragCard => _activeDragCard;
     public int ArtifactCapacity => BASE_ARTIFACT_CAPACITY;
@@ -54,13 +72,16 @@ public class CardManager : Singleton<CardManager>
     public event Action OnDeckChanged;
     public event Action OnBuildChanged;
     public event Action<CardView> OnCardSelected;
+    public event Action OnConsumablesChanged;
+
 
     public void Configure(
         Field field,
         Canvas canvas,
         CardView prefab,
         RelicData[] artifacts,
-        CardEnhancementData[] enhancements = null)
+        CardEnhancementData[] enhancements = null,
+        ConsumableData[] consumables = null)
     {
         handField = field;
         dragCanvas = canvas;
@@ -73,11 +94,117 @@ public class CardManager : Singleton<CardManager>
         enhancementCatalog.Clear();
         if (enhancements != null)
             enhancementCatalog.AddRange(enhancements);
+
+        consumableCatalog.Clear();
+        if (consumables != null)
+            consumableCatalog.AddRange(consumables);
     }
 
-    public void ConfigureRandom(IRandomSource random)
+    public void ConfigureRandom(IRandomSource random) => _cards.ConfigureRandom(random);
+
+    public CardEnhancementData FindEnhancement(string id) =>
+        enhancementCatalog.Find(value => value != null && value.id == id);
+
+    public ConsumableData FindConsumable(string id) =>
+        consumableCatalog.Find(value => value != null && value.id == id);
+
+    public ConsumableData GetConsumableAtSlot(int slotIndex) =>
+        slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex] : null;
+
+    public int GetConsumableCount(ConsumableData consumable)
     {
-        _cards.ConfigureRandom(random);
+        if (consumable == null) return 0;
+        int count = 0;
+        for (int i = 0; i < _backpack.Count; i++)
+            if (_backpack[i] == consumable) count++;
+        return count;
+    }
+
+    public bool CanAddConsumable(ConsumableData consumable, int count = 1) =>
+        consumable != null && count > 0 && consumableCatalog.Contains(consumable) &&
+        count <= BACKPACK_CAPACITY - _backpack.Count;
+
+    public bool AddConsumable(ConsumableData consumable, int count = 1)
+    {
+        if (!CanAddConsumable(consumable, count)) return false;
+        for (int i = 0; i < count; i++) _backpack.Add(consumable);
+        OnConsumablesChanged?.Invoke();
+        return true;
+    }
+
+    public bool BuyConsumable(ConsumableData consumable, int price)
+    {
+        if (consumable == null || !consumable.shopAvailable || !CanAddConsumable(consumable) ||
+            price < 0 || !CanAfford(price)) return false;
+        if (!SpendGold(price)) return false;
+        return AddConsumable(consumable);
+    }
+
+    public bool CanUseConsumable(ConsumableData consumable, CombatManager combat)
+    {
+        if (consumable == null) return false;
+        int slot = _backpack.FindIndex(value => value == consumable);
+        return CanUseConsumableAtSlot(slot, combat);
+    }
+
+    public bool CanUseConsumableAtSlot(int slotIndex, CombatManager combat)
+    {
+        var consumable = GetConsumableAtSlot(slotIndex);
+        if (consumable == null || combat == null || combat.player == null || combat.player.IsDefeated) return false;
+        return consumable.effectType switch
+        {
+            ConsumableEffectType.Heal => consumable.healAmount > 0 &&
+                combat.player.currentHealth < combat.player.maxHealth,
+            ConsumableEffectType.DirectEnemyDamage => combat.CanUseConsumableDamage(consumable.damageAmount),
+            ConsumableEffectType.ApplyEnhancement => consumable.enhancementToApply != null &&
+                _cards.OwnedCards.Any(card => card != null && card.Enhancement == null),
+            _ => false
+        };
+    }
+
+    public bool UseConsumable(ConsumableData consumable, CombatManager combat)
+    {
+        int slot = _backpack.FindIndex(value => value == consumable);
+        return UseConsumableAtSlot(slot, combat);
+    }
+
+    public bool UseConsumableAtSlot(int slotIndex, CombatManager combat)
+    {
+        if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
+        var consumable = _backpack[slotIndex];
+        if (consumable.effectType == ConsumableEffectType.ApplyEnhancement) return false;
+
+        // Remove before effects that can complete an encounter so a same-victory drop can use the freed slot.
+        _backpack.RemoveAt(slotIndex);
+        bool succeeded = consumable.effectType switch
+        {
+            ConsumableEffectType.Heal => combat.HealPlayer(consumable.healAmount) > 0,
+            ConsumableEffectType.DirectEnemyDamage => combat.TryUseConsumableDamage(consumable.damageAmount),
+            _ => false
+        };
+        if (!succeeded)
+        {
+            _backpack.Insert(slotIndex, consumable);
+            return false;
+        }
+        OnConsumablesChanged?.Invoke();
+        return true;
+    }
+
+    public bool UseEnhancementConsumableAtSlot(int slotIndex, int cardId)
+    {
+        var combat = CombatManager.Instance;
+        if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
+        var consumable = _backpack[slotIndex];
+        if (consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
+            consumable.enhancementToApply == null ||
+            !_cards.OwnedCards.Any(card => card != null && card.Enhancement == null)) return false;
+        var card = FindOwnedCard(cardId);
+        if (card == null || card.Enhancement != null ||
+            !ApplyEnhancement(cardId, consumable.enhancementToApply)) return false;
+        _backpack.RemoveAt(slotIndex);
+        OnConsumablesChanged?.Invoke();
+        return true;
     }
 
     public bool HasRelic(string id) => relics.Contains(id);
@@ -145,10 +272,36 @@ public class CardManager : Singleton<CardManager>
         return true;
     }
 
+    public bool DestroyOwnedCard(CardInstance card)
+    {
+        if (card == null || FindOwnedCard(card.Id) != card || !_cards.RemoveOwnedCard(card)) return false;
+        var views = new List<CardView>();
+        foreach (var view in _trackedViews)
+            if (view != null && ReferenceEquals(view.data, card)) views.Add(view);
+        foreach (var view in views)
+        {
+            _selectedCards.Remove(view);
+            view.SetSelectionOrder(0);
+            DetachAndDestroyView(view);
+        }
+        RefreshSelectionPresentation();
+        OnDeckChanged?.Invoke();
+        OnBuildChanged?.Invoke();
+        return true;
+    }
+
+    public void NotifyCardInstanceChanged(CardInstance card)
+    {
+        if (card == null || FindOwnedCard(card.Id) != card) return;
+        RefreshTrackedView(card);
+        OnDeckChanged?.Invoke();
+        OnBuildChanged?.Invoke();
+    }
+
     public bool BuyEnhancement(int cardId, CardEnhancementData enhancement, int price)
     {
         var card = FindOwnedCard(cardId);
-        if (card == null || card.Enhancement != null || enhancement == null || price < 0 || gold < price)
+        if (card == null || card.Enhancement != null || enhancement == null || price < 0 || !CanAfford(price))
             return false;
         if (!SpendGold(price)) return false;
         if (card.TryApplyEnhancement(enhancement))
@@ -247,6 +400,25 @@ public class CardManager : Singleton<CardManager>
     {
         if (card == null) return false;
         return TryDiscardCards(new[] { card });
+    }
+
+    public bool TryDiscardCardsByIds(IReadOnlyList<int> cardIds)
+    {
+        if (cardIds == null || cardIds.Count == 0) return false;
+        var views = new List<CardView>(cardIds.Count);
+        var uniqueIds = new HashSet<int>();
+        for (int i = 0; i < cardIds.Count; i++)
+        {
+            int id = cardIds[i];
+            if (id <= 0 || !uniqueIds.Add(id)) return false;
+            CardView found = null;
+            foreach (var view in _trackedViews)
+                if (view != null && view.data != null && view.data.Id == id && _cards.ContainsInHand(view.data))
+                { found = view; break; }
+            if (found == null) return false;
+            views.Add(found);
+        }
+        return TryDiscardCards(views);
     }
 
     public bool TryDiscardCards(IReadOnlyList<CardView> cards)
@@ -365,13 +537,25 @@ public class CardManager : Singleton<CardManager>
 
     public void AddGold(int amount)
     {
+        if (HasInfiniteMoney)
+        {
+            OnGoldChanged?.Invoke(gold);
+            return;
+        }
         gold += amount;
         OnGoldChanged?.Invoke(gold);
     }
 
+    public bool CanAfford(int amount) => amount >= 0 && (HasInfiniteMoney || gold >= amount);
+
     public bool SpendGold(int amount)
     {
-        if (amount < 0 || gold < amount) return false;
+        if (!CanAfford(amount)) return false;
+        if (HasInfiniteMoney)
+        {
+            OnGoldChanged?.Invoke(gold);
+            return true;
+        }
         gold -= amount;
         OnGoldChanged?.Invoke(gold);
         return true;
@@ -384,10 +568,12 @@ public class CardManager : Singleton<CardManager>
         relics.Clear();
         ownedArtifacts.Clear();
         _artifactInstances.Clear();
+        _backpack.Clear();
 
         OnGoldChanged?.Invoke(gold);
         OnDeckChanged?.Invoke();
         OnBuildChanged?.Invoke();
+        OnConsumablesChanged?.Invoke();
         OnCardSelected?.Invoke(null);
     }
 

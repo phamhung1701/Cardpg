@@ -28,6 +28,15 @@ public sealed class CardInstance
     public CardData.Rank rank => Rank;
 
     public GameplayEffectState EffectState { get; } = new();
+    public int PermanentAttackBonus { get; private set; }
+
+    public bool MatchesSuit(CardData.Suit suit) =>
+        Suit == suit || GameplayEffectResolver.HasEnhancementEffect(this, GameplayEffectKind.WildSuit);
+
+    public void GainPermanentAttackBonus(int amount = 1)
+    {
+        if (amount > 0) PermanentAttackBonus = (int)Math.Min(int.MaxValue, (long)PermanentAttackBonus + amount);
+    }
 
     public int BaseAttackValue => definition.AttackValue;
     public int AttackValue => Mathf.Max(0, BaseAttackValue + GameplayEffectResolver.CardLocalFlat(this, GameplayEffectKind.FlatAttack));

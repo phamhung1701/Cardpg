@@ -1,0 +1,267 @@
+using System.Collections.Generic;
+using System.Linq;
+using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.UI;
+
+public sealed class LowerEffortEventTests
+{
+    readonly List<UnityEngine.Object> _created = new();
+    CardManager _cards;
+    CombatManager _combat;
+    RunManager _run;
+    RunEventDefinition _blacksmith, _stranger, _ambush, _swamp;
+    CardEnhancementData[] _enhancements;
+
+    [SetUp]
+    public void SetUp()
+    {
+        GameplayInputGate.Clear();
+        _blacksmith = AssetDatabase.LoadAssetAtPath<RunEventDefinition>("Assets/Data/Run/Events/Blacksmith.asset");
+        _stranger = AssetDatabase.LoadAssetAtPath<RunEventDefinition>("Assets/Data/Run/Events/MysteriousStranger.asset");
+        _ambush = AssetDatabase.LoadAssetAtPath<RunEventDefinition>("Assets/Data/Run/Events/Ambush.asset");
+        _swamp = AssetDatabase.LoadAssetAtPath<RunEventDefinition>("Assets/Data/Run/Events/Swamp.asset");
+        _enhancements = AssetDatabase.FindAssets("t:CardEnhancementData", new[] { "Assets/Data/Enhancements" })
+            .Select(guid => AssetDatabase.LoadAssetAtPath<CardEnhancementData>(AssetDatabase.GUIDToAssetPath(guid)))
+            .Where(asset => asset != null).ToArray();
+        Assert.That(_blacksmith, Is.Not.Null);
+        Assert.That(_stranger, Is.Not.Null);
+        Assert.That(_ambush, Is.Not.Null);
+        Assert.That(_swamp, Is.Not.Null);
+        Assert.That(_enhancements, Is.Not.Empty);
+
+        var canvas = Make<Canvas>("Event Test Canvas");
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        var hand = new GameObject("Event Test Hand", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        _created.Add(hand);
+        hand.transform.SetParent(canvas.transform, false);
+        var field = hand.AddComponent<Field>();
+        field.cardsHolder = (RectTransform)hand.transform;
+        var drag = Make<Canvas>("Event Test Drag Canvas");
+        drag.renderMode = RenderMode.ScreenSpaceOverlay;
+        var prefabObject = new GameObject("Event Test Card Prefab", typeof(RectTransform), typeof(Image), typeof(CanvasGroup), typeof(LayoutElement));
+        _created.Add(prefabObject);
+        var prefab = prefabObject.AddComponent<CardView>();
+        prefab.face = prefabObject.GetComponent<Image>();
+        prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
+        _cards = Make<CardManager>("Event Test Cards");
+        _cards.Configure(field, drag, prefab, System.Array.Empty<RelicData>(), _enhancements);
+        _cards.ConfigureRandom(new DeterministicRandom(803));
+        _cards.BuildDeck();
+        _cards.DealHand();
+        _combat = Make<CombatManager>("Event Test Combat");
+        _combat.ConfigurePlayer(30);
+        _run = Make<RunManager>("Event Test Run");
+        _run.contentCatalog = AssetDatabase.LoadAssetAtPath<RunContentCatalog>("Assets/Data/Run/PrototypeRunContent.asset");
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        GameplayInputGate.Clear();
+        for (int i = _created.Count - 1; i >= 0; i--)
+            if (_created[i] != null) Object.DestroyImmediate(_created[i]);
+        _created.Clear();
+    }
+
+    [Test]
+    public void Blacksmith_RegistersCanonicalChoiceAndEnhancesSelectedCard()
+    {
+        Assert.That(_blacksmith.id, Is.EqualTo("evt_005"));
+        Assert.That(_run.contentCatalog.events, Does.Contain(_blacksmith));
+        OpenEvent(_blacksmith);
+        int cardId = _cards.ownedCards.First(card => card.Enhancement == null).Id;
+        var enhancement = _run.GetEventEnhancementsForChoice(0).First();
+        Assert.That(enhancement, Is.Not.Null);
+
+        Assert.That(_run.ChooseEventEnhancementTarget(0, cardId, enhancement), Is.True);
+
+        Assert.That(_cards.FindOwnedCard(cardId).Enhancement, Is.SameAs(enhancement));
+        Assert.That(_run.ActiveEvent, Is.Null);
+    }
+
+    [Test]
+    public void Blacksmith_OtherChoicesDrawTwoOrGrantTenGold()
+    {
+        OpenEvent(_blacksmith);
+        Assert.That(_cards.TryDiscardCardsByIds(_cards.hand.Take(2).Select(card => card.Id).ToArray()), Is.True);
+        int handBefore = _cards.HandCount;
+        Assert.That(_run.ChooseEventOption(1), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore + 2));
+
+        OpenEvent(_blacksmith);
+        int goldBefore = _cards.gold;
+        Assert.That(_run.ChooseEventOption(2), Is.True);
+        Assert.That(_cards.gold, Is.EqualTo(goldBefore + 10));
+    }
+
+    [Test]
+    public void MysteriousStranger_DiscardsTwoHandCardsAndGrantsOneSeededEnhancement()
+    {
+        Assert.That(_stranger.id, Is.EqualTo("evt_008"));
+        Assert.That(_run.contentCatalog.events, Does.Contain(_stranger));
+        OpenEvent(_stranger);
+        int handBefore = _cards.HandCount;
+        int discardBefore = _cards.discardPile.Count;
+        int[] ids = _cards.hand.Take(2).Select(card => card.Id).ToArray();
+
+        Assert.That(_run.ChooseEventDiscardAndReward(0, ids), Is.True);
+
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore - 2));
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(discardBefore + 2));
+        Assert.That(_cards.ownedCards.Count(card => card.Enhancement != null), Is.EqualTo(1));
+        Assert.That(_run.ActiveEvent, Is.Null);
+    }
+
+    [Test]
+    public void MysteriousStranger_RejectsDuplicateOrNonHandCardsWithoutPartialDiscard()
+    {
+        OpenEvent(_stranger);
+        int handBefore = _cards.HandCount;
+        int discardBefore = _cards.discardPile.Count;
+        int id = _cards.hand[0].Id;
+        Assert.That(_run.ChooseEventDiscardAndReward(0, new[] { id, id }), Is.False);
+        Assert.That(_run.ChooseEventDiscardAndReward(0, new[] { id, -50 }), Is.False);
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(discardBefore));
+    }
+
+    [Test]
+    public void MysteriousStranger_RefusalHasNoRewardOrDiscard()
+    {
+        OpenEvent(_stranger);
+        int handBefore = _cards.HandCount;
+        int goldBefore = _cards.gold;
+        Assert.That(_run.ChooseEventOption(1), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
+        Assert.That(_cards.gold, Is.EqualTo(goldBefore));
+        Assert.That(_cards.ownedCards.Count(card => card.Enhancement != null), Is.Zero);
+    }
+
+    [Test]
+    public void Ambush_BlockChoiceRequiresExactSixValueAndDiscardsOnlySelectedCards()
+    {
+        int[] ids = FindHandCombination(6);
+        Assert.That(ids, Is.Not.Empty);
+        int handBefore = _cards.HandCount;
+        int discardBefore = _cards.discardPile.Count;
+        OpenEvent(_ambush);
+        Assert.That(_ambush.id, Is.EqualTo("evt_007"));
+        Assert.That(_run.contentCatalog.risks, Does.Contain(_ambush));
+        Assert.That(_run.GetEventOptionUnavailableReason(0), Is.Empty);
+        Assert.That(_run.CanChooseEventDiscardForTotalValue(0, ids), Is.True);
+        Assert.That(_run.CanChooseEventDiscardForTotalValue(0, new[] { ids[0], ids[0] }), Is.False);
+
+        Assert.That(_run.ChooseEventDiscardForTotalValue(0, ids), Is.True);
+
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore - ids.Length));
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(discardBefore + ids.Length));
+        Assert.That(_run.ActiveEvent, Is.Null);
+    }
+
+    [Test]
+    public void Ambush_FleeCostsThreeHealthAndFiveGold()
+    {
+        _cards.AddGold(5);
+        _combat.TakeRunDamage(10);
+        OpenEvent(_ambush);
+        Assert.That(_run.GetEventOptionUnavailableReason(1), Is.Empty);
+
+        Assert.That(_run.ChooseEventOption(1), Is.True);
+
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(17));
+        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_run.ActiveEvent, Is.Null);
+    }
+
+    [Test]
+    public void Swamp_CrossingCostsFiveHealthAndMakesTheSeededArtifactEnhancementOrNothingRoll()
+    {
+        var artifact = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/AceEmblem.asset");
+        Assert.That(artifact, Is.Not.Null);
+        _cards.relicCatalog.Add(artifact);
+        _combat.TakeRunDamage(5);
+        OpenEvent(_swamp);
+        int enhancementsBefore = _cards.ownedCards.Count(card => card.Enhancement != null);
+        int reward = new RunRandomContext("CARDPG").CreateStream("swamp-event-reward", 397).NextInt(0, 3);
+        Assert.That(_swamp.id, Is.EqualTo("evt_010"));
+        Assert.That(_run.contentCatalog.risks, Does.Contain(_swamp));
+
+        Assert.That(_run.ChooseEventOption(0), Is.True);
+
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(20));
+        Assert.That(_cards.ownedArtifacts.Count, Is.EqualTo(reward == 0 ? 1 : 0));
+        Assert.That(_cards.ownedCards.Count(card => card.Enhancement != null),
+            Is.EqualTo(enhancementsBefore + (reward == 1 ? 1 : 0)));
+        Assert.That(_run.ActiveEvent, Is.Null);
+    }
+
+    [Test]
+    public void Swamp_AlternateRouteDoesNothing()
+    {
+        _combat.TakeRunDamage(4);
+        _cards.AddGold(7);
+        OpenEvent(_swamp);
+        int health = _combat.player.currentHealth;
+        int gold = _cards.gold;
+
+        Assert.That(_run.ChooseEventOption(1), Is.True);
+
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(health));
+        Assert.That(_cards.gold, Is.EqualTo(gold));
+        Assert.That(_run.ActiveEvent, Is.Null);
+    }
+
+    int[] FindHandCombination(int target)
+    {
+        for (int attempt = 0; attempt < CardManager.HAND_SIZE && FindCurrentHandCombination(target).Length == 0; attempt++)
+        {
+            if (_cards.hand.Count == 0) break;
+            Assert.That(_cards.TryDiscardCardsByIds(new[] { _cards.hand[0].Id }), Is.True);
+            _cards.DrawToHand(1);
+        }
+        return FindCurrentHandCombination(target);
+    }
+
+    int[] FindCurrentHandCombination(int target)
+    {
+        var hand = _cards.hand.ToArray();
+        var selected = new List<int>();
+        bool Search(int start, int total)
+        {
+            if (total == target && selected.Count > 0) return true;
+            if (total >= target) return false;
+            for (int i = start; i < hand.Length; i++)
+            {
+                int value = hand[i].BaseAttackValue;
+                if (value <= 0 || total + value > target) continue;
+                selected.Add(hand[i].Id);
+                if (Search(i + 1, total + value)) return true;
+                selected.RemoveAt(selected.Count - 1);
+            }
+            return false;
+        }
+        return Search(0, 0) ? selected.ToArray() : System.Array.Empty<int>();
+    }
+
+    void OpenEvent(RunEventDefinition definition)
+    {
+        var node = new PathNode
+        {
+            id = 1, mapIndex = 0, kind = definition.category, contentId = definition.id,
+            accessible = true, revealed = true
+        };
+        _run.currentPath.Clear();
+        _run.currentPath.Add(node);
+        _run.OnPathChosen(node.id);
+        Assert.That(_run.ActiveEvent, Is.SameAs(definition));
+    }
+
+    T Make<T>(string name) where T : Component
+    {
+        var go = new GameObject(name);
+        _created.Add(go);
+        return go.AddComponent<T>();
+    }
+}

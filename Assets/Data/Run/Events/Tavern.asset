@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56ede82db3e0bdd49bbf245bd4ba24ac, type: 3}
+  m_Name: Tavern
+  m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
+  id: evt_006
+  category: 3
+  title: Tavern
+  description: You come across a roadside tavern.
+  choices:
+  - label: Ask for Guidance
+    description: Reveal 1 hidden node.
+    effects:
+    - type: 6
+      amount: 1
+  - label: Rest
+    description: Lose 2 Gold and heal 5 HP.
+    effects:
+    - type: 1
+      amount: 2
+    - type: 2
+      amount: 5

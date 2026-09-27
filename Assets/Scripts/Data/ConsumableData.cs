@@ -1,0 +1,28 @@
+using UnityEngine;
+
+public enum ConsumableEffectType
+{
+    Heal = 0,
+    DirectEnemyDamage = 1,
+    ApplyEnhancement = 2
+}
+
+[CreateAssetMenu(fileName = "Consumable", menuName = "Game/Consumable")]
+public sealed class ConsumableData : ScriptableObject
+{
+    public string id;
+    public string canonicalId;
+    public string displayName;
+    public string icon;
+    [TextArea] public string description;
+    [Min(0)] public int price = 5;
+    [Min(1)] public int uses = 1;
+    public ConsumableEffectType effectType = ConsumableEffectType.Heal;
+    [Min(0)] public int healAmount;
+    [Min(0)] public int damageAmount;
+    public CardEnhancementData enhancementToApply;
+    public bool shopAvailable = true;
+    public bool dropAvailable = true;
+    public bool eventAvailable;
+    [Range(0f, 1f)] public float dropChance = 0.1f;
+}

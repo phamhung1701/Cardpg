@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 public class ActionButtonsUI : MonoBehaviour
@@ -12,6 +13,7 @@ public class ActionButtonsUI : MonoBehaviour
     public Field handField;
     public Button takeDamageButton;
     public Button recoverButton;
+    public Button[] backpackSlotButtons = new Button[CardManager.BACKPACK_CAPACITY];
     public TMP_Text playerHealthLabel;
     public TMP_Text turnStateLabel;
     public TMP_Text pendingDamageLabel;
@@ -19,6 +21,8 @@ public class ActionButtonsUI : MonoBehaviour
     public TMP_Text combatLogLabel;
 
     TMP_Text _primaryActionLabel;
+    UnityAction[] _backpackSlotListeners;
+    EnhancementTargetUI _enhancementTargetUI;
 
     void OnEnable()
     {
@@ -33,9 +37,11 @@ public class ActionButtonsUI : MonoBehaviour
         {
             CardManager.Instance.OnCardSelected += HandleSelectionChanged;
             CardManager.Instance.OnDeckChanged += HandleDeckChanged;
+            CardManager.Instance.OnConsumablesChanged += HandleDeckChanged;
         }
 
         _primaryActionLabel = playButton != null ? playButton.GetComponentInChildren<TMP_Text>(true) : null;
+        _enhancementTargetUI = GetComponent<EnhancementTargetUI>();
 
         if (playButton) playButton.onClick.AddListener(OnPlayClicked);
         if (blockButton) blockButton.onClick.AddListener(OnBlockClicked);
@@ -43,6 +49,7 @@ public class ActionButtonsUI : MonoBehaviour
         if (suitSortButton) suitSortButton.onClick.AddListener(OnSuitSortClicked);
         if (takeDamageButton) takeDamageButton.onClick.AddListener(OnTakeDamageClicked);
         if (recoverButton) recoverButton.onClick.AddListener(OnRecoverClicked);
+        BindBackpackSlots();
 
         RefreshAll();
     }
@@ -60,6 +67,7 @@ public class ActionButtonsUI : MonoBehaviour
         {
             CardManager.Instance.OnCardSelected -= HandleSelectionChanged;
             CardManager.Instance.OnDeckChanged -= HandleDeckChanged;
+            CardManager.Instance.OnConsumablesChanged -= HandleDeckChanged;
         }
 
         if (playButton) playButton.onClick.RemoveListener(OnPlayClicked);
@@ -68,6 +76,7 @@ public class ActionButtonsUI : MonoBehaviour
         if (suitSortButton) suitSortButton.onClick.RemoveListener(OnSuitSortClicked);
         if (takeDamageButton) takeDamageButton.onClick.RemoveListener(OnTakeDamageClicked);
         if (recoverButton) recoverButton.onClick.RemoveListener(OnRecoverClicked);
+        UnbindBackpackSlots();
     }
 
     void HandleStateChanged(GameState _) => RefreshAll();
@@ -114,8 +123,12 @@ public class ActionButtonsUI : MonoBehaviour
         if (takeDamageButton) takeDamageButton.interactable = canTakeDamage;
         if (recoverButton) recoverButton.interactable = canRecover;
 
+        RefreshBackpackSlots(cards, combat);
+
         if (playerHealthLabel)
-            playerHealthLabel.text = $"PLAYER HP  {combat.player.currentHealth}/{combat.player.maxHealth}";
+            playerHealthLabel.text = combat.HasInfiniteHealthForDev
+                ? "PLAYER HP  ∞"
+                : $"PLAYER HP  {combat.player.currentHealth}/{combat.player.maxHealth}";
 
         if (turnStateLabel)
         {
@@ -223,4 +236,60 @@ public class ActionButtonsUI : MonoBehaviour
 
     void OnTakeDamageClicked() => CombatManager.Instance?.TakeRemainingDamage();
     void OnRecoverClicked() => CombatManager.Instance?.Recover();
+
+    void BindBackpackSlots()
+    {
+        UnbindBackpackSlots();
+        if (backpackSlotButtons == null) return;
+        _backpackSlotListeners = new UnityAction[backpackSlotButtons.Length];
+        for (int i = 0; i < backpackSlotButtons.Length; i++)
+        {
+            if (!backpackSlotButtons[i]) continue;
+            int slotIndex = i;
+            _backpackSlotListeners[i] = () => UseBackpackSlot(slotIndex);
+            backpackSlotButtons[i].onClick.AddListener(_backpackSlotListeners[i]);
+        }
+    }
+
+    void UnbindBackpackSlots()
+    {
+        if (_backpackSlotListeners == null || backpackSlotButtons == null) return;
+        int count = Mathf.Min(_backpackSlotListeners.Length, backpackSlotButtons.Length);
+        for (int i = 0; i < count; i++)
+            if (backpackSlotButtons[i] && _backpackSlotListeners[i] != null)
+                backpackSlotButtons[i].onClick.RemoveListener(_backpackSlotListeners[i]);
+        _backpackSlotListeners = null;
+    }
+
+    void UseBackpackSlot(int slotIndex)
+    {
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        var consumable = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
+        if (cards == null || combat == null || consumable == null) return;
+        if (consumable.effectType == ConsumableEffectType.ApplyEnhancement)
+        {
+            _enhancementTargetUI?.OpenConsumableTarget(slotIndex);
+            return;
+        }
+        cards.UseConsumableAtSlot(slotIndex, combat);
+    }
+
+    void RefreshBackpackSlots(CardManager cards, CombatManager combat)
+    {
+        if (backpackSlotButtons == null) return;
+        for (int i = 0; i < backpackSlotButtons.Length; i++)
+        {
+            var button = backpackSlotButtons[i];
+            if (!button) continue;
+            var consumable = cards.GetConsumableAtSlot(i);
+            var label = button.GetComponentInChildren<TMP_Text>(true);
+            if (label) label.text = consumable == null
+                ? $"EMPTY SLOT {i + 1}"
+                : $"{consumable.icon} {consumable.displayName}";
+            button.interactable = cards.CanUseConsumableAtSlot(i, combat) &&
+                (consumable == null || consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
+                    _enhancementTargetUI != null && _enhancementTargetUI.CanOpenConsumableTarget);
+        }
+    }
 }

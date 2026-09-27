@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public enum GameState { Idle, PlayerTurn, EnemyAttacking, GameOver, GameWon }
@@ -167,6 +168,47 @@ public class CombatManager : Singleton<CombatManager>
         return true;
     }
 
+    public bool CanUseConsumableDamage(int amount) =>
+        !GameplayInputGate.IsBlocked && amount > 0 && !_reactionFaulted && !_isResolvingAction &&
+        currentState == GameState.PlayerTurn && !_encounterResolved && currentEnemy != null &&
+        !currentEnemy.IsDefeated && _enemies.Contains(currentEnemy);
+
+    public bool TryUseConsumableDamage(int amount)
+    {
+        if (!CanUseConsumableDamage(amount)) return false;
+        var target = currentEnemy;
+        _isResolvingAction = true;
+        _reactions.Clear();
+        _activeAction = CreateAction(CombatActionOrigin.Consumable, sourcePlayer: player,
+            targetEnemy: target);
+        _nextReactiveHitIndex = 1;
+        try
+        {
+            var request = new DamageRequest(_activeAction, 0, CombatDamageOrigin.Consumable,
+                player, target, amount);
+            var result = ResolveDamage(request);
+            if (target.IsDefeated)
+                HandleEnemyDefeated(target);
+            else
+                EnqueueIncomingHitResolvedAbilities(_activeAction, target, result);
+
+            ProcessReactions(CombatReactionPhase.HitResolved);
+            if (_reactionFaulted) return true;
+            Log($"Consumable dealt {result.ActualHpLost} damage to {target.DisplayName}.");
+            if (player.IsDefeated)
+                ResolveEncounter(EncounterResult.Defeat);
+            else if (_enemies.Count == 0)
+                ResolveEncounter(EncounterResult.Victory);
+            return true;
+        }
+        finally
+        {
+            _activeAction = null;
+            _isResolvingAction = false;
+            _reactions.Clear();
+        }
+    }
+
     public bool ShouldReplaceSelectionOnAdd => currentState == GameState.PlayerTurn;
 
     public bool CanAddCardToSelection(IReadOnlyList<CardView> selectedCards, CardView candidate)
@@ -289,9 +331,14 @@ public class CombatManager : Singleton<CombatManager>
 
     public bool CanPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
     {
-        return !GameplayInputGate.IsBlocked && !_reactionFaulted && !_isResolvingAction && currentState == GameState.PlayerTurn &&
-            target != null && !target.IsDefeated && _enemies.Contains(target) && !_encounterResolved &&
-            AreValidHandViews(cards) && GameplayEffectResolver.CanPlaySelection(cards, target, CardManager.Instance);
+        if (GameplayInputGate.IsBlocked || _reactionFaulted || _isResolvingAction || currentState != GameState.PlayerTurn ||
+            target == null || target.IsDefeated || !_enemies.Contains(target) || _encounterResolved ||
+            !AreValidHandViews(cards) || !GameplayEffectResolver.CanPlaySelection(cards, target, CardManager.Instance))
+            return false;
+        var instances = new CardInstance[cards.Count];
+        for (int i = 0; i < cards.Count; i++) instances[i] = cards[i].data;
+        int cost = GameplayEffectResolver.GetVampiricHealthCost(instances);
+        return cost == 0 || CanTakeRunDamage(cost);
     }
 
     public bool TryPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
@@ -312,6 +359,9 @@ public class CombatManager : Singleton<CombatManager>
             aggregatedDamage += CalculateCardAttackDamage(cardInstances[i]);
             names.Add(cardInstances[i].DisplayName);
         }
+        int vampiricCost = GameplayEffectResolver.GetVampiricHealthCost(cardInstances);
+        bool isExplosive = GameplayEffectResolver.HasExplosiveEffect(cardInstances);
+        bool hasLethal = cardInstances.Any(GameplayEffectResolver.IsLethalEnchantment);
         bool critical = false;
         var cm = CardManager.Instance;
         bool isAcePair = cards.Count == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards);
@@ -337,6 +387,7 @@ public class CombatManager : Singleton<CombatManager>
         try
         {
             if (!cm.TryDiscardCards(cards)) return false;
+            if (vampiricCost > 0) TakeRunDamage(vampiricCost);
 
             var handSnapshot = new List<CardInstance>(cm.hand);
             GameplayEffectResolver.EnqueueAttackCommitted(
@@ -344,7 +395,7 @@ public class CombatManager : Singleton<CombatManager>
                     target, this, cm), _reactions);
             bool reactionFailed = !ProcessReactions(CombatReactionPhase.AttackCommitted);
 
-            if (!reactionFailed && (isAcePair || hasCriticalChanceOverride))
+            if (!reactionFailed && (isAcePair || hasCriticalChanceOverride || hasLethal))
             {
                 if (actionCriticalChance >= 100f) critical = true;
                 else if (actionCriticalChance > 0f && _criticalRandom != null)
@@ -392,10 +443,14 @@ public class CombatManager : Singleton<CombatManager>
 
                 if (target.IsDefeated)
                 {
+                    AwardDevouringKillBonus(cardInstances);
                     HandleEnemyDefeated(target);
                     break;
                 }
             }
+
+            if (!reactionFailed && isExplosive)
+                ResolveExplosiveDamage(cardInstances, target, damagePerHit);
 
             if (hitCount == 1)
                 Log($"Played {string.Join(" + ", names)} on {target.DisplayName}{(critical ? " (CRITICAL)" : string.Empty)} for {totalHpLost} damage! (HP: {target.currentHp}/{target.maxHp})");
@@ -616,6 +671,43 @@ public class CombatManager : Singleton<CombatManager>
         RemoveEnemy(enemy);
         int drawn = CardManager.Instance.DrawToHand(1);
         Log($"{enemy.DisplayName} defeated! {enemy.GoldReward}g secured.{(drawn > 0 ? " Drew 1 card." : string.Empty)}");
+    }
+
+    void AwardDevouringKillBonus(IReadOnlyList<CardInstance> committedCards)
+    {
+        if (committedCards == null || CardManager.Instance == null) return;
+        for (int i = 0; i < committedCards.Count; i++)
+        {
+            var card = committedCards[i];
+            if (!GameplayEffectResolver.HasEnhancementEffect(card, GameplayEffectKind.PermanentKillAttack)) continue;
+            card.GainPermanentAttackBonus(1);
+            CardManager.Instance.NotifyCardInstanceChanged(card);
+            Log($"{card.Enhancement.displayName}: permanently gained +1 attack.");
+        }
+    }
+
+    void ResolveExplosiveDamage(IReadOnlyList<CardInstance> committedCards, EnemyRuntime primaryTarget, int damage)
+    {
+        if (damage <= 0) return;
+        var targets = new List<EnemyRuntime>(_enemies);
+        for (int i = 0; i < targets.Count; i++)
+        {
+            var target = targets[i];
+            if (target == null || ReferenceEquals(target, primaryTarget) || target.IsDefeated || !_enemies.Contains(target))
+                continue;
+            var request = new DamageRequest(_activeAction, _nextReactiveHitIndex++,
+                CombatDamageOrigin.Card, player, target, damage);
+            var result = ResolveDamage(request);
+            if (target.IsDefeated)
+            {
+                AwardDevouringKillBonus(committedCards);
+                HandleEnemyDefeated(target);
+            }
+            else
+                EnqueueIncomingHitResolvedAbilities(_activeAction, target, result);
+            if (!ProcessReactions(CombatReactionPhase.HitResolved) || _reactionFaulted || player.IsDefeated)
+                return;
+        }
     }
 
     void RemoveEnemy(EnemyRuntime enemy)
@@ -888,6 +980,17 @@ public class CombatManager : Singleton<CombatManager>
             hitCount);
     }
 
+    public bool ForceDefeatForDevelopment()
+    {
+#if UNITY_EDITOR
+        if (_encounterResolved) return false;
+        ResolveEncounter(EncounterResult.Defeat);
+        return true;
+#else
+        return false;
+#endif
+    }
+
     void ResolveEncounter(EncounterResult result)
     {
         if (_encounterResolved || _reactionFaulted) return;
@@ -940,8 +1043,21 @@ public class CombatManager : Singleton<CombatManager>
         return gained;
     }
 
+    public bool HasInfiniteHealthForDev
+    {
+        get
+        {
+#if UNITY_EDITOR
+            return DevModeRuntime.InfiniteHealth;
+#else
+            return false;
+#endif
+        }
+    }
+
     public bool CanTakeRunDamage(int amount)
     {
+        if (HasInfiniteHealthForDev) return true;
         return amount <= 0 || player.currentHealth > amount;
     }
 
