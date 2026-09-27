@@ -46,7 +46,11 @@ public sealed class CardCollection
         _deck.AddRange(validatedCards);
     }
 
-    public bool AddOwnedToDeck(CardInstance card)
+    public bool AddOwnedToDeck(CardInstance card) => AddOwned(card, _deck);
+
+    public bool AddOwnedToDiscard(CardInstance card) => AddOwned(card, _discardPile);
+
+    bool AddOwned(CardInstance card, List<CardInstance> destination)
     {
         if (card == null) return false;
 
@@ -60,7 +64,23 @@ public sealed class CardCollection
             return false;
 
         _ownedCards.Add(card);
-        _deck.Add(card);
+        destination.Add(card);
+        return true;
+    }
+
+    public bool TryRemoveOwnedCards(IReadOnlyList<CardInstance> cards)
+    {
+        if (cards == null || cards.Count == 0 || cards.Count >= _ownedCards.Count) return false;
+        var seen = new HashSet<CardInstance>();
+        foreach (var card in cards)
+            if (card == null || !seen.Add(card) || !_ownedCards.Contains(card)) return false;
+        foreach (var card in cards)
+        {
+            _ownedCards.Remove(card);
+            _deck.Remove(card);
+            _hand.Remove(card);
+            _discardPile.Remove(card);
+        }
         return true;
     }
 

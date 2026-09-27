@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,6 +19,8 @@ public sealed class EnhancementTargetUI : MonoBehaviour
     int _upgradeIndex = -1;
     int _eventChoiceIndex = -1;
     int _consumableSlotIndex = -1;
+    int _mutationSlotIndex = -1;
+    readonly List<int> _mutationCardIds = new();
     CardEnhancementData _eventEnhancement;
     int _selectedCardId;
     public int SelectedCardId => _selectedCardId;
@@ -92,6 +95,28 @@ public sealed class EnhancementTargetUI : MonoBehaviour
     public bool CanOpenEventEnhancementPicker => panel != null && cardsContainer != null &&
         cardButtonPrefab != null && confirmButton != null;
     public bool CanOpenConsumableTarget => CanOpenEventEnhancementPicker;
+    public bool CanOpenDeckMutationTarget => CanOpenEventEnhancementPicker;
+
+    public void OpenDeckMutationTarget(int slotIndex)
+    {
+        var cards = CardManager.Instance;
+        var item = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
+        if (!CanOpenDeckMutationTarget || GameplayInputGate.IsBlocked ||
+            !cards.CanUseConsumableAtSlot(slotIndex, CombatManager.Instance) ||
+            item.effectType is not (ConsumableEffectType.DuplicateCard or
+                ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)) return;
+        _shopOfferId = null;
+        _upgradeIndex = -1;
+        _eventChoiceIndex = -1;
+        _consumableSlotIndex = -1;
+        _mutationSlotIndex = slotIndex;
+        _mutationCardIds.Clear();
+        if (titleLabel) titleLabel.text = $"CHOOSE CARD: {item.displayName}";
+        if (panel) { panel.SetActive(true); panel.transform.SetAsLastSibling(); }
+        RefreshCards();
+        var scroll = cardsContainer ? cardsContainer.GetComponentInParent<ScrollRect>() : null;
+        if (scroll) scroll.verticalNormalizedPosition = 1f;
+    }
 
     public void OpenConsumableTarget(int slotIndex)
     {
@@ -126,6 +151,8 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     void ShowEventEnhancements()
     {
+        _mutationSlotIndex = -1;
+        _mutationCardIds.Clear();
         var run = RunManager.Instance;
         var candidates = run != null ? run.GetEventEnhancementsForChoice(_eventChoiceIndex) : null;
         if (!panel || !cardsContainer || !cardButtonPrefab || candidates == null) return;
@@ -156,6 +183,8 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     void Show(ShopOffer offer)
     {
+        _mutationSlotIndex = -1;
+        _mutationCardIds.Clear();
         _selectedCardId = 0;
         if (titleLabel) titleLabel.text = $"CHOOSE CARD: {offer.Icon} {offer.DisplayName}";
         if (panel) { panel.SetActive(true); panel.transform.SetAsLastSibling(); }
@@ -171,6 +200,8 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         _eventChoiceIndex = -1;
         _eventEnhancement = null;
         _consumableSlotIndex = -1;
+        _mutationSlotIndex = -1;
+        _mutationCardIds.Clear();
         _selectedCardId = 0;
         if (panel) panel.SetActive(false);
         if (confirmButton) confirmButton.interactable = false;
@@ -211,20 +242,22 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             {
                 if (card == null) continue;
                 int id = card.Id;
-                string reason = RunManager.Instance.GetEnhancementTargetUnavailableReason(id);
+                string reason = _mutationSlotIndex >= 0
+                    ? cards.CanTargetDeckMutationAtSlot(_mutationSlotIndex, id) ? "" : "Not a valid target"
+                    : RunManager.Instance.GetEnhancementTargetUnavailableReason(id);
                 var obj = Instantiate(cardButtonPrefab, cardsContainer);
                 obj.name = $"TargetCard_{id}";
                 var label = obj.GetComponentInChildren<TMP_Text>();
-                if (label) label.text = (id == _selectedCardId ? "SELECTED " : "") +
+                bool selected = _mutationSlotIndex >= 0 ? _mutationCardIds.Contains(id) : id == _selectedCardId;
+                if (label) label.text = (selected ? "SELECTED " : "") +
                     $"{card.SuitSymbol} {card.DisplayName}\n#{id}" +
                     (string.IsNullOrEmpty(reason) ? "" : $"\n{reason}");
                 var button = obj.GetComponent<Button>();
                 if (button)
                 {
-                    // Keep ineligible cards inspectable so the player can see why they cannot be chosen.
                     button.onClick.AddListener(() => SelectCard(id));
                     var colors = button.colors;
-                    colors.normalColor = id == _selectedCardId ? new Color(0.52f, 0.86f, 1f) :
+                    colors.normalColor = selected ? new Color(0.52f, 0.86f, 1f) :
                         string.IsNullOrEmpty(reason) ? Color.white : new Color(0.48f, 0.48f, 0.48f);
                     button.colors = colors;
                 }
@@ -236,12 +269,39 @@ public sealed class EnhancementTargetUI : MonoBehaviour
     void SelectCard(int id)
     {
         if (GameplayInputGate.IsBlocked || !panel || !panel.activeSelf) return;
-        _selectedCardId = id;
+        if (_mutationSlotIndex >= 0)
+        {
+            var cards = CardManager.Instance;
+            if (cards == null || !cards.CanTargetDeckMutationAtSlot(_mutationSlotIndex, id)) return;
+            if (!_mutationCardIds.Remove(id))
+            {
+                if (cards.GetConsumableAtSlot(_mutationSlotIndex).effectType != ConsumableEffectType.DestroyCards)
+                    _mutationCardIds.Clear();
+                if (_mutationCardIds.Count < 2) _mutationCardIds.Add(id);
+            }
+        }
+        else _selectedCardId = id;
         RefreshCards();
     }
 
     void UpdateFeedback(string failure = null)
     {
+        if (_mutationSlotIndex >= 0)
+        {
+            var cards = CardManager.Instance;
+            var item = cards != null ? cards.GetConsumableAtSlot(_mutationSlotIndex) : null;
+            bool valid = item != null && cards.CanUseConsumableAtSlot(_mutationSlotIndex, CombatManager.Instance) &&
+                _mutationCardIds.Count > 0 && _mutationCardIds.Count <=
+                    (item.effectType == ConsumableEffectType.DestroyCards ? 2 : 1) &&
+                _mutationCardIds.Count < cards.ownedCards.Count;
+            foreach (int id in _mutationCardIds)
+                valid &= cards.CanTargetDeckMutationAtSlot(_mutationSlotIndex, id);
+            if (feedbackLabel) feedbackLabel.text = failure ?? (valid
+                ? $"Selected {_mutationCardIds.Count} card(s). Confirm or cancel for free."
+                : "Select eligible card(s). Torch destroys one or two; keep at least one card.");
+            if (confirmButton) confirmButton.interactable = valid;
+            return;
+        }
         string reason = failure ?? (_selectedCardId == 0 ? "Select an owned card, then confirm." :
             RunManager.Instance.GetEnhancementTargetUnavailableReason(_selectedCardId));
         if (feedbackLabel) feedbackLabel.text = string.IsNullOrEmpty(reason)
@@ -251,7 +311,16 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     void Confirm()
     {
-        if (GameplayInputGate.IsBlocked || !panel || !panel.activeSelf || _selectedCardId == 0) return;
+        if (GameplayInputGate.IsBlocked || !panel || !panel.activeSelf) return;
+        if (_mutationSlotIndex >= 0)
+        {
+            var cards = CardManager.Instance;
+            if (cards != null && cards.UseDeckMutationConsumableAtSlot(_mutationSlotIndex, _mutationCardIds.ToArray()))
+                Hide();
+            else UpdateFeedback("Consumable or target unavailable");
+            return;
+        }
+        if (_selectedCardId == 0) return;
         var run = RunManager.Instance;
         if (run == null) return;
         string offerId = _shopOfferId;

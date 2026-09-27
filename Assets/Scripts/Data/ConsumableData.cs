@@ -4,7 +4,10 @@ public enum ConsumableEffectType
 {
     Heal = 0,
     DirectEnemyDamage = 1,
-    ApplyEnhancement = 2
+    ApplyEnhancement = 2,
+    DuplicateCard = 3,
+    DestroyCards = 4,
+    ChangeSuit = 5
 }
 
 [CreateAssetMenu(fileName = "Consumable", menuName = "Game/Consumable")]
@@ -21,6 +24,7 @@ public sealed class ConsumableData : ScriptableObject
     [Min(0)] public int healAmount;
     [Min(0)] public int damageAmount;
     public CardEnhancementData enhancementToApply;
+    public CardData.Suit targetSuit;
     public bool shopAvailable = true;
     public bool dropAvailable = true;
     public bool eventAvailable;

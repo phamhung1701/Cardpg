@@ -6,6 +6,8 @@ public sealed class CardInstance
 {
     [SerializeField] CardData definition;
     [SerializeField] CardEnhancementData enhancement;
+    [SerializeField] bool hasSuitOverride;
+    [SerializeField] CardData.Suit suitOverride;
     [SerializeField] int id;
 
     public CardInstance(CardData definition, int id)
@@ -20,7 +22,8 @@ public sealed class CardInstance
     public CardEnhancementData Enhancement => enhancement;
     public int Id => id;
 
-    public CardData.Suit Suit => definition.suit;
+    public CardData.Suit Suit => hasSuitOverride ? suitOverride : definition.suit;
+    public bool HasSuitOverride => hasSuitOverride;
     public CardData.Rank Rank => definition.rank;
 
     // Compatibility forwards for existing gameplay code while it moves to the model API.
@@ -42,9 +45,36 @@ public sealed class CardInstance
     public int AttackValue => Mathf.Max(0, BaseAttackValue + GameplayEffectResolver.CardLocalFlat(this, GameplayEffectKind.FlatAttack));
     public int DefenseValue => Mathf.Max(0, BaseAttackValue + GameplayEffectResolver.CardLocalFlat(this, GameplayEffectKind.FlatBlock));
     public string DisplayName => enhancement != null
-        ? $"{definition.DisplayName} [{enhancement.displayName}]"
-        : definition.DisplayName;
-    public string SuitSymbol => definition.SuitSymbol;
+        ? $"{definition.RankLabel}{SuitSymbol} [{enhancement.displayName}]"
+        : $"{definition.RankLabel}{SuitSymbol}";
+    public string SuitSymbol => Suit switch
+    {
+        CardData.Suit.Hearts => "♥",
+        CardData.Suit.Diamonds => "♦",
+        CardData.Suit.Clubs => "♣",
+        CardData.Suit.Spades => "♠",
+        _ => ""
+    };
+
+    public bool TryChangeSuit(CardData.Suit suit)
+    {
+        if (!Enum.IsDefined(typeof(CardData.Suit), suit) || Suit == suit) return false;
+        hasSuitOverride = suit != definition.suit;
+        suitOverride = suit;
+        return true;
+    }
+
+    public CardInstance ClonePermanentState(int newId)
+    {
+        var copy = new CardInstance(definition, newId)
+        {
+            hasSuitOverride = hasSuitOverride,
+            suitOverride = suitOverride,
+            enhancement = enhancement,
+            PermanentAttackBonus = PermanentAttackBonus
+        };
+        return copy;
+    }
 
     public bool TryApplyEnhancement(CardEnhancementData value)
     {

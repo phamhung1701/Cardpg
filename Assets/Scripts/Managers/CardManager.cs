@@ -30,7 +30,7 @@ public class CardManager : Singleton<CardManager>
     readonly List<CardView> _selectedCards = new();
     readonly List<CardData> _generatedDefinitions = new();
     readonly Dictionary<RelicData, ArtifactRuntimeInstance> _artifactInstances = new();
-    readonly List<ConsumableData> _backpack = new(BACKPACK_CAPACITY);
+    readonly List<ConsumableInstance> _backpack = new(BACKPACK_CAPACITY);
     CardView _activeDragCard;
     int _nextCardId = 1;
 
@@ -38,7 +38,9 @@ public class CardManager : Singleton<CardManager>
     public IReadOnlyList<CardInstance> deck => _cards.Deck;
     public IReadOnlyList<CardInstance> hand => _cards.Hand;
     public IReadOnlyList<CardInstance> discardPile => _cards.DiscardPile;
-    public IReadOnlyList<ConsumableData> Backpack => _backpack;
+    public IReadOnlyList<ConsumableData> Backpack => _backpack.Select(slot => slot.Definition).ToArray();
+    public ConsumableInstance GetConsumableInstanceAtSlot(int slotIndex) =>
+        slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex] : null;
     public int BackpackSlotsUsed => _backpack.Count;
     public bool IsBackpackFull => _backpack.Count >= BACKPACK_CAPACITY;
     public int HandCount => _cards.HandCount;
@@ -109,14 +111,14 @@ public class CardManager : Singleton<CardManager>
         consumableCatalog.Find(value => value != null && value.id == id);
 
     public ConsumableData GetConsumableAtSlot(int slotIndex) =>
-        slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex] : null;
+        slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex].Definition : null;
 
     public int GetConsumableCount(ConsumableData consumable)
     {
         if (consumable == null) return 0;
         int count = 0;
         for (int i = 0; i < _backpack.Count; i++)
-            if (_backpack[i] == consumable) count++;
+            if (_backpack[i].Definition == consumable) count++;
         return count;
     }
 
@@ -127,7 +129,7 @@ public class CardManager : Singleton<CardManager>
     public bool AddConsumable(ConsumableData consumable, int count = 1)
     {
         if (!CanAddConsumable(consumable, count)) return false;
-        for (int i = 0; i < count; i++) _backpack.Add(consumable);
+        for (int i = 0; i < count; i++) _backpack.Add(new ConsumableInstance(consumable));
         OnConsumablesChanged?.Invoke();
         return true;
     }
@@ -143,14 +145,19 @@ public class CardManager : Singleton<CardManager>
     public bool CanUseConsumable(ConsumableData consumable, CombatManager combat)
     {
         if (consumable == null) return false;
-        int slot = _backpack.FindIndex(value => value == consumable);
+        int slot = _backpack.FindIndex(value => value.Definition == consumable);
         return CanUseConsumableAtSlot(slot, combat);
     }
 
     public bool CanUseConsumableAtSlot(int slotIndex, CombatManager combat)
     {
         var consumable = GetConsumableAtSlot(slotIndex);
-        if (consumable == null || combat == null || combat.player == null || combat.player.IsDefeated) return false;
+        if (consumable == null || GetConsumableInstanceAtSlot(slotIndex).RemainingCharges <= 0 ||
+            GameplayInputGate.IsBlocked || combat == null || combat.player == null || combat.player.IsDefeated ||
+            combat.IsResolvingAction) return false;
+        bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
+        bool canEdit = inCombat || combat.currentState == GameState.Idle || combat.currentState == GameState.GameWon;
+        bool hasTarget = _cards.OwnedCards.Any(card => DeckMutationService.CanTarget(_cards, card, inCombat));
         return consumable.effectType switch
         {
             ConsumableEffectType.Heal => consumable.healAmount > 0 &&
@@ -158,21 +165,28 @@ public class CardManager : Singleton<CardManager>
             ConsumableEffectType.DirectEnemyDamage => combat.CanUseConsumableDamage(consumable.damageAmount),
             ConsumableEffectType.ApplyEnhancement => consumable.enhancementToApply != null &&
                 _cards.OwnedCards.Any(card => card != null && card.Enhancement == null),
+            ConsumableEffectType.DuplicateCard => canEdit && hasTarget,
+            ConsumableEffectType.DestroyCards => canEdit && _cards.OwnedCards.Count > 1 && hasTarget,
+            ConsumableEffectType.ChangeSuit => canEdit && _cards.OwnedCards.Any(card =>
+                DeckMutationService.CanTarget(_cards, card, inCombat) && card.Suit != consumable.targetSuit),
             _ => false
         };
     }
 
     public bool UseConsumable(ConsumableData consumable, CombatManager combat)
     {
-        int slot = _backpack.FindIndex(value => value == consumable);
+        int slot = _backpack.FindIndex(value => value.Definition == consumable);
         return UseConsumableAtSlot(slot, combat);
     }
 
     public bool UseConsumableAtSlot(int slotIndex, CombatManager combat)
     {
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
-        var consumable = _backpack[slotIndex];
-        if (consumable.effectType == ConsumableEffectType.ApplyEnhancement) return false;
+        var instance = _backpack[slotIndex];
+        var consumable = instance.Definition;
+        if (consumable.effectType is ConsumableEffectType.ApplyEnhancement or
+            ConsumableEffectType.DuplicateCard or ConsumableEffectType.DestroyCards or
+            ConsumableEffectType.ChangeSuit) return false;
 
         // Remove before effects that can complete an encounter so a same-victory drop can use the freed slot.
         _backpack.RemoveAt(slotIndex);
@@ -184,7 +198,7 @@ public class CardManager : Singleton<CardManager>
         };
         if (!succeeded)
         {
-            _backpack.Insert(slotIndex, consumable);
+            _backpack.Insert(slotIndex, instance);
             return false;
         }
         OnConsumablesChanged?.Invoke();
@@ -195,7 +209,7 @@ public class CardManager : Singleton<CardManager>
     {
         var combat = CombatManager.Instance;
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
-        var consumable = _backpack[slotIndex];
+        var consumable = _backpack[slotIndex].Definition;
         if (consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
             consumable.enhancementToApply == null ||
             !_cards.OwnedCards.Any(card => card != null && card.Enhancement == null)) return false;
@@ -205,6 +219,79 @@ public class CardManager : Singleton<CardManager>
         _backpack.RemoveAt(slotIndex);
         OnConsumablesChanged?.Invoke();
         return true;
+    }
+
+    public bool UseDeckMutationConsumableAtSlot(int slotIndex, IReadOnlyList<int> cardIds)
+    {
+        var combat = CombatManager.Instance;
+        if (!CanUseConsumableAtSlot(slotIndex, combat) || cardIds == null) return false;
+        var item = _backpack[slotIndex];
+        var definition = item.Definition;
+        if (definition.effectType is not (ConsumableEffectType.DuplicateCard or
+            ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)) return false;
+        bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
+        var selected = new List<CardInstance>(cardIds.Count);
+        var unique = new HashSet<int>();
+        foreach (int id in cardIds)
+        {
+            var card = FindOwnedCard(id);
+            if (!unique.Add(id) || !DeckMutationService.CanTarget(_cards, card, inCombat)) return false;
+            selected.Add(card);
+        }
+        bool success;
+        switch (definition.effectType)
+        {
+            case ConsumableEffectType.DuplicateCard:
+                if (selected.Count != 1) return false;
+                success = DeckMutationService.Duplicate(_cards, selected[0], _nextCardId, inCombat) != null;
+                if (success) _nextCardId++;
+                break;
+            case ConsumableEffectType.DestroyCards:
+                if (!DeckMutationService.CanDestroy(_cards, selected, inCombat)) return false;
+                success = DeckMutationService.Destroy(_cards, selected, inCombat);
+                if (success)
+                    foreach (var card in selected) RemoveTrackedViews(card);
+                break;
+            default:
+                if (selected.Count != 1) return false;
+                success = DeckMutationService.ChangeSuit(_cards, selected[0], definition.targetSuit, inCombat);
+                if (success) RefreshTrackedView(selected[0]);
+                break;
+        }
+        if (!success) return false;
+        item.SpendCharge();
+        if (item.RemainingCharges == 0) _backpack.RemoveAt(slotIndex);
+        OnConsumablesChanged?.Invoke();
+        OnDeckChanged?.Invoke();
+        OnBuildChanged?.Invoke();
+        return true;
+    }
+
+    public bool CanTargetDeckMutationAtSlot(int slotIndex, int cardId)
+    {
+        var combat = CombatManager.Instance;
+        if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
+        var definition = GetConsumableAtSlot(slotIndex);
+        if (definition.effectType is not (ConsumableEffectType.DuplicateCard or
+            ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)) return false;
+        bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
+        var card = FindOwnedCard(cardId);
+        return DeckMutationService.CanTarget(_cards, card, inCombat) &&
+            (definition.effectType != ConsumableEffectType.ChangeSuit || card.Suit != definition.targetSuit);
+    }
+
+    void RemoveTrackedViews(CardInstance card)
+    {
+        var views = new List<CardView>();
+        foreach (var view in _trackedViews)
+            if (view != null && ReferenceEquals(view.data, card)) views.Add(view);
+        foreach (var view in views)
+        {
+            _selectedCards.Remove(view);
+            view.SetSelectionOrder(0);
+            DetachAndDestroyView(view);
+        }
+        RefreshSelectionPresentation();
     }
 
     public bool HasRelic(string id) => relics.Contains(id);
@@ -275,16 +362,7 @@ public class CardManager : Singleton<CardManager>
     public bool DestroyOwnedCard(CardInstance card)
     {
         if (card == null || FindOwnedCard(card.Id) != card || !_cards.RemoveOwnedCard(card)) return false;
-        var views = new List<CardView>();
-        foreach (var view in _trackedViews)
-            if (view != null && ReferenceEquals(view.data, card)) views.Add(view);
-        foreach (var view in views)
-        {
-            _selectedCards.Remove(view);
-            view.SetSelectionOrder(0);
-            DetachAndDestroyView(view);
-        }
-        RefreshSelectionPresentation();
+        RemoveTrackedViews(card);
         OnDeckChanged?.Invoke();
         OnBuildChanged?.Invoke();
         return true;

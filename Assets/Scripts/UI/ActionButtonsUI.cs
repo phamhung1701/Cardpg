@@ -272,6 +272,12 @@ public class ActionButtonsUI : MonoBehaviour
             _enhancementTargetUI?.OpenConsumableTarget(slotIndex);
             return;
         }
+        if (consumable.effectType is ConsumableEffectType.DuplicateCard or
+            ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)
+        {
+            _enhancementTargetUI?.OpenDeckMutationTarget(slotIndex);
+            return;
+        }
         cards.UseConsumableAtSlot(slotIndex, combat);
     }
 
@@ -286,9 +292,12 @@ public class ActionButtonsUI : MonoBehaviour
             var label = button.GetComponentInChildren<TMP_Text>(true);
             if (label) label.text = consumable == null
                 ? $"EMPTY SLOT {i + 1}"
-                : $"{consumable.icon} {consumable.displayName}";
+                : $"{consumable.icon} {consumable.displayName}" +
+                    (consumable.uses > 1 ? $" ({cards.GetConsumableInstanceAtSlot(i).RemainingCharges}/{consumable.uses})" : "");
             button.interactable = cards.CanUseConsumableAtSlot(i, combat) &&
-                (consumable == null || consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
+                (consumable == null || consumable.effectType is not
+                    (ConsumableEffectType.ApplyEnhancement or ConsumableEffectType.DuplicateCard or
+                     ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit) ||
                     _enhancementTargetUI != null && _enhancementTargetUI.CanOpenConsumableTarget);
         }
     }

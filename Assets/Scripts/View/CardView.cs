@@ -131,7 +131,12 @@ public class CardView : MonoBehaviour,
                 : string.Empty;
     }
 
-    public Sprite ResolveCardSprite(CardInstance card) => ResolveCardSprite(card?.Definition);
+    public Sprite ResolveCardSprite(CardInstance card)
+    {
+        if (card == null || cardSprites == null) return null;
+        int index = (int)card.Suit * 13 + (int)card.Rank;
+        return index >= 0 && index < cardSprites.Length ? cardSprites[index] : null;
+    }
 
     public Sprite ResolveCardSprite(CardData card)
     {

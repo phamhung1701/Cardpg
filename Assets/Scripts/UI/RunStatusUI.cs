@@ -11,6 +11,7 @@ public class RunStatusUI : MonoBehaviour
     public TMP_Text bossProgressLabel;
     public TMP_Text timingLabel;
     public TMP_Text ownedArtifactsLabel;
+    public TMP_Text[] backpackSlotLabels = new TMP_Text[CardManager.BACKPACK_CAPACITY];
 
     void OnEnable()
     {
@@ -19,6 +20,7 @@ public class RunStatusUI : MonoBehaviour
             CardManager.Instance.OnGoldChanged += HandleGoldChanged;
             CardManager.Instance.OnDeckChanged += Refresh;
             CardManager.Instance.OnBuildChanged += Refresh;
+            CardManager.Instance.OnConsumablesChanged += Refresh;
         }
 
         if (RunManager.Instance != null)
@@ -42,6 +44,7 @@ public class RunStatusUI : MonoBehaviour
             CardManager.Instance.OnGoldChanged -= HandleGoldChanged;
             CardManager.Instance.OnDeckChanged -= Refresh;
             CardManager.Instance.OnBuildChanged -= Refresh;
+            CardManager.Instance.OnConsumablesChanged -= Refresh;
         }
 
         if (RunManager.Instance != null)
@@ -116,6 +119,20 @@ public class RunStatusUI : MonoBehaviour
         }
 
         RefreshTiming();
+    }
+
+    void RefreshBackpack(CardManager cards)
+    {
+        if (backpackSlotLabels == null) return;
+        for (int i = 0; i < backpackSlotLabels.Length; i++)
+        {
+            var label = backpackSlotLabels[i];
+            if (!label) continue;
+            var slot = cards != null ? cards.GetConsumableInstanceAtSlot(i) : null;
+            label.text = slot == null ? $"EMPTY SLOT {i + 1}" :
+                $"{slot.Definition.icon} {slot.Definition.displayName}" +
+                (slot.Definition.uses > 1 ? $" ({slot.RemainingCharges}/{slot.Definition.uses})" : "");
+        }
     }
 
     void RefreshArtifacts(CardManager cards)
