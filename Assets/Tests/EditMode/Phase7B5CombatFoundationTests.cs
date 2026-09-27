@@ -386,6 +386,91 @@ public sealed class Phase7B5CombatFoundationTests
     }
 
     [Test]
+    public void RunawayDuringLethalPlayerAction_DoesNotResolveVictoryOrGrantRewards()
+    {
+        var runaway = ScriptableObject.CreateInstance<RunawayOnHitAbility>();
+        runaway.Combat = _combat;
+        _created.Add(runaway);
+        var enemy = new EnemyRuntime(CreateEnemyType("Runaway Player Action", 1000, 0, 75, runaway));
+        _combat.StartEnemy(enemy);
+        int results = 0;
+        _combat.OnEncounterResult += _ => results++;
+
+        LogAssert.Expect(LogType.Error,
+            $"Combat reaction limit ({CombatReactionQueue.DefaultOperationLimit}) exceeded. Remaining reactions were discarded.");
+        Assert.That(_combat.TryPlayCards(new[] { HighestAttackView() }, enemy), Is.True);
+
+        Assert.That(enemy.IsDefeated, Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
+        Assert.That(results, Is.Zero);
+        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.False);
+    }
+
+    [Test]
+    public void RunawayDuringDefense_DoesNotResolveVictoryOrGrantRewards()
+    {
+        var artifact = ScriptableObject.CreateInstance<RelicData>();
+        artifact.id = "test-runaway-counter";
+        artifact.effects = new[]
+        {
+            new GameplayEffectDefinition
+            {
+                kind = GameplayEffectKind.CounterDamage,
+                trigger = GameplayEffectTrigger.AttackBlocked,
+                amount = 1,
+                conditions = Array.Empty<GameplayEffectCondition>()
+            }
+        };
+        _created.Add(artifact);
+        Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+
+        var enemy = new EnemyRuntime(CreateEnemyType("Runaway Defense", 1000, 1, 90));
+        _combat.StartEnemy(enemy);
+        Assert.That(_combat.TryPlayCards(new[] { HighestAttackView() }, enemy), Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+
+        var runaway = ScriptableObject.CreateInstance<RunawayOnHitAbility>();
+        runaway.Combat = _combat;
+        _created.Add(runaway);
+        enemy.type.abilities = new[] { runaway };
+        int results = 0;
+        _combat.OnEncounterResult += _ => results++;
+
+        LogAssert.Expect(LogType.Error,
+            $"Combat reaction limit ({CombatReactionQueue.DefaultOperationLimit}) exceeded. Remaining reactions were discarded.");
+        Assert.That(_combat.TryDefendWithCards(new[] { LowestAttackView() }, enemy), Is.True);
+
+        Assert.That(enemy.IsDefeated, Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
+        Assert.That(results, Is.Zero);
+        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_combat.TryDefendWithCards(new[] { LowestAttackView() }, enemy), Is.False);
+    }
+
+    [Test]
+    public void RunawayDuringEncounterStartup_StopsBeforeDrawAndPlayerTurn()
+    {
+        var ability = ScriptableObject.CreateInstance<EnemyAbility>();
+        _created.Add(ability);
+        var type = CreateEnemyType("Runaway Encounter Start", 100, 0, 0);
+        type.abilities = Enumerable.Repeat(ability, CombatReactionQueue.DefaultOperationLimit + 1).ToArray();
+        var enemy = new EnemyRuntime(type);
+        int handBefore = _cards.HandCount;
+        int results = 0;
+        _combat.OnEncounterResult += _ => results++;
+
+        LogAssert.Expect(LogType.Error,
+            $"Combat reaction limit ({CombatReactionQueue.DefaultOperationLimit}) exceeded. Remaining reactions were discarded.");
+        _combat.StartEncounter(new[] { enemy });
+
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
+        Assert.That(results, Is.Zero);
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.False);
+    }
+
+    [Test]
     public void CombatReset_RestartsActionIdentityAndClearsTransientResolutionState()
     {
         var firstEnemy = new EnemyRuntime(CreateEnemyType("First Action", 100, 0, 0));
@@ -470,6 +555,21 @@ public sealed class Phase7B5CombatFoundationTests
         var gameObject = components.Length > 0 ? new GameObject(name, components) : new GameObject(name);
         _created.Add(gameObject);
         return gameObject;
+    }
+}
+
+public sealed class RunawayOnHitAbility : EnemyAbility
+{
+    public CombatManager Combat { get; set; }
+    bool _queuedRunaway;
+
+    public override void OnIncomingHitResolved(EnemyRuntime enemy, CombatManager context, DamageResult result)
+    {
+        if (_queuedRunaway) return;
+        _queuedRunaway = true;
+        int lethalDamage = enemy.currentHp + 1;
+        for (int i = 0; i < CombatReactionQueue.DefaultOperationLimit + 4; i++)
+            Combat.QueueReactiveDamage(enemy, enemy, i == 0 ? lethalDamage : 0, i, 0);
     }
 }
 

@@ -33,6 +33,7 @@ public class CombatManager : Singleton<CombatManager>
     public int QueuedExtraPlayerTurns => _queuedPlayerTurnGrants.Count;
     public int CompletedPlayerTurnCount => _completedPlayerTurnCount;
     bool _isResolvingAction;
+    bool _reactionFaulted;
     CombatActionContext _activeAction;
     CombatReactionPhase? _processingReactionPhase;
     public IReadOnlyList<EnemyRuntime> Enemies => _enemies;
@@ -99,7 +100,7 @@ public class CombatManager : Singleton<CombatManager>
     {
         if (enemies == null || enemies.Count == 0)
             throw new ArgumentException("An encounter requires at least one enemy.", nameof(enemies));
-        if (currentState != GameState.Idle && currentState != GameState.GameWon) return;
+        if (_reactionFaulted || (currentState != GameState.Idle && currentState != GameState.GameWon)) return;
 
         UnsubscribeFromEnemies();
         CardManager.Instance?.CancelCardInteractions();
@@ -137,15 +138,19 @@ public class CombatManager : Singleton<CombatManager>
             EnqueueEncounterStartedAbilities(encounterAction, enemy, i);
         }
         ProcessReactions(CombatReactionPhase.EncounterStarted);
+        if (_reactionFaulted) return;
 
         int drawn = CardManager.Instance.DrawToHand(1);
         GameplayEffectResolver.EnqueueEncounterStart(
             new EncounterStartEffectContext(encounterAction, player, this, CardManager.Instance,
                 _enemies, drawn), _reactions);
         ProcessReactions(CombatReactionPhase.EncounterReady);
+        if (_reactionFaulted) return;
+
         OnEnemiesChanged?.Invoke();
         OnEnemyChanged?.Invoke();
         BeginPlayerTurn();
+        if (_reactionFaulted) return;
         Log(_enemies.Count == 1
             ? $"Enemy appears: {_enemies[0].DisplayName} (HP: {_enemies[0].maxHp}, ATK: {_enemies[0].currentAttack})"
             : $"Enemy group appears: {string.Join(", ", _enemies.ConvertAll(enemy => $"{enemy.DisplayName} {enemy.currentHp} HP/{enemy.currentAttack} ATK"))}");
@@ -155,7 +160,7 @@ public class CombatManager : Singleton<CombatManager>
 
     public bool SelectEnemyTarget(EnemyRuntime enemy)
     {
-        if (enemy == null || enemy.IsDefeated || !_enemies.Contains(enemy)) return false;
+        if (enemy == null || enemy.IsDefeated || _reactionFaulted || !_enemies.Contains(enemy)) return false;
         if (ReferenceEquals(currentEnemy, enemy)) return true;
         currentEnemy = enemy;
         OnEnemyChanged?.Invoke();
@@ -284,7 +289,7 @@ public class CombatManager : Singleton<CombatManager>
 
     public bool CanPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
     {
-        return !GameplayInputGate.IsBlocked && !_isResolvingAction && currentState == GameState.PlayerTurn &&
+        return !GameplayInputGate.IsBlocked && !_reactionFaulted && !_isResolvingAction && currentState == GameState.PlayerTurn &&
             target != null && !target.IsDefeated && _enemies.Contains(target) && !_encounterResolved &&
             AreValidHandViews(cards) && GameplayEffectResolver.CanPlaySelection(cards, target, CardManager.Instance);
     }
@@ -378,6 +383,7 @@ public class CombatManager : Singleton<CombatManager>
                 if (!target.IsDefeated)
                     EnqueueIncomingHitResolvedAbilities(_activeAction, target, result);
                 reactionFailed = !ProcessReactions(CombatReactionPhase.HitResolved);
+                if (_reactionFaulted) return true;
                 if (player.IsDefeated)
                 {
                     ResolveEncounter(EncounterResult.Defeat);
@@ -401,6 +407,8 @@ public class CombatManager : Singleton<CombatManager>
                 EnqueuePlayerCardResolvedAbilities(_activeAction, target);
                 reactionFailed = !ProcessReactions(CombatReactionPhase.CardResolved);
             }
+
+            if (_reactionFaulted) return true;
 
             CompletePlayerTurnForEnemies();
             if (_enemies.Count == 0)
@@ -439,7 +447,7 @@ public class CombatManager : Singleton<CombatManager>
 
     public bool CanDefendWithCards(IReadOnlyList<CardView> cards, EnemyRuntime target)
     {
-        return !GameplayInputGate.IsBlocked && !_isResolvingAction && currentState == GameState.EnemyAttacking &&
+        return !GameplayInputGate.IsBlocked && !_reactionFaulted && !_isResolvingAction && currentState == GameState.EnemyAttacking &&
             target != null && !target.IsDefeated && _enemies.Contains(target) && !_encounterResolved &&
             cards != null && cards.Count > 0 && AreValidHandViews(cards) && MatchDefenseAssignments(cards) != null;
     }
@@ -494,6 +502,7 @@ public class CombatManager : Singleton<CombatManager>
             bool reactionsCompleted = ProcessReactions(CombatReactionPhase.AttackBlocked);
             if (reactionsCompleted)
                 ProcessReactions(CombatReactionPhase.HitResolved);
+            if (_reactionFaulted) return true;
             if (!_encounterResolved && _enemies.Count == 0)
                 ResolveEncounter(EncounterResult.Victory);
             if (_encounterResolved) return true;
@@ -530,7 +539,7 @@ public class CombatManager : Singleton<CombatManager>
             "Took",
             allowShield: true);
 
-        if (!_encounterResolved)
+        if (!_encounterResolved && !_reactionFaulted)
         {
             BeginPlayerTurn();
             Log("Your turn.");
@@ -539,7 +548,7 @@ public class CombatManager : Singleton<CombatManager>
 
     public void Recover()
     {
-        if (GameplayInputGate.IsBlocked || _isResolvingAction || currentState != GameState.PlayerTurn ||
+        if (_reactionFaulted || GameplayInputGate.IsBlocked || _isResolvingAction || currentState != GameState.PlayerTurn ||
             _enemies.Count == 0 || _encounterResolved || HandCount() != 0)
             return;
 
@@ -551,7 +560,7 @@ public class CombatManager : Singleton<CombatManager>
             damage,
             "Recovery attack dealt",
             allowShield: true);
-        if (_encounterResolved) return;
+        if (_encounterResolved || _reactionFaulted) return;
 
         int drawn = CardManager.Instance.DrawToHand(1);
         Log(drawn > 0 ? "Recovered and drew 1 card." : "Recovered, but no card could be drawn.");
@@ -654,6 +663,7 @@ public class CombatManager : Singleton<CombatManager>
             ProcessReactions(CombatReactionPhase.HitResolved);
             Log($"{logPrefix} {result.ActualHpLost} damage. (HP: {player.currentHealth}/{player.maxHealth})");
 
+            if (_reactionFaulted) return;
             if (player.IsDefeated)
                 ResolveEncounter(EncounterResult.Defeat);
         }
@@ -757,6 +767,7 @@ public class CombatManager : Singleton<CombatManager>
 
     void BeginPlayerTurn()
     {
+        if (_reactionFaulted) return;
         SetState(GameState.PlayerTurn);
         var cards = CardManager.Instance;
         if (cards == null || _encounterResolved) return;
@@ -767,7 +778,10 @@ public class CombatManager : Singleton<CombatManager>
         GameplayEffectResolver.EnqueuePlayerTurnStart(context, turnQueue);
         if (!turnQueue.ProcessPhase(CombatReactionPhase.PlayerTurnStarted,
             () => player.IsDefeated || _encounterResolved))
-            Log("Player-turn effect processing stopped at the reaction limit.");
+        {
+            HandleReactionFault(CombatReactionPhase.PlayerTurnStarted);
+            return;
+        }
     }
 
     internal void LogEffect(string message) => Log(message);
@@ -834,13 +848,26 @@ public class CombatManager : Singleton<CombatManager>
                 phase,
                 () => player.IsDefeated || _encounterResolved);
             if (!completed)
+            {
                 Log($"Reaction processing halted during {phase}; remaining action effects were skipped.");
+                HandleReactionFault(phase);
+            }
             return completed;
         }
         finally
         {
             _processingReactionPhase = null;
         }
+    }
+
+    void HandleReactionFault(CombatReactionPhase phase)
+    {
+        if (_reactionFaulted) return;
+        _reactionFaulted = true;
+        _queuedPlayerTurnGrants.Clear();
+        CardManager.Instance?.CancelCardInteractions();
+        SetState(GameState.GameOver);
+        Log($"Encounter halted after reaction processing failed during {phase}. No victory or rewards will be granted.");
     }
 
     CombatActionContext CreateAction(
@@ -863,7 +890,7 @@ public class CombatManager : Singleton<CombatManager>
 
     void ResolveEncounter(EncounterResult result)
     {
-        if (_encounterResolved) return;
+        if (_encounterResolved || _reactionFaulted) return;
 
         _encounterResolved = true;
         CardManager.Instance?.CancelCardInteractions();
@@ -1019,6 +1046,7 @@ public class CombatManager : Singleton<CombatManager>
         _activeAction = null;
         _isResolvingAction = false;
         _encounterResolved = false;
+        _reactionFaulted = false;
         player.Configure(_configuredPlayerMaxHealth);
         player.Reset();
         SetPendingDamage(0, true);
