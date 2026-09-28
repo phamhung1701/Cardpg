@@ -229,16 +229,14 @@ public class CombatManager : Singleton<CombatManager>
     {
         int count = selectedCards?.Count ?? 0;
         if (count == 0) return true;
-        if (count >= 3) return false;
         if (count == 1)
         {
-            if (CanPairSelection(selectedCards, candidate)) return true;
-            // With one selected card, a second click either creates a legal pair/Hands set
-            // or replaces the ordinary single-card selection, matching existing click UX.
+            // Permit a second click so the UI can replace an ordinary selection; ToggleCardSelection
+            // keeps it only when it forms an Ace pair, Hands set, or Royal Family prefix.
             return true;
         }
-        return GameplayEffectResolver.CanContinueSameRankSelection(selectedCards, candidate,
-            CardManager.Instance);
+        if (GameplayEffectResolver.CanContinueSameRankSelection(selectedCards, candidate, CardManager.Instance)) return true;
+        return GameplayEffectResolver.CanContinueAttackSelection(selectedCards, candidate, CardManager.Instance);
     }
 
     public bool CanExtendSameRankSelection(IReadOnlyList<CardView> selectedCards, CardView candidate) =>
@@ -351,19 +349,22 @@ public class CombatManager : Singleton<CombatManager>
         if (hitCount <= 0 || !CanPlayCards(cards, target)) return false;
 
         var cardInstances = new CardInstance[cards.Count];
-        int aggregatedDamage = 0;
+        long rawCardDamageTotal = 0;
         var names = new List<string>(cards.Count);
         for (int i = 0; i < cards.Count; i++)
         {
             cardInstances[i] = cards[i].data;
-            aggregatedDamage += CalculateCardAttackDamage(cardInstances[i]);
+            rawCardDamageTotal += CalculateCardAttackDamage(cardInstances[i]);
             names.Add(cardInstances[i].DisplayName);
         }
+        int aggregatedDamage = (int)Math.Min(rawCardDamageTotal, int.MaxValue);
         int vampiricCost = GameplayEffectResolver.GetVampiricHealthCost(cardInstances);
         bool isExplosive = GameplayEffectResolver.HasExplosiveEffect(cardInstances);
         bool hasLethal = cardInstances.Any(GameplayEffectResolver.IsLethalEnchantment);
-        bool critical = false;
+        bool isRoyalFamily = GameplayEffectResolver.IsRoyalFamilySelection(cardInstances, CardManager.Instance);
         var cm = CardManager.Instance;
+        bool handsGroup = GameplayEffectResolver.IsHandsMultiCardAction(cardInstances, cm);
+        bool critical = false;
         bool isAcePair = cards.Count == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards);
         bool hasCriticalChanceOverride = GameplayEffectResolver.TryGetCriticalChanceOverride(
             cardInstances, cm, out float criticalChanceOverride);
@@ -380,9 +381,9 @@ public class CombatManager : Singleton<CombatManager>
             hitCount: hitCount);
         int damagePerHit = GameplayEffectResolver.CalculateActionDamage(
             new ActionDamageEffectContext(_activeAction, cardInstances, target, cm, aggregatedDamage,
-                GameplayEffectResolver.IsHandsMultiCardAction(cardInstances, cm)),
+                handsGroup),
             out int actionDamageCap);
-        _nextReactiveHitIndex = hitCount;
+        _nextReactiveHitIndex = Math.Max(hitCount, handsGroup ? cards.Count : hitCount);
 
         try
         {
@@ -395,13 +396,14 @@ public class CombatManager : Singleton<CombatManager>
                     target, this, cm), _reactions);
             bool reactionFailed = !ProcessReactions(CombatReactionPhase.AttackCommitted);
 
-            if (!reactionFailed && (isAcePair || hasCriticalChanceOverride || hasLethal))
+            if (!reactionFailed && !isRoyalFamily &&
+                (isAcePair || hasCriticalChanceOverride || hasLethal))
             {
                 if (actionCriticalChance >= 100f) critical = true;
                 else if (actionCriticalChance > 0f && _criticalRandom != null)
                     critical = _criticalRandom.NextFloat() * 100f < actionCriticalChance;
             }
-            if (critical) damagePerHit *= 2;
+            if (critical) damagePerHit = (int)Math.Min((long)damagePerHit * 2, int.MaxValue);
             int remainingActionDamage = actionDamageCap < 0 ? -1 :
                 (int)Math.Min((long)actionDamageCap * (critical ? 2 : 1), int.MaxValue);
 
@@ -413,43 +415,111 @@ public class CombatManager : Singleton<CombatManager>
 
             int totalHpLost = 0;
             int resolvedHits = 0;
-            for (int hitIndex = 0; hitIndex < hitCount && !reactionFailed; hitIndex++)
+            if (isRoyalFamily || handsGroup)
             {
-                if (target.IsDefeated || !_enemies.Contains(target)) break;
-                int requestedDamage = remainingActionDamage < 0
-                    ? damagePerHit : Math.Min(damagePerHit, remainingActionDamage);
-                if (requestedDamage <= 0 && remainingActionDamage == 0) break;
-                if (remainingActionDamage >= 0) remainingActionDamage -= requestedDamage;
+                long damageBudget = actionDamageCap < 0
+                    ? Math.Max(0L, (long)damagePerHit)
+                    : Math.Min(Math.Max(0L, (long)actionDamageCap * (critical ? 2 : 1)),
+                        Math.Max(0L, (long)damagePerHit));
+                long expectedBaseAfterCritical = rawCardDamageTotal * (critical ? 2 : 1);
+                long actionBonus = Math.Max(0L, (long)damagePerHit - expectedBaseAfterCritical);
+                for (int cardIndex = 0; cardIndex < cards.Count; cardIndex++)
+                {
+                    EnqueueCardCommittedEffects(_activeAction, cardInstances[cardIndex], target, cm, cardIndex);
+                    reactionFailed = !ProcessReactions(CombatReactionPhase.CardCommitted);
+                    if (reactionFailed) break;
+                    if (player.IsDefeated)
+                    {
+                        ResolveEncounter(EncounterResult.Defeat);
+                        return true;
+                    }
+                    if (isRoyalFamily || target.IsDefeated || !_enemies.Contains(target)) continue;
 
-                var request = new DamageRequest(
-                    _activeAction,
-                    hitIndex,
-                    CombatDamageOrigin.Card,
-                    player,
-                    target,
-                    requestedDamage);
-                var result = ResolveDamage(request);
-                totalHpLost += result.ActualHpLost;
-                resolvedHits++;
-                if (!target.IsDefeated)
-                    EnqueueIncomingHitResolvedAbilities(_activeAction, target, result);
-                reactionFailed = !ProcessReactions(CombatReactionPhase.HitResolved);
-                if (_reactionFaulted) return true;
+                    long perCardDamage = CalculateCardAttackDamage(cardInstances[cardIndex]);
+                    if (cardIndex == 0) perCardDamage += actionBonus;
+                    if (critical) perCardDamage *= 2;
+                    int requestedDamage = (int)Math.Min(Math.Max(0L, perCardDamage), damageBudget);
+                    damageBudget -= requestedDamage;
+                    if (requestedDamage <= 0) continue;
+
+                    var request = new DamageRequest(_activeAction, cardIndex, CombatDamageOrigin.Card,
+                        player, target, requestedDamage);
+                    var result = ResolveDamage(request);
+                    totalHpLost += result.ActualHpLost;
+                    resolvedHits++;
+                    if (!target.IsDefeated)
+                        EnqueueIncomingHitResolvedAbilities(_activeAction, target, result);
+                    reactionFailed = !ProcessReactions(CombatReactionPhase.HitResolved);
+                    if (_reactionFaulted) return true;
+                    if (player.IsDefeated)
+                    {
+                        ResolveEncounter(EncounterResult.Defeat);
+                        return true;
+                    }
+                    if (target.IsDefeated)
+                    {
+                        AwardDevouringKillBonus(cardInstances);
+                        HandleEnemyDefeated(target);
+                    }
+                }
+
+                if (!reactionFailed && !player.IsDefeated && isRoyalFamily && !target.IsDefeated)
+                {
+                    // Explicit defeat outcome: never encode instant defeat as an oversized damage request.
+                    target.DefeatInstantly();
+                    HandleEnemyDefeated(target);
+                }
                 if (player.IsDefeated)
                 {
                     ResolveEncounter(EncounterResult.Defeat);
                     return true;
                 }
-
-                if (target.IsDefeated)
+            }
+            else
+            {
+                for (int cardIndex = 0; cardIndex < cards.Count && !reactionFailed; cardIndex++)
                 {
-                    AwardDevouringKillBonus(cardInstances);
-                    HandleEnemyDefeated(target);
-                    break;
+                    EnqueueCardCommittedEffects(_activeAction, cardInstances[cardIndex], target, cm, cardIndex);
+                    reactionFailed = !ProcessReactions(CombatReactionPhase.CardCommitted);
+                }
+
+                for (int hitIndex = 0; hitIndex < hitCount && !reactionFailed; hitIndex++)
+                {
+                    if (target.IsDefeated || !_enemies.Contains(target)) break;
+                    int requestedDamage = remainingActionDamage < 0
+                        ? damagePerHit : Math.Min(damagePerHit, remainingActionDamage);
+                    if (requestedDamage <= 0 && remainingActionDamage == 0) break;
+                    if (remainingActionDamage >= 0) remainingActionDamage -= requestedDamage;
+
+                    var request = new DamageRequest(
+                        _activeAction,
+                        hitIndex,
+                        CombatDamageOrigin.Card,
+                        player,
+                        target,
+                        requestedDamage);
+                    var result = ResolveDamage(request);
+                    totalHpLost += result.ActualHpLost;
+                    resolvedHits++;
+                    if (!target.IsDefeated)
+                        EnqueueIncomingHitResolvedAbilities(_activeAction, target, result);
+                    reactionFailed = !ProcessReactions(CombatReactionPhase.HitResolved);
+                    if (_reactionFaulted) return true;
+                    if (player.IsDefeated)
+                    {
+                        ResolveEncounter(EncounterResult.Defeat);
+                        return true;
+                    }
+                    if (target.IsDefeated)
+                    {
+                        AwardDevouringKillBonus(cardInstances);
+                        HandleEnemyDefeated(target);
+                        break;
+                    }
                 }
             }
 
-            if (!reactionFailed && isExplosive)
+            if (!reactionFailed && isExplosive && !isRoyalFamily)
                 ResolveExplosiveDamage(cardInstances, target, damagePerHit);
 
             if (hitCount == 1)

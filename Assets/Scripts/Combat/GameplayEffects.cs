@@ -1030,6 +1030,34 @@ public static class GameplayEffectResolver
         return false;
     }
 
+    public static bool CanContinueAttackSelection(IReadOnlyList<CardView> selected,
+        CardView candidate, CardManager cards)
+    {
+        if (selected == null || candidate?.data == null || cards == null) return false;
+        if (selected.Count == 0) return true;
+        if (CanContinueSameRankSelection(selected, candidate, cards)) return true;
+        if (!HasRoyalFamilyHeirloom(cards)) return false;
+        var proposed = new List<CardInstance>(selected.Count + 1);
+        for (int i = 0; i < selected.Count; i++) proposed.Add(selected[i]?.data);
+        proposed.Add(candidate.data);
+        return AttackSelectionRules.IsRoyalFamilyPartial(proposed);
+    }
+
+    public static bool HasRoyalFamilyHeirloom(CardManager manager) => manager != null &&
+        manager.ownedArtifacts.Any(artifact => artifact != null &&
+            artifact.specialRule == ArtifactSpecialRule.RoyalFamilyHeirloom);
+
+    public static bool IsRoyalFamilyPartialSelection(IReadOnlyList<CardView> cards, CardManager manager)
+    {
+        if (!HasRoyalFamilyHeirloom(manager) || cards == null || cards.Count == 0) return false;
+        var instances = new CardInstance[cards.Count];
+        for (int i = 0; i < cards.Count; i++) instances[i] = cards[i]?.data;
+        return AttackSelectionRules.IsRoyalFamilyPartial(instances);
+    }
+
+    public static bool IsRoyalFamilySelection(IReadOnlyList<CardInstance> cards, CardManager manager) =>
+        HasRoyalFamilyHeirloom(manager) && AttackSelectionRules.IsRoyalFamily(cards);
+
     public static bool IsHandsMultiCardAction(IReadOnlyList<CardInstance> cards, CardManager manager)
     {
         if (cards == null || cards.Count < 2 || cards.Count > 3 || manager == null || cards[0] == null) return false;
@@ -1139,9 +1167,12 @@ public static class GameplayEffectResolver
     public static bool CanPlaySelection(IReadOnlyList<CardView> cards, EnemyRuntime target,
         CardManager manager)
     {
-        if (target == null || target.IsDefeated || cards == null || cards.Count == 0 || cards.Count > 3) return false;
+        if (target == null || target.IsDefeated || cards == null || cards.Count == 0 || cards.Count > 5) return false;
         if (!cards.All(card => card != null && card.data != null)) return false;
-        return cards.Count == 1 || CanPlayAsAcePair(cards) || IsSameRankMultiCardAction(cards, manager);
+        if (cards.Count <= 3 && (cards.Count == 1 || CanPlayAsAcePair(cards) || IsSameRankMultiCardAction(cards, manager))) return true;
+        if (cards.Count == 5)
+            return IsRoyalFamilySelection(cards.Select(card => card.data).ToArray(), manager);
+        return false;
     }
 
     public static void EnqueueCardCommitted(CardCommittedEffectContext context, CombatReactionQueue queue)

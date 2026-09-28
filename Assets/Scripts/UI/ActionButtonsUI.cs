@@ -1,3 +1,4 @@
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -113,8 +114,9 @@ public class ActionButtonsUI : MonoBehaviour
         {
             _primaryActionLabel.text = combat.currentState switch
             {
+                GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilySelection(cards.SelectedCards.Select(view => view.data).ToArray(), cards) => "PLAY ROYAL FAMILY",
                 GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) => "PLAY ACE PAIR",
-                GameState.PlayerTurn when selectedCount >= 2 => $"PLAY SAME-RANK {selectedCount}",
+                GameState.PlayerTurn when selectedCount >= 2 && GameplayEffectResolver.IsSameRankMultiCardAction(cards.SelectedCards, cards) => $"PLAY SAME-RANK {selectedCount}",
                 GameState.PlayerTurn => "PLAY CARD",
                 GameState.EnemyAttacking => "PLAY",
                 _ => "CARD ACTION"
@@ -157,9 +159,13 @@ public class ActionButtonsUI : MonoBehaviour
             {
                 GameState.PlayerTurn when cards.HandCount == 0 =>
                     $"Hand empty: Recover takes {combat.TotalEnemyAttack} damage, then draws 1 card",
+                GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilySelection(cards.SelectedCards.Select(view => view.data).ToArray(), cards) =>
+                    "Royal Family: exact 10/J/Q/K/A in one effective suit — instant defeat. Press Play or drag to target",
+                GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilyPartialSelection(cards.SelectedCards, cards) =>
+                    $"Royal Family selection ({selectedCount}/5)  •  exact 10/J/Q/K/A, one effective suit; target will be instantly defeated when complete",
                 GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) =>
                     $"Ace pair: {cards.SelectedCards[0].data.DisplayName} + {cards.SelectedCards[1].data.DisplayName}  •  Press Play or drag to the enemy",
-                GameState.PlayerTurn when selectedCount >= 2 =>
+                GameState.PlayerTurn when selectedCount >= 2 && GameplayEffectResolver.IsSameRankMultiCardAction(cards.SelectedCards, cards) =>
                     $"Same-rank set ({selectedCount} cards): {cards.SelectedCards[0].data.Rank}  •  Press Play or drag to the enemy",
                 GameState.PlayerTurn when hasSelected =>
                     $"Selected: {cards.selectedCard.data.DisplayName}  •  Press Play or drag to the enemy",

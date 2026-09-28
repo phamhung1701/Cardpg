@@ -16,7 +16,9 @@ public enum ArtifactSpecialRule
     GlassCommon = 5,
     GlassRare = 6,
     GlassEpic = 7,
-    RareRetaliation = 8
+    RareRetaliation = 8,
+    RareHands = 9,
+    RoyalFamilyHeirloom = 10
 }
 
 [CreateAssetMenu(fileName = "Artifact", menuName = "Game/Artifact Data")]

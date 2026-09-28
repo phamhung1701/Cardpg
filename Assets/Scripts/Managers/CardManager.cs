@@ -581,7 +581,7 @@ public class CardManager : Singleton<CardManager>
 
         if (combat.ShouldReplaceSelectionOnAdd &&
             !combat.CanPairSelection(_selectedCards, card) &&
-            !combat.CanExtendSameRankSelection(_selectedCards, card))
+            !GameplayEffectResolver.CanContinueAttackSelection(_selectedCards, card, this))
             ClearSelection(false);
 
         _selectedCards.Add(card);

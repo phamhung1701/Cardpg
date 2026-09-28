@@ -3008,6 +3008,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 2fcee4e2646f5eb46b890e58bc69224d, type: 2}
   - {fileID: 11400000, guid: 2ef6fffe59940b243a76cbf358ec57e8, type: 2}
   - {fileID: 11400000, guid: 4569e092a6adb6842aae93128ffaa184, type: 2}
+  - {fileID: 11400000, guid: ef588685079c25f47bf6cc2441d912c3, type: 2}
+  - {fileID: 11400000, guid: ccace14c7a0e7384c91a78109f062dd6, type: 2}
   enhancementCatalog:
   - {fileID: 11400000, guid: df3c7ab7238098c479e6077dcb8fbee9, type: 2}
   - {fileID: 11400000, guid: 6b373811d1407e5499cb6fed5706a76c, type: 2}

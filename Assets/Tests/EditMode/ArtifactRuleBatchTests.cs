@@ -14,7 +14,7 @@ public sealed class ArtifactRuleBatchTests
     CardManager _cards;
     CombatManager _combat;
     RunManager _run;
-    RelicData _cheater, _hands, _dwarf, _dagger, _healingLight;
+    RelicData _cheater, _hands, _dwarf, _dagger, _healingLight, _handsRare, _royal;
     CardEnhancementData _mending, _sharpened;
     Field _field;
 
@@ -65,7 +65,8 @@ public sealed class ArtifactRuleBatchTests
                 AssetDatabaseArtifact("rel_005"), AssetDatabaseArtifact("rel_007"),
                 AssetDatabaseArtifact("rel_023"),
                 AssetDatabaseArtifact("rel_001"), AssetDatabaseArtifact("rel_002"),
-                AssetDatabaseArtifact("rel_003"), AssetDatabaseArtifact("rel_004") },
+                AssetDatabaseArtifact("rel_003"), AssetDatabaseArtifact("rel_004"),
+                AssetDatabaseArtifact("rel_020"), AssetDatabaseArtifact("rel_100") },
             Array.Empty<CardEnhancementData>());
         _cards.ConfigureRandom(new DeterministicRandom(41));
         _combat = Make<CombatManager>("Rule Batch Combat");
@@ -76,6 +77,8 @@ public sealed class ArtifactRuleBatchTests
         _run.goblinType = Enemy("Goblin", 50, 3);
         _run.knightType = Enemy("Knight", 50, 3);
         _run.StartRunWithSeed("RULE-BATCH-SEED");
+        _handsRare = AssetDatabaseArtifact("rel_020");
+        _royal = AssetDatabaseArtifact("rel_100");
         _mending = AssetDatabaseEnhancement("enh_003");
         _sharpened = AssetDatabaseEnhancement("enh_001");
     }
@@ -234,6 +237,165 @@ public sealed class ArtifactRuleBatchTests
         var nextEnemy = StartTarget(200, 1);
         Assert.That(_combat.TryPlayCards(new[] { FindView(c => c.Rank == CardData.Rank.Three) }, nextEnemy), Is.True);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn), "Encounter start cleared Cheater's once flag.");
+    }
+
+    [Test]
+    public void HandsRare_ResolvesCardsInSelectionOrderAndFinishesCommittedEffectsAfterTargetDies()
+    {
+        Buy(_hands);
+        Buy(_handsRare);
+        CollectionAssert.Contains(_cards.ownedArtifacts, _handsRare);
+        CollectionAssert.DoesNotContain(_cards.ownedArtifacts, _hands);
+
+        var group = EnsureRankInHand(CardData.Rank.Six, 3);
+        for (int i = 0; i < group.Length; i++)
+        {
+            var onPlay = ScriptableObject.CreateInstance<CardEnhancementData>();
+            onPlay.displayName = $"Committed Heal {i + 1}";
+            onPlay.healOnPlay = i + 1;
+            _assets.Add(onPlay);
+            Assert.That(group[i].data.TryApplyEnhancement(onPlay), Is.True);
+        }
+
+        _combat.player.TakeDamage(20);
+        var first = new EnemyRuntime(Type("Low-HP Target", 1, 1));
+        var second = new EnemyRuntime(Type("Untouched Target", 200, 1));
+        _combat.StartEncounter(new[] { first, second });
+        var damageResults = new List<DamageResult>();
+        var encounterResults = new List<EncounterResult>();
+        var healLogs = new List<string>();
+        _combat.OnDamageResolved += damageResults.Add;
+        _combat.OnEncounterResult += encounterResults.Add;
+        _combat.OnCombatLog += message => { if (message.Contains(": Healed ")) healLogs.Add(message); };
+        var committedIds = group.Select(view => view.data.Id).ToArray();
+        var selectionOrder = group.Select(view => view.data.Id).ToArray();
+
+        Assert.That(_combat.TryPlayCards(group, first), Is.True);
+        Assert.That(first.IsDefeated, Is.True);
+        Assert.That(second.currentHp, Is.EqualTo(200), "Remaining committed cards must not retarget the surviving enemy.");
+        Assert.That(damageResults, Has.Count.EqualTo(1), "Only the first card's attack reached the 1-HP target.");
+        Assert.That(damageResults[0].Request.HitIndex, Is.EqualTo(0));
+        Assert.That(group.All(view => _cards.discardPile.Contains(view.data)), Is.True,
+            "All committed cards are disposed even though the first one defeated the target.");
+        Assert.That(committedIds.OrderBy(id => id), Is.EqualTo(selectionOrder.OrderBy(id => id)));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(16), "Every committed card's on-play effect resolves exactly once.");
+        CollectionAssert.AreEqual(new[]
+        {
+            "Committed Heal 1: Healed 1 HP.",
+            "Committed Heal 2: Healed 2 HP.",
+            "Committed Heal 3: Healed 3 HP."
+        }, healLogs, "Effects resolve in exact selection order even after the first card kills the target.");
+        Assert.That(_combat.Enemies, Has.Count.EqualTo(1));
+        Assert.That(_combat.Enemies[0], Is.SameAs(second));
+        Assert.That(_combat.CompletedPlayerTurnCount, Is.EqualTo(1), "The whole group spends one player action.");
+        Assert.That(encounterResults, Is.Empty, "The surviving enemy prevents premature victory.");
+    }
+
+    [Test]
+    public void RoyalFamily_InvalidMixedSuitSelectionConsumesNothing()
+    {
+        Buy(_royal);
+        AddFaceCard(CardData.Suit.Clubs, CardData.Rank.Jack);
+        AddFaceCard(CardData.Suit.Spades, CardData.Rank.Queen);
+        AddFaceCard(CardData.Suit.Diamonds, CardData.Rank.King);
+        var cards = new List<CardView>();
+        cards.Add(FindView(c => c.Rank == CardData.Rank.Ten && c.Suit == CardData.Suit.Hearts));
+        cards.Add(FindView(c => c.Rank == CardData.Rank.Jack && c.Suit == CardData.Suit.Clubs,
+            cards.Select(view => view.data).ToArray()));
+        cards.Add(FindView(c => c.Rank == CardData.Rank.Queen && c.Suit == CardData.Suit.Spades,
+            cards.Select(view => view.data).ToArray()));
+        cards.Add(FindView(c => c.Rank == CardData.Rank.King && c.Suit == CardData.Suit.Diamonds,
+            cards.Select(view => view.data).ToArray()));
+        cards.Add(FindView(c => c.Rank == CardData.Rank.Ace && c.Suit == CardData.Suit.Hearts,
+            cards.Select(view => view.data).ToArray()));
+        var target = StartTarget(100, 1);
+        int handCount = _cards.HandCount;
+        int gold = _cards.gold;
+        int damageEvents = 0;
+        _combat.OnDamageResolved += _ => damageEvents++;
+
+        Assert.That(_combat.CanPlayCards(cards, target), Is.False);
+        Assert.That(_combat.TryPlayCards(cards, target), Is.False);
+        Assert.That(_cards.HandCount, Is.EqualTo(handCount));
+        Assert.That(_cards.gold, Is.EqualTo(gold));
+        Assert.That(target.currentHp, Is.EqualTo(100));
+        Assert.That(damageEvents, Is.Zero);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+    }
+
+    [Test]
+    public void RoyalFamily_WildSuitDefeatsBossThroughOneActionAndAwardsVictoryOnce()
+    {
+        Buy(_royal);
+        AddFaceCard(CardData.Suit.Hearts, CardData.Rank.Jack);
+        AddFaceCard(CardData.Suit.Spades, CardData.Rank.Queen);
+        AddFaceCard(CardData.Suit.Hearts, CardData.Rank.King);
+        var royalCards = new List<CardView>();
+        royalCards.Add(FindView(c => c.Rank == CardData.Rank.Ten && c.Suit == CardData.Suit.Hearts));
+        royalCards.Add(FindView(c => c.Rank == CardData.Rank.Jack && c.Suit == CardData.Suit.Hearts,
+            royalCards.Select(view => view.data).ToArray()));
+        royalCards.Add(FindView(c => c.Rank == CardData.Rank.Queen && c.Suit == CardData.Suit.Spades,
+            royalCards.Select(view => view.data).ToArray()));
+        royalCards.Add(FindView(c => c.Rank == CardData.Rank.King && c.Suit == CardData.Suit.Hearts,
+            royalCards.Select(view => view.data).ToArray()));
+        royalCards.Add(FindView(c => c.Rank == CardData.Rank.Ace && c.Suit == CardData.Suit.Hearts,
+            royalCards.Select(view => view.data).ToArray()));
+        var royal = royalCards.ToArray();
+        var onPlay = ScriptableObject.CreateInstance<CardEnhancementData>();
+        onPlay.displayName = "Royal Heal";
+        onPlay.healOnPlay = 1;
+        _assets.Add(onPlay);
+        var wildHeal = ScriptableObject.CreateInstance<CardEnhancementData>();
+        wildHeal.displayName = "Wild Royal";
+        wildHeal.effects = new[]
+        {
+            new GameplayEffectDefinition { kind = GameplayEffectKind.WildSuit },
+            new GameplayEffectDefinition { kind = GameplayEffectKind.Heal,
+                trigger = GameplayEffectTrigger.CardCommitted, amount = 1 }
+        };
+        _assets.Add(wildHeal);
+        for (int i = 0; i < royal.Length; i++)
+            Assert.That(royal[i].data.TryApplyEnhancement(i == 2 ? wildHeal : onPlay), Is.True);
+
+        var type = Type("Boss God", int.MaxValue, 9);
+        type.goldReward = 13;
+        var boss = new EnemyRuntime(type);
+        _combat.StartEnemy(boss);
+        _combat.player.TakeDamage(10);
+        var damageResults = new List<DamageResult>();
+        var encounterResults = new List<EncounterResult>();
+        var playLogs = new List<string>();
+        _combat.OnDamageResolved += damageResults.Add;
+        _combat.OnEncounterResult += encounterResults.Add;
+        _combat.OnCombatLog += message => { if (message.StartsWith("Played ")) playLogs.Add(message); };
+        var random = new CountingRandom();
+        _combat.ConfigureCriticalRandom(random);
+        _combat.CriticalChancePercent = 100f;
+        foreach (var view in royal) _cards.ToggleCardSelection(view);
+        Assert.That(_cards.SelectedCards, Has.Count.EqualTo(5));
+        Assert.That(_combat.CanPlayCards(_cards.SelectedCards, boss), Is.True);
+        int[] committedIds = royal.Select(view => view.data.Id).ToArray();
+
+        Assert.That(_combat.TryPlayCards(_cards.GetSelectedCardsSnapshot(), boss), Is.True);
+        Assert.That(boss.IsDefeated, Is.True, "Instant defeat also applies to boss-scale HP.");
+        Assert.That(damageResults, Is.Empty, "Instant defeat is not represented by synthetic numeric damage.");
+        Assert.That(encounterResults, Is.EqualTo(new[] { EncounterResult.Victory }));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameWon));
+        Assert.That(_cards.gold, Is.EqualTo(13));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(25), "All five on-play heals resolve before the defeat outcome.");
+        Assert.That(random.Calls, Is.Zero, "The instant-defeat action does not spend a critical roll.");
+        Assert.That(playLogs, Has.Count.EqualTo(1), "The group is logged as one action.");
+        Assert.That(committedIds.All(id => _cards.discardPile.Any(card => card.Id == id)), Is.True);
+        Assert.That(_combat.TryPlayCards(royal, boss), Is.False, "A resolved encounter cannot award victory twice.");
+        Assert.That(encounterResults, Has.Count.EqualTo(1));
+        Assert.That(_cards.gold, Is.EqualTo(13));
+    }
+
+    void AddFaceCard(CardData.Suit suit, CardData.Rank rank)
+    {
+        var source = CardData.Create(suit, rank);
+        _assets.Add(source);
+        Assert.That(_cards.AddBossReward(source), Is.Not.Null);
     }
 
     [Test]

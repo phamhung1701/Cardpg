@@ -77,6 +77,13 @@ public class EnemyRuntime : ICombatDamageTarget
         return previousHp - currentHp;
     }
 
+    public void DefeatInstantly()
+    {
+        if (IsDefeated) return;
+        currentHp = 0;
+        OnHpChanged?.Invoke();
+    }
+
     public int GainShield(int amount)
     {
         if (amount <= 0 || IsDefeated) return 0;
