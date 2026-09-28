@@ -166,6 +166,7 @@ public class RunResultUI : MonoBehaviour
             ? "None"
             : string.Join(", ", cards.ownedArtifacts.Where(value => value != null).Select(value => value.displayName).Take(6));
         int enhanced = cards != null ? cards.ownedCards.Count(card => card.Enhancement != null) : 0;
+        string goldDisplay = cards == null ? "0" : cards.HasInfiniteMoney ? "∞" : cards.gold.ToString();
         string rewardLine = victory && !string.IsNullOrEmpty(_lastBossRewardName)
             ? $"\nFinal reward: {_lastBossRewardName}"
             : string.Empty;
@@ -179,7 +180,7 @@ public class RunResultUI : MonoBehaviour
                 $"Seed  {seed}\n" +
                 $"Progress  Map {mapReached}/{totalBosses}\n" +
                 $"Bosses Defeated  {bossesDefeated}/{totalBosses}\n" +
-                $"Gold  {(cards != null ? cards.gold : 0)}\n" +
+                $"Gold  {goldDisplay}\n" +
                 $"Artifacts  {artifacts}\n" +
                 $"Enhanced Cards  {enhanced}{rewardLine}\n\n" +
                 timingSummary;

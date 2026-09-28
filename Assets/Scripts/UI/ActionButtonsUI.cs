@@ -136,7 +136,7 @@ public class ActionButtonsUI : MonoBehaviour
         {
             turnStateLabel.text = combat.currentState switch
             {
-                GameState.PlayerTurn => "PLAYER TURN",
+                GameState.PlayerTurn => combat.IsBonusPlayerAction ? "PLAYER TURN  •  BONUS ACTION" : "PLAYER TURN",
                 GameState.EnemyAttacking => "DEFENSE WINDOW",
                 GameState.GameWon => "ENCOUNTER WON",
                 GameState.GameOver => "RUN DEFEAT",

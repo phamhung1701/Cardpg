@@ -153,7 +153,12 @@ public class EnemyDisplayUI : MonoBehaviour
                 GameState.GameOver => "Player defeated",
                 _ => "Choose your next encounter"
             };
-            string abilities = DisplayedEnemy?.AbilitySummary;
+            var enemy = DisplayedEnemy;
+            if (enemy != null && state == GameState.PlayerTurn && enemy.NextAttackIsCharged)
+                guidance += $"\nWarning: charged attack next ({enemy.currentAttack * 2} damage)";
+            else if (enemy != null && state == GameState.EnemyAttacking && enemy.CurrentResponseIsCharged)
+                guidance = $"Charged attack incoming ({enemy.ResponseAttack} damage)";
+            string abilities = enemy?.AbilitySummary;
             statusText.text = string.IsNullOrEmpty(abilities)
                 ? guidance
                 : $"{guidance}\nTrait: {abilities}";

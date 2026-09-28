@@ -11,6 +11,9 @@ public sealed class MainMenuUI : MonoBehaviour
 
     void OnEnable()
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        DevModePanelUI.InstallMainMenu(this);
+#endif
         if (newRunButton) newRunButton.onClick.AddListener(ShowRunSetup);
         if (settingsButton) settingsButton.onClick.AddListener(ShowSettings);
         if (creditsButton) creditsButton.onClick.AddListener(ShowCredits);

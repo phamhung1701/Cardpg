@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Knight
   m_EditorClassIdentifier: Assembly-CSharp::EnemyTypeData
   enemyName: Knight
-  maxHp: 25
-  baseAttack: 8
+  maxHp: 16
+  baseAttack: 4
   goldReward: 10
+  encounterCount: 1
+  fleeAfterPlayerTurns: 0
   sourceCard: {fileID: 0}
   abilities: []

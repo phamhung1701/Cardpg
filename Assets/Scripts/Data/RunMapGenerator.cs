@@ -41,7 +41,7 @@ public static class RunMapGenerator
                     hidden = hidden,
                     completed = false,
                     mapIndex = mapIndex,
-                    contentId = PickContentId(kind, catalog, fallbackEnemies, contentRandom)
+                    contentId = PickContentId(kind, mapIndex, catalog, fallbackEnemies, contentRandom)
                 };
                 columns[col].Add(node);
                 nodes.Add(node);
@@ -93,6 +93,7 @@ public static class RunMapGenerator
 
     static string PickContentId(
         MapNodeType kind,
+        int mapIndex,
         RunContentCatalog catalog,
         EnemyTypeData[] fallbackEnemies,
         IRandomSource random)
@@ -103,8 +104,14 @@ public static class RunMapGenerator
                 ? catalog.normalEnemies
                 : fallbackEnemies;
             if (enemies == null || enemies.Length == 0) return string.Empty;
-            var enemy = enemies[random.NextInt(0, enemies.Length)];
-            return enemy != null ? enemy.name : string.Empty;
+            var eligible = new List<EnemyTypeData>(enemies.Length);
+            foreach (var enemy in enemies)
+                if (enemy != null && (mapIndex >= 2 || enemy.enemyName != "Knight") &&
+                    (kind != MapNodeType.Elite ||
+                        (enemy.enemyName != "Shieldbearer" && enemy.enemyName != "Brute")))
+                    eligible.Add(enemy);
+            if (eligible.Count == 0) return string.Empty;
+            return eligible[random.NextInt(0, eligible.Count)].name;
         }
 
         if (kind == MapNodeType.Event || kind == MapNodeType.Upgrade || kind == MapNodeType.Risk)

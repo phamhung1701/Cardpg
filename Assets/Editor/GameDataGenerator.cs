@@ -98,7 +98,15 @@ public static class GameDataGenerator
         EnsureFolder(EnemyDir);
         CreateEnemy("Thief", "Thief", 12, 1, 15, fleeAfterPlayerTurns: 2);
         CreateEnemy("Goblin", "Goblin", 3, 2, 3, encounterCount: 3);
-        CreateEnemy("Knight", "Knight", 25, 8, 10);
+        CreateEnemy("Knight", "Knight", 16, 4, 10);
+        // Temporary 0 Gold rewards until the economy values in the workbook are approved.
+        CreateEnemy("Shieldbearer", "Shieldbearer", 10, 3, 0);
+        CreateEnemy("Brute", "Brute", 18, 3, 0);
+        ConfigureEnemyAbility("Shieldbearer", "StartingShield", "Starting Shield",
+            "Begins each encounter with one Shield.", EnemyAbilityEffect.StartWithShield, 1);
+        ConfigureEnemyAbility("Brute", "ChargedAttack", "Charged Attack",
+            "Alternates normal attacks with announced double-damage attacks.",
+            EnemyAbilityEffect.AlternateChargedAttack, 1);
         Debug.Log("Enemy assets created.");
     }
 
@@ -219,6 +227,31 @@ public static class GameDataGenerator
         enemy.encounterCount = encounterCount;
         enemy.fleeAfterPlayerTurns = fleeAfterPlayerTurns;
         AssetDatabase.CreateAsset(enemy, path);
+    }
+
+    static void ConfigureEnemyAbility(string enemyAssetName, string abilityAssetName,
+        string displayName, string description, EnemyAbilityEffect effect, int amount)
+    {
+        string folder = $"{EnemyDir}/Abilities";
+        EnsureFolder(folder);
+        string path = $"{folder}/{abilityAssetName}.asset";
+        var ability = AssetDatabase.LoadAssetAtPath<EnemyAbility>(path);
+        if (ability == null)
+        {
+            ability = ScriptableObject.CreateInstance<EnemyAbility>();
+            AssetDatabase.CreateAsset(ability, path);
+        }
+        ability.id = abilityAssetName;
+        ability.displayName = displayName;
+        ability.description = description;
+        ability.effect = effect;
+        ability.amount = amount;
+        EditorUtility.SetDirty(ability);
+
+        var enemy = AssetDatabase.LoadAssetAtPath<EnemyTypeData>($"{EnemyDir}/{enemyAssetName}.asset");
+        if (enemy == null) return;
+        enemy.abilities = new[] { ability };
+        EditorUtility.SetDirty(enemy);
     }
 
     static void EnsureFolder(string path)

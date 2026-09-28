@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -108,6 +109,177 @@ public sealed class Phase7BMultiEnemyTests
         Assert.That((goblin.maxHp, goblin.baseAttack, goblin.goldReward, goblin.encounterCount, goblin.fleeAfterPlayerTurns),
             Is.EqualTo((3, 2, 3, 3, 0)));
 #endif
+    }
+
+    [Test]
+    public void KnightAsset_UsesApprovedBaseStats_WithoutChangingExistingReward()
+    {
+#if UNITY_EDITOR
+        var knight = UnityEditor.AssetDatabase.LoadAssetAtPath<EnemyTypeData>("Assets/Data/Enemies/Knight.asset");
+        Assert.That(knight, Is.Not.Null);
+        Assert.That((knight.maxHp, knight.baseAttack, knight.goldReward, knight.encounterCount),
+            Is.EqualTo((16, 4, 10, 1)));
+#endif
+    }
+
+    [TestCase(0, 16, 4)]
+    [TestCase(1, 19, 4)]
+    [TestCase(11, 51, 7)]
+    public void KnightCombat_PreviewAndSpawnShareScaledStats_WithoutMutatingSource(
+        int mapIndex, int expectedHp, int expectedAttack)
+    {
+        var knight = CreateEnemyType("Knight", 16, 4, 10);
+        var run = CreateComponent<RunManager>("Phase1 RunManager");
+        run.knightType = knight;
+        var node = new PathNode
+        {
+            id = 7, kind = MapNodeType.Combat, contentId = "Knight",
+            mapIndex = mapIndex, accessible = true, revealed = true
+        };
+        run.currentPath.Add(node);
+
+        Assert.That(run.GetEncounterStats(node), Is.EqualTo((expectedHp, expectedAttack)));
+        Assert.That(run.GetNodeDesc(node), Does.Contain($"{expectedHp} HP / {expectedAttack} ATK"));
+        _combat.Reset();
+        run.OnPathChosen(node.id);
+
+        Assert.That(_combat.Enemies.Count, Is.EqualTo(1));
+        Assert.That((_combat.Enemies[0].maxHp, _combat.Enemies[0].currentAttack),
+            Is.EqualTo((expectedHp, expectedAttack)));
+        Assert.That((knight.maxHp, knight.baseAttack), Is.EqualTo((16, 4)));
+    }
+
+    [Test]
+    public void EliteEncounter_ScalesBaseBeforeFixedModifier_AndKeepsAssetUnchanged()
+    {
+        var knight = CreateEnemyType("Knight", 16, 4, 10);
+        var run = CreateComponent<RunManager>("Phase1 Elite RunManager");
+        run.knightType = knight;
+        var node = new PathNode
+        {
+            id = 8, kind = MapNodeType.Elite, contentId = "Knight",
+            mapIndex = 11, accessible = true, revealed = true
+        };
+        run.currentPath.Add(node);
+
+        Assert.That(run.GetEncounterStats(node), Is.EqualTo((77, 9)));
+        _combat.Reset();
+        run.OnPathChosen(node.id);
+
+        Assert.That(_combat.Enemies.Count, Is.EqualTo(1));
+        Assert.That((_combat.Enemies[0].maxHp, _combat.Enemies[0].currentAttack), Is.EqualTo((77, 9)));
+        Assert.That((knight.maxHp, knight.baseAttack, knight.goldReward), Is.EqualTo((16, 4, 10)));
+    }
+
+    [Test]
+    public void BossEncounter_PreviewAndSpawnScaleCachedBossWithoutChangingIt()
+    {
+        var boss = CreateEnemyType("Jack of Hearts", 20, 10, 10);
+        var run = CreateComponent<RunManager>("Phase1 Boss RunManager");
+        run.bossDeck.Add(boss);
+        var node = new PathNode
+        {
+            id = 9, kind = MapNodeType.Boss, contentId = "boss",
+            mapIndex = 11, accessible = true, revealed = true
+        };
+        run.currentPath.Add(node);
+
+        Assert.That(run.GetEncounterStats(node), Is.EqualTo((64, 18)));
+        _combat.Reset();
+        run.OnPathChosen(node.id);
+
+        Assert.That(_combat.Enemies.Count, Is.EqualTo(1));
+        Assert.That((_combat.Enemies[0].maxHp, _combat.Enemies[0].currentAttack), Is.EqualTo((64, 18)));
+        Assert.That((boss.maxHp, boss.baseAttack), Is.EqualTo((20, 10)));
+    }
+
+    [Test]
+    public void ShieldbearerCombat_PairsWithOneGoblin_AndStartsWithOneShield()
+    {
+        var shield = CreateEnemyType("Shieldbearer", 10, 3, 0);
+        var shieldAbility = ScriptableObject.CreateInstance<EnemyAbility>();
+        _created.Add(shieldAbility);
+        shieldAbility.effect = EnemyAbilityEffect.StartWithShield;
+        shieldAbility.amount = 1;
+        shield.abilities = new[] { shieldAbility };
+        var goblin = CreateEnemyType("Goblin", 3, 2, 3, encounterCount: 3);
+        var catalog = ScriptableObject.CreateInstance<RunContentCatalog>();
+        _created.Add(catalog);
+        catalog.normalEnemies = new[] { shield, goblin };
+        var run = CreateComponent<RunManager>("Phase1 Mixed RunManager");
+        run.contentCatalog = catalog;
+        var node = new PathNode
+        {
+            id = 19, kind = MapNodeType.Combat, contentId = "Shieldbearer",
+            mapIndex = 1, accessible = true, revealed = true
+        };
+        run.currentPath.Add(node);
+
+        _combat.Reset();
+        run.OnPathChosen(node.id);
+        Assert.That(_combat.Enemies.Select(enemy => enemy.type.enemyName),
+            Is.EqualTo(new[] { "Shieldbearer", "Goblin" }));
+        Assert.That((_combat.Enemies[0].maxHp, _combat.Enemies[0].currentAttack), Is.EqualTo((12, 3)));
+        Assert.That((_combat.Enemies[1].maxHp, _combat.Enemies[1].currentAttack), Is.EqualTo((4, 2)));
+        var shieldRuntime = _combat.Enemies[0];
+        Assert.That(shieldRuntime.ShieldCharges, Is.EqualTo(1));
+        Assert.That(shieldRuntime.TakeCardDamage(2, _combat), Is.Zero);
+        Assert.That((shieldRuntime.currentHp, shieldRuntime.ShieldCharges), Is.EqualTo((12, 0)));
+        _combat.Reset();
+        _combat.StartEncounter(new[] { shieldRuntime, new EnemyRuntime(goblin, startingHp: 4, startingAttack: 2) });
+        Assert.That(shieldRuntime.ShieldCharges, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void KnightMapThreeEncounter_IsSolo()
+    {
+        var knight = CreateEnemyType("Knight", 16, 4, 10);
+        var goblin = CreateEnemyType("Goblin", 3, 2, 3);
+        var run = CreateComponent<RunManager>("Phase1 Knight Solo RunManager");
+        run.knightType = knight;
+        run.goblinType = goblin;
+        var node = new PathNode
+        {
+            id = 20, kind = MapNodeType.Combat, contentId = "Knight",
+            mapIndex = 2, accessible = true, revealed = true
+        };
+        run.currentPath.Add(node);
+        _combat.Reset();
+        run.OnPathChosen(node.id);
+        Assert.That(_combat.Enemies.Count, Is.EqualTo(1));
+        Assert.That((_combat.Enemies[0].maxHp, _combat.Enemies[0].currentAttack), Is.EqualTo((22, 5)));
+    }
+
+    [Test]
+    public void BruteCombat_AlternatesResponseDamage_AndTelegraphsTheChargedTurn()
+    {
+        var brute = CreateEnemyType("Brute", 18, 3, 0);
+        var ability = ScriptableObject.CreateInstance<EnemyAbility>();
+        _created.Add(ability);
+        ability.effect = EnemyAbilityEffect.AlternateChargedAttack;
+        ability.displayName = "Charged Attack";
+        brute.abilities = new[] { ability };
+        var runtime = new EnemyRuntime(brute);
+        _combat.StartEnemy(runtime);
+        var display = CreateDisplay("Brute Intent View");
+        var status = CreateGameObject("Brute Intent Status", typeof(RectTransform)).AddComponent<TextMeshProUGUI>();
+        display.statusText = status;
+        display.Bind(runtime);
+
+        Assert.That(runtime.NextAttackIsCharged, Is.False);
+        PlayLowestAttackCard(runtime);
+        Assert.That((_combat.pendingDamage, runtime.CurrentResponseIsCharged), Is.EqualTo((3, false)));
+        _combat.TakeRemainingDamage();
+        Assert.That(runtime.NextAttackIsCharged, Is.True);
+        display.RefreshStateGuidance();
+        Assert.That(status.text, Does.Contain("Warning: charged attack next (6 damage)"));
+
+        PlayLowestAttackCard(runtime);
+        Assert.That((_combat.pendingDamage, runtime.CurrentResponseIsCharged), Is.EqualTo((6, true)));
+        display.RefreshStateGuidance();
+        Assert.That(status.text, Does.Contain("Charged attack incoming (6 damage)"));
+        _combat.TakeRemainingDamage();
+        Assert.That(runtime.NextAttackIsCharged, Is.False);
     }
 
     [Test]

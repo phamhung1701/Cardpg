@@ -12,11 +12,21 @@ CardPG is a single-player, seed-driven card roguelike RPG prototype built with U
 
 ## Combat and builds
 
-Play a card to attack an enemy. During the defense window, discard cards to block distinct incoming attacks, or choose to take the remaining damage. Recover is available with an empty hand. Encounters may contain multiple independently targetable enemies.
+Play a card to attack an enemy. During the defense window, discard cards to block distinct incoming attacks, or choose to take the remaining damage. Recover is available with an empty hand. Encounters may contain multiple independently targetable enemies. Ace pairing combines an Ace and one other card into a single seeded-critical attack. The Hands Emblem enables two- or three-card same-rank attacks; with the Royal Family Heirloom, the exact 10–J–Q–K–A sequence in one effective suit can instantly defeat its target. Other general poker hands are not baseline rules.
 
-Ace pairing allows an Ace and one other card to be committed as a single attack, with deterministic seeded critical hits. The Hands Emblem adds a separate same-rank action: two or three matching-rank cards, with a total action damage cap. Other general poker hands are not part of the current rules.
+Artifacts provide run-level effects; Enhancements belong to a specific card instance. Cards can hold one Enhancement. The current build also includes tiered Artifact upgrades, charged Runes stored in three non-stacking backpack slots, and consumables that can be used during a run. Overflow auto-plays up to two cards (Common) or three cards (Rare) drawn while the hand is full, sharing that budget across nested draws within one player action. Rare Cheater grants one non-recursive bonus action before the enemy responds; Common Cheater retains its first-turn behavior. These are prototype systems and their values remain subject to balance review.
 
-Artifacts provide run-level effects; Enhancements belong to a specific card instance. A card can currently hold one Enhancement. The current approved Artifact content includes canonical IDs `rel_001`–`rel_014`, `rel_016`, `rel_019`, `rel_023`, and `rel_028`; Chain Armor reduces incoming combat damage before Shield, and Arsenal Emblem raises the hand limit by one. Ace Emblem sets the critical chance to 50% for any attack action containing an Ace, with one critical roll for the action. Retaliation Emblem counterattacks each source enemy whose attack was blocked for 5 damage. Current canonical Tier I Enhancements include Sharpened, Hardened, Mending, Quickdraw, Golden, and Auxiliary. Each in-hand Auxiliary gives +3 attack to card calculations, and each in-hand Golden gives 2 Gold once per attack action. Some prototype Artifact and Enhancement definitions are also retained. Tier upgrades, rarity-weighted offers, and much of the workbook's planned content are not implemented.
+## Development milestones
+
+Content milestones 1–4 are implemented in the current checkout, extending the existing seeded run and combat loop with permanent deck editing, charged Runes and other consumables in a three-slot non-stacking backpack, tiered Artifact upgrades, Hands and Royal Family group attacks, and bounded Overflow auto-plays and Rare Cheater bonus actions. Queen, King, and God are name-only workbook placeholders that still require gameplay specifications; existing authored bosses remain playable.
+
+The remaining roadmap is:
+
+- **Milestone 5 — Epic Arsenal / Club:** not implemented.
+- **Milestone 6 — Blood Ritual:** not implemented.
+- **Milestone 7 — Quests:** not implemented.
+
+The most recent recorded regression checkpoint reports **329 EditMode tests and 3 PlayMode tests passing**. This is historical verification from the project notes; it has not been rerun as part of this README update.
 
 ## Seeds and replay
 
@@ -29,6 +39,12 @@ New Run accepts an optional seed. Leaving it blank generates a fresh seed when t
 3. Open `Assets/Scenes/MainMenu.unity` and enter Play Mode. If starting directly in gameplay for development, open `Assets/Scenes/Game.unity`.
 
 The project uses the Universal Render Pipeline and Unity's New Input System. There is no standalone release build or save/continue flow documented as part of this prototype.
+
+## Dev Mode
+
+The Editor sandbox is available from `Assets/Scenes/Game.unity` via **CardPG → Development → Dev Mode**. Windows builds made with **Development Build** enabled also expose a Dev Mode entry on the Main Menu. Choose an optional seed and the Infinite Health, Infinite Money, and All Eligible Shop Offers toggles, then select **Start Dev Run**; ordinary New Run remains unaffected. During an active dev run, the top-of-screen DEV MODE banner and the DEV control open the in-run panel. Cheats are off on application launch, reset when returning to the Main Menu or starting a normal run, and remain enabled across Retry Same Seed. **Disable Cheats** affects only future actions; it does not restore spent HP/Gold or reverse purchases. **Lose Run Now** requires confirmation and routes through the ordinary defeat result.
+
+To make a Windows test build, select **File → Build Profiles → Windows → Build**, enable **Development Build**, and build to a test folder. Development controls and cheat hooks are compiled out of ordinary non-development player builds. A Development Build is intentionally not protected from its users. Dev overrides do not bypass Artifact capacity, duplicate prevention, enhancement eligibility, or purchase validation. The Editor shop browser remains an Editor-only tool.
 
 ## Development notes
 

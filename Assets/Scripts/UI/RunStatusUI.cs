@@ -74,9 +74,10 @@ public class RunStatusUI : MonoBehaviour
         var run = RunManager.Instance;
 
         if (goldLabel)
-            goldLabel.text = cards != null ? $"Gold  {cards.gold}" : "Gold  —";
+            goldLabel.text = cards == null ? "Gold  —" : cards.HasInfiniteMoney ? "Gold  ∞" : $"Gold  {cards.gold}";
 
         RefreshArtifacts(cards);
+        RefreshBackpack(cards);
 
         if (pileSummaryLabel)
         {

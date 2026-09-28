@@ -20,6 +20,9 @@ public sealed class CombatActionContext
     public CardData.Suit? SuitSnapshot { get; }
     public CardData.Rank? RankSnapshot { get; }
     public int HitCount { get; }
+    public bool IsBonusAction { get; }
+    public long RootActionId { get; }
+    public bool IsOverflowAutoPlay { get; }
 
     public CombatActionContext(
         long actionId,
@@ -28,7 +31,10 @@ public sealed class CombatActionContext
         EnemyRuntime sourceEnemy = null,
         CardInstance card = null,
         EnemyRuntime targetEnemy = null,
-        int hitCount = 1)
+        int hitCount = 1,
+        bool isBonusAction = false,
+        long rootActionId = 0,
+        bool isOverflowAutoPlay = false)
     {
         ActionId = actionId;
         Origin = origin;
@@ -39,5 +45,8 @@ public sealed class CombatActionContext
         SuitSnapshot = card != null ? card.Suit : null;
         RankSnapshot = card != null ? card.Rank : null;
         HitCount = UnityEngine.Mathf.Max(1, hitCount);
+        IsBonusAction = isBonusAction;
+        RootActionId = rootActionId > 0 ? rootActionId : actionId;
+        IsOverflowAutoPlay = isOverflowAutoPlay;
     }
 }

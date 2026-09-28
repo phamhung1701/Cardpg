@@ -29,11 +29,13 @@ MonoBehaviour:
     extraTurn:
       trigger: 0
       oncePerEncounter: 1
+      cannotTriggerFromBonusAction: 0
       requireAllPlayedCardsBelowRank: 0
       exclusiveRank: 0
     sameRankMultiCard:
       requireMatchingRank: 0
       maximumCards: 0
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

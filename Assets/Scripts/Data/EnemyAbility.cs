@@ -5,7 +5,9 @@ public enum EnemyAbilityEffect
     IncreaseAttackOnEncounterStart,
     IncreaseAttackAfterPlayerCard,
     HealAfterPlayerCard,
-    ReduceIncomingCardDamage
+    ReduceIncomingCardDamage,
+    StartWithShield,
+    AlternateChargedAttack
 }
 
 [CreateAssetMenu(fileName = "EnemyAbility", menuName = "Game/Enemy Ability")]
@@ -39,6 +41,8 @@ public class EnemyAbility : ScriptableObject
     {
         if (effect == EnemyAbilityEffect.IncreaseAttackOnEncounterStart)
             enemy.IncreaseAttack(amount);
+        else if (effect == EnemyAbilityEffect.StartWithShield)
+            enemy.GainShield(amount);
     }
 
     public virtual void OnIncomingHitResolved(

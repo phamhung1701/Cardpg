@@ -21,7 +21,13 @@ public class CombatManager : Singleton<CombatManager>
     readonly List<EnemyRuntime> _pendingAttackSources = new();
     readonly Queue<PlayerTurnGrant> _queuedPlayerTurnGrants = new();
     int _attackCountAtStart;
+    readonly Queue<CardView> _overflowAutoPlays = new();
+    int _overflowBudgetRemaining;
+    long _overflowRootActionId;
+    bool _overflowRootActive;
+    bool _executingOverflowAutoPlay;
     int _completedPlayerTurnCount;
+    bool _isBonusPlayerAction;
     public int PendingAttackCount => _pendingAttacks.Count;
     public int BlockedAttackCount => _attackCountAtStart - _pendingAttacks.Count;
     readonly HashSet<EnemyRuntime> _processedEnemyDeaths = new();
@@ -33,6 +39,7 @@ public class CombatManager : Singleton<CombatManager>
     int _playerTurnNumber;
     public int QueuedExtraPlayerTurns => _queuedPlayerTurnGrants.Count;
     public int CompletedPlayerTurnCount => _completedPlayerTurnCount;
+    public bool IsBonusPlayerAction => _isBonusPlayerAction;
     bool _isResolvingAction;
     bool _reactionFaulted;
     CombatActionContext _activeAction;
@@ -134,6 +141,7 @@ public class CombatManager : Singleton<CombatManager>
         {
             var enemy = _enemies[i];
             enemy.ResetShield();
+            enemy.ResetResponseIntent();
             enemy.OnHpChanged += HandleEnemyHpChanged;
             enemy.OnAttackChanged += HandleEnemyHpChanged;
             EnqueueEncounterStartedAbilities(encounterAction, enemy, i);
@@ -167,6 +175,23 @@ public class CombatManager : Singleton<CombatManager>
         OnEnemyChanged?.Invoke();
         return true;
     }
+
+    public int QueuedOverflowAutoPlayCount => _overflowAutoPlays.Count;
+    public int OverflowDrawAllowance => _overflowRootActive && currentState == GameState.PlayerTurn
+        ? _overflowBudgetRemaining : 0;
+
+    public void QueueOverflowAutoPlay(CardView card)
+    {
+        if (card == null || !_overflowRootActive || _overflowBudgetRemaining <= 0 ||
+            currentState != GameState.PlayerTurn || _encounterResolved) return;
+        _overflowBudgetRemaining--;
+        _overflowAutoPlays.Enqueue(card);
+    }
+
+    public bool IsPlayerActionActive => _isResolvingAction && currentState == GameState.PlayerTurn;
+
+    public bool CanAutoPlayOverflow => _overflowRootActive && currentState == GameState.PlayerTurn &&
+        !player.IsDefeated && !_encounterResolved && !_reactionFaulted;
 
     public bool CanUseConsumableDamage(int amount) =>
         !GameplayInputGate.IsBlocked && amount > 0 && !_reactionFaulted && !_isResolvingAction &&
@@ -371,6 +396,14 @@ public class CombatManager : Singleton<CombatManager>
         float actionCriticalChance = hasCriticalChanceOverride
             ? criticalChanceOverride : criticalChancePercent;
 
+        bool isOverflowAutoPlay = _executingOverflowAutoPlay;
+        if (!isOverflowAutoPlay)
+        {
+            _overflowRootActive = true;
+            _overflowRootActionId = _nextActionId;
+            _overflowBudgetRemaining = cm != null ? cm.OverflowCapacity : 0;
+            _overflowAutoPlays.Clear();
+        }
         _isResolvingAction = true;
         _reactions.Clear();
         _activeAction = CreateAction(
@@ -534,6 +567,16 @@ public class CombatManager : Singleton<CombatManager>
             }
 
             if (_reactionFaulted) return true;
+            if (isOverflowAutoPlay) return true;
+            var completedAction = _activeAction;
+            DrainOverflowAutoPlays();
+            _activeAction = completedAction;
+            if (player.IsDefeated)
+            {
+                ResolveEncounter(EncounterResult.Defeat);
+                return true;
+            }
+            if (_encounterResolved || _reactionFaulted) return true;
 
             CompletePlayerTurnForEnemies();
             if (_enemies.Count == 0)
@@ -556,7 +599,40 @@ public class CombatManager : Singleton<CombatManager>
             _activeAction = null;
             _isResolvingAction = false;
             _reactions.Clear();
+            if (!isOverflowAutoPlay)
+            {
+                _overflowRootActive = false;
+                _overflowRootActionId = 0;
+                _overflowBudgetRemaining = 0;
+                if (_encounterResolved || _reactionFaulted) _overflowAutoPlays.Clear();
+            }
         }
+    }
+
+    void DrainOverflowAutoPlays()
+    {
+        if (!_overflowRootActive || _overflowAutoPlays.Count == 0) return;
+        _activeAction = null;
+        _isResolvingAction = false;
+        _reactions.Clear();
+        while (_overflowAutoPlays.Count > 0 && CanAutoPlayOverflow)
+        {
+            var card = _overflowAutoPlays.Dequeue();
+            if (card == null || card.data == null || !CardManager.Instance.hand.Any(instance => ReferenceEquals(instance, card.data)))
+                continue;
+            var target = currentEnemy != null && !currentEnemy.IsDefeated && _enemies.Contains(currentEnemy)
+                ? currentEnemy : _enemies.FirstOrDefault(enemy => enemy != null && !enemy.IsDefeated);
+            if (target == null) break;
+            bool previous = _executingOverflowAutoPlay;
+            _executingOverflowAutoPlay = true;
+            try
+            {
+                Log($"Overflow auto-plays {card.data.DisplayName} on {target.DisplayName}.");
+                TryPlayCards(new[] { card }, target, 1);
+            }
+            finally { _executingOverflowAutoPlay = previous; }
+        }
+        if (_encounterResolved || _reactionFaulted || player.IsDefeated) _overflowAutoPlays.Clear();
     }
 
     public void DiscardCard(CardView card)
@@ -698,9 +774,11 @@ public class CombatManager : Singleton<CombatManager>
         for (int i = 0; i < _enemies.Count; i++)
         {
             var enemy = _enemies[i];
-            if (enemy != null && !enemy.IsDefeated && enemy.currentAttack > 0)
+            if (enemy == null || enemy.IsDefeated) continue;
+            int attack = enemy.PrepareResponseAttack();
+            if (attack > 0)
             {
-                _pendingAttacks.Add(enemy.currentAttack);
+                _pendingAttacks.Add(attack);
                 _pendingAttackSources.Add(enemy);
             }
         }
@@ -716,7 +794,8 @@ public class CombatManager : Singleton<CombatManager>
         }
 
         SetState(GameState.EnemyAttacking);
-        string breakdown = string.Join(" + ", _enemies.ConvertAll(enemy => $"{enemy.DisplayName} {Mathf.Max(0, enemy.currentAttack)}"));
+        string breakdown = string.Join(" + ", _enemies.ConvertAll(enemy =>
+            $"{enemy.DisplayName} {Mathf.Max(0, enemy.ResponseAttack)}{(enemy.CurrentResponseIsCharged ? " (charged)" : "")}"));
         Log($"Surviving enemies attack for {pendingDamage} ({breakdown})! Discard to defend or take the remaining damage.");
     }
 
@@ -923,13 +1002,14 @@ public class CombatManager : Singleton<CombatManager>
         if (_queuedPlayerTurnGrants.Count == 0) return false;
         var grant = _queuedPlayerTurnGrants.Dequeue();
         Log($"{grant.SourceName} grants an extra player turn.");
-        BeginPlayerTurn();
+        BeginPlayerTurn(isBonusAction: true);
         return true;
     }
 
-    void BeginPlayerTurn()
+    void BeginPlayerTurn(bool isBonusAction = false)
     {
         if (_reactionFaulted) return;
+        _isBonusPlayerAction = isBonusAction;
         SetState(GameState.PlayerTurn);
         var cards = CardManager.Instance;
         if (cards == null || _encounterResolved) return;
@@ -1047,13 +1127,16 @@ public class CombatManager : Singleton<CombatManager>
             sourceEnemy,
             card,
             targetEnemy,
-            hitCount);
+            hitCount,
+            origin == CombatActionOrigin.PlayerCard && _isBonusPlayerAction,
+            _overflowRootActive ? _overflowRootActionId : 0,
+            _executingOverflowAutoPlay);
     }
 
     public bool ForceDefeatForDevelopment()
     {
-#if UNITY_EDITOR
-        if (_encounterResolved) return false;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (_encounterResolved || _reactionFaulted || _isResolvingAction || AttackCardPresentationUI.Instance != null && AttackCardPresentationUI.Instance.IsBusy) return false;
         ResolveEncounter(EncounterResult.Defeat);
         return true;
 #else
@@ -1117,7 +1200,7 @@ public class CombatManager : Singleton<CombatManager>
     {
         get
         {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             return DevModeRuntime.InfiniteHealth;
 #else
             return false;

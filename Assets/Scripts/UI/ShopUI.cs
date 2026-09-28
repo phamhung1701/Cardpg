@@ -53,12 +53,24 @@ public class ShopUI : MonoBehaviour
 
     void HandleGoldChanged(int gold)
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (goldText) goldText.text = CardManager.Instance != null && CardManager.Instance.HasInfiniteMoney
+            ? "∞ Gold" : $"{gold}g";
+#else
         if (goldText) goldText.text = $"{gold}g";
+#endif
         if (panel != null && panel.activeSelf) RefreshItems();
     }
 
     void Open()
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (DevModeRuntime.Enabled && DevModeRuntime.UnlimitedShopOffers)
+        {
+            if (panel) panel.SetActive(false);
+            return;
+        }
+#endif
         if (panel) panel.SetActive(true);
         RefreshItems();
     }
@@ -72,6 +84,13 @@ public class ShopUI : MonoBehaviour
 
     void RefreshItems()
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (DevModeRuntime.Enabled && DevModeRuntime.UnlimitedShopOffers)
+        {
+            if (panel) panel.SetActive(false);
+            return;
+        }
+#endif
         _selectedOfferId = null;
         UpdateSelectionDetails();
         if (itemsContainer == null || itemButtonPrefab == null) return;

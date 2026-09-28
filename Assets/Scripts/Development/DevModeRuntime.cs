@@ -1,8 +1,10 @@
-#if UNITY_EDITOR
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
 using UnityEngine;
+#else
+using UnityEngine;
+#endif
 
-// Editor-only state shared by the Development EditorWindow and guarded gameplay hooks.
-// Delete this file, the DevMode Editor scripts, and their guarded call sites to remove the feature.
+// Session-only activation; PlayerPrefs stores option defaults, never an enabled state.
 public static class DevModeRuntime
 {
     const string Prefix = "CardPG.DevMode.";
@@ -10,22 +12,57 @@ public static class DevModeRuntime
     const string InfiniteHealthKey = Prefix + "InfiniteHealth";
     const string InfiniteMoneyKey = Prefix + "InfiniteMoney";
     const string UnlimitedShopOffersKey = Prefix + "UnlimitedShopOffers";
+    static bool _enabled;
 
-    public static bool Enabled => PlayerPrefs.GetInt(EnabledKey, 0) != 0;
+    public static bool Available => Application.isEditor || Debug.isDebugBuild;
+    public static bool Enabled
+    {
+        get
+        {
+#if UNITY_EDITOR
+            return Available && (_enabled || PlayerPrefs.GetInt(EnabledKey, 0) != 0);
+#elif DEVELOPMENT_BUILD
+            return Available && _enabled;
+#else
+            return false;
+#endif
+        }
+    }
     public static bool InfiniteHealth => Enabled && PlayerPrefs.GetInt(InfiniteHealthKey, 1) != 0;
     public static bool InfiniteMoney => Enabled && PlayerPrefs.GetInt(InfiniteMoneyKey, 1) != 0;
     public static bool UnlimitedShopOffers => Enabled && PlayerPrefs.GetInt(UnlimitedShopOffersKey, 1) != 0;
 
-    public static void Configure(bool enabled, bool infiniteHealth, bool infiniteMoney,
-        bool unlimitedShopOffers)
+    public static void Configure(bool enabled, bool infiniteHealth, bool infiniteMoney, bool unlimitedShopOffers)
     {
-        PlayerPrefs.SetInt(EnabledKey, enabled ? 1 : 0);
         PlayerPrefs.SetInt(InfiniteHealthKey, infiniteHealth ? 1 : 0);
         PlayerPrefs.SetInt(InfiniteMoneyKey, infiniteMoney ? 1 : 0);
         PlayerPrefs.SetInt(UnlimitedShopOffersKey, unlimitedShopOffers ? 1 : 0);
         PlayerPrefs.Save();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        _enabled = enabled && Available;
+#else
+        _enabled = false;
+#endif
+#if UNITY_EDITOR
+        PlayerPrefs.SetInt(EnabledKey, _enabled ? 1 : 0);
+        PlayerPrefs.Save();
+#endif
     }
 
-    public static void Disable() => Configure(false, false, false, false);
-}
+    public static void Disable()
+    {
+        _enabled = false;
+#if UNITY_EDITOR
+        PlayerPrefs.SetInt(EnabledKey, 0);
+        PlayerPrefs.Save();
 #endif
+    }
+    public static void ResetSession()
+    {
+        _enabled = false;
+#if UNITY_EDITOR
+        PlayerPrefs.SetInt(EnabledKey, 0);
+        PlayerPrefs.Save();
+#endif
+    }
+}

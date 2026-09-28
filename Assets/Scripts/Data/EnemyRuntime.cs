@@ -13,18 +13,42 @@ public class EnemyRuntime : ICombatDamageTarget
 
     readonly int _instanceNumber;
     readonly int _encounterSize;
+    readonly bool _alternatesChargedAttack;
+    int _responsesPrepared;
+    bool _currentResponseIsCharged;
 
     public event Action OnHpChanged;
     public event Action OnAttackChanged;
 
-    public EnemyRuntime(EnemyTypeData enemyType, int instanceNumber = 1, int encounterSize = 1)
+    public EnemyRuntime(EnemyTypeData enemyType, int instanceNumber = 1, int encounterSize = 1,
+        int? startingHp = null, int? startingAttack = null)
     {
         type = enemyType != null ? enemyType : throw new ArgumentNullException(nameof(enemyType));
-        maxHp = enemyType.maxHp;
-        currentHp = enemyType.maxHp;
-        currentAttack = enemyType.baseAttack;
+        maxHp = startingHp ?? enemyType.maxHp;
+        currentHp = maxHp;
+        currentAttack = startingAttack ?? enemyType.baseAttack;
         _instanceNumber = Mathf.Max(1, instanceNumber);
         _encounterSize = Mathf.Max(1, encounterSize);
+        _alternatesChargedAttack = enemyType.abilities != null &&
+            enemyType.abilities.Any(ability => ability != null &&
+                ability.effect == EnemyAbilityEffect.AlternateChargedAttack);
+    }
+
+    public bool NextAttackIsCharged => _alternatesChargedAttack && (_responsesPrepared & 1) == 1;
+    public bool CurrentResponseIsCharged => _currentResponseIsCharged;
+    public int ResponseAttack => _currentResponseIsCharged ? currentAttack * 2 : currentAttack;
+
+    public int PrepareResponseAttack()
+    {
+        _currentResponseIsCharged = NextAttackIsCharged;
+        _responsesPrepared++;
+        return ResponseAttack;
+    }
+
+    public void ResetResponseIntent()
+    {
+        _responsesPrepared = 0;
+        _currentResponseIsCharged = false;
     }
 
     public string DisplayName => _encounterSize > 1 ? $"{type.enemyName} {_instanceNumber}" : type.enemyName;

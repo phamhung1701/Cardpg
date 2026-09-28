@@ -45,11 +45,25 @@ public class CardManager : Singleton<CardManager>
     public bool IsBackpackFull => _backpack.Count >= BACKPACK_CAPACITY;
     public int HandCount => _cards.HandCount;
     public int HandCapacity => GameplayEffectResolver.CalculateHandCapacity(HAND_SIZE, this);
+    public int OverflowCapacity
+    {
+        get
+        {
+            int capacity = 0;
+            for (int i = 0; i < ownedArtifacts.Count; i++)
+            {
+                var rule = ownedArtifacts[i]?.specialRule;
+                if (rule == ArtifactSpecialRule.OverflowRare) return 3;
+                if (rule == ArtifactSpecialRule.OverflowCommon) capacity = 2;
+            }
+            return capacity;
+        }
+    }
     public bool HasInfiniteMoney
     {
         get
         {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             return DevModeRuntime.InfiniteMoney;
 #else
             return false;
@@ -469,13 +483,19 @@ public class CardManager : Singleton<CardManager>
     public int DrawToHand(int count)
     {
         int previousHandCount = _cards.HandCount;
-        int drawn = _cards.DrawToHand(count, HandCapacity);
+        var combat = CombatManager.Instance;
+        int normalCapacity = HandCapacity;
+        int drawCapacity = normalCapacity + (combat != null ? combat.OverflowDrawAllowance : 0);
+        int drawn = _cards.DrawToHand(count, drawCapacity);
         if (drawn <= 0) return 0;
 
         if (CanCreateViews())
         {
             for (int i = previousHandCount; i < _cards.HandCount; i++)
-                CreateView(_cards.Hand[i]);
+            {
+                var view = CreateView(_cards.Hand[i]);
+                if (i >= normalCapacity && combat != null) combat.QueueOverflowAutoPlay(view);
+            }
         }
 
         OnDeckChanged?.Invoke();
@@ -682,11 +702,12 @@ public class CardManager : Singleton<CardManager>
 
     bool CanCreateViews() => handField != null && handField.cardsHolder != null && cardPrefab != null && dragCanvas != null;
 
-    void CreateView(CardInstance cardInstance)
+    CardView CreateView(CardInstance cardInstance)
     {
         var view = Instantiate(cardPrefab);
         _trackedViews.Add(view);
         handField.AddCard(view, cardInstance);
+        return view;
     }
 
     void ClearCardState()

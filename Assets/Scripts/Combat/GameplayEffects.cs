@@ -84,6 +84,7 @@ public struct ExtraTurnRuleDefinition
 {
     public ExtraTurnRuleTrigger trigger;
     public bool oncePerEncounter;
+    public bool cannotTriggerFromBonusAction;
     public bool requireAllPlayedCardsBelowRank;
     public CardData.Rank exclusiveRank;
 }
@@ -1139,6 +1140,7 @@ public static class GameplayEffectResolver
             var rule = rules[ruleOrder];
             if (rule == null || rule.kind != GameplayRuleModifierKind.ExtraTurn) continue;
             var ruleData = rule.extraTurn;
+            if (context.Action?.IsBonusAction == true && ruleData.cannotTriggerFromBonusAction) continue;
             bool qualifies = ruleData.trigger switch
             {
                 ExtraTurnRuleTrigger.FirstPlayerTurnCompleted => context.CompletedPlayerTurn == 1,

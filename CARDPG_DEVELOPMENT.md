@@ -308,7 +308,7 @@ Implemented and verified on **September 24, 2026**. Run Setup now opens with bla
 
 **Console:** this pass's warnings/errors query returned **0** during and after the Game-scene smoke. The earlier frontend follow-up logged one Unity AI Toolkit account-service warning (`Account API did not become accessible within 30 seconds`); its stack originated in `com.unity.ai.assistant` cloud/account availability, not CardPG gameplay. No CardPG warning/error was observed in this pass. Do not extrapolate to a permanently warning-free Editor or modify gameplay to suppress unrelated service noise.
 
-**Remaining debt / next-development options:** Recover–Shield policy is decided per approved issue #14: one aggregate Recover hit uses applicable incoming combat modifiers, consumes at most one Shield charge if positive residual damage remains, draws once only on survival, and causes no second enemy attack/Retaliation; direct Run/Event HP costs bypass Shield. No authored multi-hit card exists for a player-driven input check; physical mouse/drag interaction and a complete meaningful twelve-map pacing study remain unperformed. The pacing study is deliberately deferred because 7D kept five route depths and future combat animation/presentation may change run time; it does **not** block this milestone. Potential separately scoped next steps include combat presentation/animations, enemy artwork, playtest-led pacing/Shop decisions, and a deliberate Recover–Shield ruling. New content, Artifact upgrades/replacement, extra depths, balance and unrelated systems remain future decisions, not this milestone.
+**Remaining debt / next-development options:** Recover–Shield policy is decided per approved issue #14: one aggregate Recover hit uses applicable incoming combat modifiers, consumes at most one Shield charge if positive residual damage remains, draws once only on survival, and causes no second enemy attack/Retaliation; direct Run/Event HP costs bypass Shield. No authored multi-hit card exists for a player-driven input check; physical mouse/drag interaction and a complete meaningful twelve-map pacing study remain unperformed. The pacing study is deliberately deferred because 7D kept five route depths and future combat animation/presentation may change run time; it does **not** block this milestone. Potential separately scoped next steps include combat presentation/animations, enemy artwork, and playtest-led pacing/Shop decisions. New content, Artifact upgrades/replacement, extra depths, balance and unrelated systems remain future decisions, not this milestone.
 
 
 ### Content Expansion Architecture — Shared Effects + Canonical Tier I Core — Complete
@@ -552,7 +552,47 @@ Common Tier I `rel_028` Arsenal Emblem has a blank workbook price and a temporar
 - Focused tests **6/6**, full EditMode **220/220**, and discovered PlayMode **1/1** passed. Auxiliary tests cover two sources stacking, same-card application, discard exclusion, Ace-pair preview/execution parity; Arsenal tests cover capacity 8→9, clamping, reset, and definition immutability.
 - No separate interactive Shop/combat smoke was performed. Final Console warning/error query returned **0**.
 
-### Combat UI/UX Revamp — Complete (September 26, 2026)
+### Standalone Dev Mode follow-up — implementation and tests complete; player build blocked
+
+The standalone Dev Mode UI is now generated at runtime only in the Editor/Development Build. Main Menu receives a Dev Mode entry in the previously reserved bottom slot; its setup panel accepts an optional seed and the three approved toggles. Gameplay receives a persistent DEV MODE indicator plus a coordinator-managed panel with active-setting status, Disable Cheats, and a confirmation dialog for Lose Run Now. The release compilation excludes the runtime Dev UI and all active cheat code via `UNITY_EDITOR || DEVELOPMENT_BUILD` gates; ordinary New Run/Main Menu return disable the session, while Retry Same Seed leaves it configured.
+
+`DevModeRuntime.ResetSession()` clears both in-memory activation and the Editor's legacy activation key. The Editor window's configure-before-Play path remains intact through its Editor lifecycle. Added an EditMode regression for stale activation reset and a PlayMode UI test for setup entry, overlay visibility, menu coordinator time/input blocking, close, and disable.
+
+Verification so far: Unity script recompile succeeded; focused DevMode EditMode **5/5**, full EditMode **330/330**, prior complete PlayMode suite **3/3**, and new DevMode UI PlayMode test **1/1**. The new menu UI is generated from code; no scene YAML or build scene ordering edits were made.
+
+Windows x64 Build Support reports installed. BuildPipeline builds were attempted in `D:/locus/data/temp/CardPG-DevMode-Builds` because Unity rejected the plan's suggested `Library/Locus/tmp` as an internal work directory. Both Development and release attempts failed before producing an executable: Unity's Player script compilation path raised `InvalidCastException` in `EditorCompilation.CompleteActiveBuildWhilePumping`; Bee then reported the generated Player DAG could not be loaded and Unity reported scripts had compiler errors, with no actionable source diagnostic. A subsequent release attempt similarly failed while scripts were compiling. Therefore no EXE launch, release exclusion audit, Player log inspection, or interactive shop/retry/defeat smoke is claimed. This environment/build-pipeline blocker remains for a clean Editor restart or independent command-line build retry.
+
+Manual procedure once a Windows Development Build is available: launch Main Menu → Dev Mode → set seed/toggles → Start Dev Run; verify the DEV banner, visit a Shop and scroll all eligible offers, test health/money behavior, open DEV → confirm Lose Run Now and inspect normal defeat result, Retry Same Seed (same options), Disable Cheats (no retroactive refunds/heals), then return to Main Menu and start a normal run. Close and relaunch the app to verify dev mode starts off. In a non-Development release EXE, verify no Dev Mode entry or overlay and normal health, money, and shop behavior even if `CardPG.DevMode.Enabled` exists in PlayerPrefs.
+
+
+
+
+Added a removable Unity Editor developer tool at `CardPG/Development/Dev Mode`. It starts Play Mode from the existing `Assets/Scenes/Game.unity` and keeps the dev controls in a separate Editor window—no Main Menu button, extra game scene, or Build Settings entry. The runtime overrides are guarded by `UNITY_EDITOR`; the DevMode Editor window is under `Assets/Editor/DevMode/`.
+
+- **Infinite health:** combat and direct Run/Event HP costs are suppressed while enabled.
+- **Infinite money:** spending and affordability checks are bypassed; the gameplay HUD shows `∞`.
+- **Unlimited Shop offers:** each Shop exposes all currently unowned Artifact catalog entries and all Enhancement definitions in the scrollable Editor Dev Shop browser. Purchases still use RunManager's cached-offer, duplicate, targeting, and price validation paths. The normal five-Persistent-Artifact cap and one-Enhancement-per-card rule remain enforced. The standard Shop panel is hidden only during this Editor dev mode.
+- **Lose Run Now:** invokes the existing one-shot `EncounterResult.Defeat` path and displays the normal Defeat results.
+- EditMode `DevModeTests`: **4/4** passed; full EditMode **224/224**; discovered PlayMode **1/1**. Programmatic Play Mode smoke verified no combat/event HP loss, no Gold spending, all **28** catalog offers (22 Artifacts + 6 Enhancements), the five-slot Artifact cap, the normal Shop panel hidden, and the Dev window present. The Lose Run path produced GameOver and the results screen. The Dev window's actual GUI buttons were not physically clicked.
+- Build Settings were not changed; only MainMenu, Game, and Bootstrap remain enabled for the player build. To remove the feature at release, delete `Assets/Editor/DevMode/` and `Assets/Scripts/Development/DevModeRuntime.cs`, then remove the small `#if UNITY_EDITOR` hooks in the runtime managers/UI. No DevMode scene or MainMenu wiring is required.
+
+No new workbook content was added in this dev-mode task.
+
+### Incremental workbook Event — `evt_009` Noble Family — Complete (September 27, 2026)
+
+Added the Common Tier I spreadsheet Event using only existing event effects: **Refuse** has no effect; **Accept** grants +10 Gold. Authored `Assets/Data/Run/Events/NobleFamily.asset` and appended it to `PrototypeRunContent.asset`'s standard Event catalog. No resolver, UI, map topology, Shop, RNG, or combat changes were needed. The spreadsheet has no price for this Event; it is not a Shop offer.
+
+- Added `Assets/Tests/EditMode/NobleFamilyEventTests.cs` for canonical definition/catalog registration and both choice outcomes through the existing `RunEffectResolver`.
+- Focused Noble Family tests **2/2**; adjacent event/map regression **4/4**; full EditMode **245/245** (0 failed/skipped/inconclusive); discovered PlayMode suite **1/1**. Final Unity Console error/warning query **0**. No dedicated manual Game-scene event interaction was performed; the authored data, catalog link, and resolver outcomes are covered by EditMode tests.
+- No other workbook content was added in this increment.
+
+### Incremental workbook Event — `evt_006` Tavern — Complete (September 27, 2026)
+
+Added the Common Tier I Tavern event. **Ask for Guidance** reveals exactly one reachable, normally hidden Event/Risk node using the same deterministic route-depth → row → node-ID policy as Lantern; it changes visibility only, preserves route links/topology, notifies map UI, and consumes no RNG. The choice is unavailable when no eligible node remains. **Rest** applies the existing ordered effects: spend 2 Gold, then heal 5 HP (clamped by normal player health rules). The event has no Shop price.
+
+- Added the typed `RunEffectType.RevealMapNode` run/event effect and reused RunManager's shared hidden-node eligibility/selection logic; no combat, seeded stream, or route-generation changes.
+- Added `Assets/Tests/EditMode/TavernEventTests.cs`. Focused Tavern + prior event/Lantern regressions **8/8**; full EditMode **249/249** (0 failed/skipped/inconclusive); discovered PlayMode **1/1**. Final Console error/warning query **0**. EditMode exercised the authoritative RunManager choice flow; no separate manual Game-scene click-through was performed.
+- No other workbook content was added in this increment. Blacksmith's Enhancement selection/target semantics and Shop Guidance's purchase interaction remain deferred as requested; no behavior was inferred for them.
 
 One presentation-only Game-scene batch replaced the previous row/hand/action geometry with a Balatro-like centered curved fan (dynamic, modest overlap; hover and selected elevation; cursor-centered drag, hysteresis, smooth reflow and return), visual-only Rank/Suit sorts, centered responsive 1–3-enemy prefab row, compact top run state and left Gold/Draw Deck control, right icon-only Artifact rail with tooltip/detail and capacity count, bottom Play/Sort/Block actions, and bottom-right HP/incoming damage/Take Damage. Recover stays reachable with an empty hand. The draw viewer now lists the **remaining draw deck cards**, not discarded cards or a build summary. The gameplay seed remains hidden; no separate Discard action or pile HUD was introduced. Combat legality, card identity/zones, run generation, effects, damage, and defense assignment remain authoritative in their existing managers/models. No enemy death animations or unrelated presentation were started.
 
@@ -572,7 +612,7 @@ Files: `Assets/Scenes/Game.unity`, `Assets/Scripts/UI/ActionButtonsUI.cs`, `Card
 
 ## 9. Next Task
 
-Continue gradual content expansion from `CardPG_GameData_organized.xlsx`; inspect exact definitions and current repository support first. Completed incremental entries are `rel_014` Ace Emblem, `rel_016` Retaliation Emblem, `rel_019` Chain Armor, `rel_028` Arsenal Emblem, `enh_007` Golden, and `enh_008` Auxiliary. No additional next entry is selected here. Favor content that fits current typed effects, add focused tests, then regress before proceeding. Stop/defer on regressions or unresolved semantics.
+Continue gradual content expansion from `CardPG_GameData_organized.xlsx`; inspect exact definitions and current repository support first. Completed incremental entries include `evt_006` Tavern, `evt_009` Noble Family, `rel_014` Ace Emblem, `rel_016` Retaliation Emblem, `rel_019` Chain Armor, `rel_028` Arsenal Emblem, `enh_007` Golden, and `enh_008` Auxiliary. No next content entry is selected. Favor content that fits current systems, add focused tests, then regress before proceeding. Stop/defer on regressions or unresolved semantics.
 
 ## 10. Instructions for Future Locus Sessions
 

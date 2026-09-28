@@ -35,6 +35,9 @@ public sealed class PlayerRuntime : ICombatDamageTarget
 
     public int ModifyIncomingCombatDamage(DamageRequest request, CombatManager context, int damage)
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (DevModeRuntime.InfiniteHealth) return 0;
+#endif
         // Run/Event HP costs use TakeDamage directly and never enter this combat pipeline.
         if (context == null || request.Origin is not (
                 CombatDamageOrigin.Card or CombatDamageOrigin.EnemyAggregate or
@@ -67,6 +70,9 @@ public sealed class PlayerRuntime : ICombatDamageTarget
 
     public int TakeDamage(int amount)
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (DevModeRuntime.InfiniteHealth) return 0;
+#endif
         if (amount <= 0 || IsDefeated)
             return 0;
 

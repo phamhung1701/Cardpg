@@ -27,6 +27,18 @@ public sealed class GameFlowService : MonoBehaviour
 
     public void StartRun(string seed)
     {
+        DevModeRuntime.Disable();
+        LoadRun(seed);
+    }
+
+    public void StartDevRun(string seed, bool infiniteHealth, bool infiniteMoney, bool unlimitedShopOffers)
+    {
+        DevModeRuntime.Configure(true, infiniteHealth, infiniteMoney, unlimitedShopOffers);
+        LoadRun(seed);
+    }
+
+    void LoadRun(string seed)
+    {
         RestoreGlobalRuntimeState();
         FrontendLaunchContext.RequestRun(seed);
         SceneManager.LoadScene(GameSceneName);
@@ -34,6 +46,7 @@ public sealed class GameFlowService : MonoBehaviour
 
     public void ShowMainMenu(MainMenuDestination destination = MainMenuDestination.Home)
     {
+        DevModeRuntime.Disable();
         RestoreGlobalRuntimeState();
         FrontendLaunchContext.RequestMainMenu(destination);
         SceneManager.LoadScene(MainMenuSceneName);

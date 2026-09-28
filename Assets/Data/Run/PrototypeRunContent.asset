@@ -16,6 +16,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 4cf02a4bcf7b3ac4aa246a0da053d4eb, type: 2}
   - {fileID: 11400000, guid: d1bd1b5f338bb314187873c9dc5563c8, type: 2}
   - {fileID: 11400000, guid: 190c7f06bbf4153429c9f2f030089994, type: 2}
+  - {fileID: 11400000, guid: eebe928cdd822a84d9a73cadc36ea448, type: 2}
+  - {fileID: 11400000, guid: 3fc15e9ace73cec4598577014da993f0, type: 2}
   eliteAbility: {fileID: 11400000, guid: f84b541f748adf048a3c39827d6f1fea, type: 2}
   clubsBossAbility: {fileID: 11400000, guid: 53482898301764e4595a1ae179aa2ab0, type: 2}
   diamondsBossAbility: {fileID: 11400000, guid: bb29b3d4b94735745ab8194247764ed2, type: 2}

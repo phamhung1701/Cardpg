@@ -352,14 +352,46 @@ public class RunManager : Singleton<RunManager>
             return;
         }
 
+        var stats = GetEncounterStats(node);
         int encounterCount = node.kind == MapNodeType.Combat
             ? Mathf.Max(1, enemyType.encounterCount)
             : 1;
-        var enemies = new List<EnemyRuntime>(encounterCount);
+        var enemies = new List<EnemyRuntime>(encounterCount + 1);
         for (int i = 0; i < encounterCount; i++)
-            enemies.Add(new EnemyRuntime(enemyType, i + 1, encounterCount));
+            enemies.Add(new EnemyRuntime(enemyType, i + 1, encounterCount, stats.hp, stats.attack));
+
+        if (node.kind == MapNodeType.Combat && ShouldAddGoblinAlly(node, enemyType))
+        {
+            var goblin = GetNormalEnemies().FirstOrDefault(enemy => enemy != null && enemy.enemyName == "Goblin");
+            if (goblin != null)
+            {
+                var allyStats = EnemyMapScaling.Scale(goblin.maxHp, goblin.baseAttack, node.mapIndex);
+                enemies.Add(new EnemyRuntime(goblin, startingHp: allyStats.hp, startingAttack: allyStats.attack));
+            }
+        }
 
         CombatManager.Instance.StartEncounter(enemies);
+    }
+
+    bool ShouldAddGoblinAlly(PathNode node, EnemyTypeData enemyType)
+    {
+        if (enemyType.enemyName == "Shieldbearer") return true;
+        if (enemyType.enemyName != "Knight" || node.mapIndex < 3) return false;
+        var random = (_randomContext ?? new RunRandomContext(runSeed)).CreateStream(
+            "knight-weak-ally", unchecked(node.mapIndex * 7919 ^ node.id));
+        return random.NextInt(0, 2) == 0;
+    }
+
+    /// <summary>Preview and spawn use the same scaled base stats; elite bonuses are applied afterwards.</summary>
+    public (int hp, int attack) GetEncounterStats(PathNode node)
+    {
+        if (node == null) return (0, 0);
+        var source = node.kind == MapNodeType.Boss ? CurrentBoss : FindEnemy(node.contentId);
+        if (source == null) return (0, 0);
+        var stats = EnemyMapScaling.Scale(source.maxHp, source.baseAttack, node.mapIndex);
+        return node.kind == MapNodeType.Elite
+            ? (Mathf.CeilToInt(stats.hp * 1.5f), stats.attack + 2)
+            : stats;
     }
 
     EnemyTypeData CreateEliteType(EnemyTypeData source)
@@ -426,15 +458,25 @@ public class RunManager : Singleton<RunManager>
     public string GetNodeDesc(PathNode node)
     {
         if (node == null) return string.Empty;
+        bool showStats = node.accessible && node.revealed &&
+            (node.kind == MapNodeType.Combat || node.kind == MapNodeType.Elite || node.kind == MapNodeType.Boss);
+        var stats = showStats ? GetEncounterStats(node) : (hp: 0, attack: 0);
+        showStats &= stats.hp > 0;
         return node.kind switch
         {
-            MapNodeType.Combat => "Normal encounter",
-            MapNodeType.Elite => "Hard fight • better gold",
+            MapNodeType.Combat => showStats
+                ? $"Normal encounter • primary enemy {stats.hp} HP / {stats.attack} ATK"
+                : "Normal encounter",
+            MapNodeType.Elite => showStats
+                ? $"Hard fight • better gold • {stats.hp} HP / {stats.attack} ATK"
+                : "Hard fight • better gold",
             MapNodeType.Shop => "Spend gold on artifacts and card enhancements",
             MapNodeType.Event => "A choice with immediate effects",
             MapNodeType.Upgrade => "Choose a free card enhancement",
             MapNodeType.Risk => "Trade safety for a stronger reward",
-            MapNodeType.Boss => "Major boss encounter",
+            MapNodeType.Boss => showStats
+                ? $"Major boss encounter • {stats.hp} HP / {stats.attack} ATK"
+                : "Major boss encounter",
             _ => string.Empty
         };
     }
@@ -580,7 +622,7 @@ public class RunManager : Singleton<RunManager>
         var cards = CardManager.Instance;
         if (_activeNode == null || _activeNode.kind != MapNodeType.Shop || cards == null)
             return;
-#if UNITY_EDITOR
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (DevModeRuntime.UnlimitedShopOffers)
         {
             PrepareAllDevShopOffers(cards);
@@ -661,7 +703,7 @@ public class RunManager : Singleton<RunManager>
         _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Guidance, price = 5 });
     }
 
-#if UNITY_EDITOR
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
     void PrepareAllDevShopOffers(CardManager cards)
     {
         foreach (var artifact in cards.relicCatalog

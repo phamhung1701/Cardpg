@@ -21,6 +21,9 @@ public sealed class PauseMenuUI : MonoBehaviour
 
     void OnEnable()
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        DevModePanelUI.InstallGame(this);
+#endif
         if (pauseButton) pauseButton.onClick.AddListener(OpenPause);
         if (resumeButton) resumeButton.onClick.AddListener(Resume);
         if (settingsButton) settingsButton.onClick.AddListener(OpenSettings);

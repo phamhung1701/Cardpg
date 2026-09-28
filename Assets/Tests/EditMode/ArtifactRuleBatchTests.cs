@@ -104,6 +104,13 @@ public sealed class ArtifactRuleBatchTests
         Assert.That(cheater.ruleModifiers[0].kind, Is.EqualTo(GameplayRuleModifierKind.ExtraTurn));
         Assert.That(cheater.ruleModifiers[0].extraTurn.trigger, Is.EqualTo(ExtraTurnRuleTrigger.FirstPlayerTurnCompleted));
         Assert.That(cheater.ruleModifiers[0].extraTurn.oncePerEncounter, Is.True);
+        var cheaterRare = AssetDatabaseArtifact("rel_024");
+        Assert.That(cheaterRare.rarity, Is.EqualTo("Rare"));
+        Assert.That(cheaterRare.tier, Is.EqualTo(2));
+        Assert.That(cheaterRare.upgradeFromId, Is.EqualTo("rel_011"));
+        Assert.That(cheaterRare.ruleModifiers[0].extraTurn.trigger, Is.EqualTo(ExtraTurnRuleTrigger.QualifyingPlayedActionCompleted));
+        Assert.That(cheaterRare.ruleModifiers[0].extraTurn.oncePerEncounter, Is.False);
+        Assert.That(cheaterRare.ruleModifiers[0].extraTurn.cannotTriggerFromBonusAction, Is.True);
         Assert.That(hands.ruleModifiers[0].kind, Is.EqualTo(GameplayRuleModifierKind.SameRankMultiCard));
         Assert.That(hands.ruleModifiers[0].sameRankMultiCard.maximumCards, Is.EqualTo(3));
         Assert.That(hands.effects.Single(e=>e.kind==GameplayEffectKind.ActionDamageCap).amount, Is.EqualTo(10));
@@ -136,6 +143,133 @@ public sealed class ArtifactRuleBatchTests
         Assert.That(_combat.TryPlayCards(new[] { nextAction }, enemy), Is.True);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
         Assert.That(_combat.player.currentHealth, Is.EqualTo(28), "Cheater does not retrigger after its first player turn.");
+    }
+
+    [Test]
+    public void Cheater_GrantsOneBonusPerNormalActionButNeverFromTheBonusAction()
+    {
+        var cheater = AssetDatabaseArtifact("rel_024");
+        var commonCheater = AssetDatabaseArtifact("rel_011");
+        _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
+            new[] { commonCheater, cheater, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
+        Buy(commonCheater);
+        Buy(cheater);
+        var enemy = StartTarget(200, 1);
+        _combat.CriticalChancePercent = 0;
+        Assert.That(_combat.TryPlayCards(new[] { FindView(c => c.Rank == CardData.Rank.Two) }, enemy), Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(_combat.IsBonusPlayerAction, Is.True);
+        Assert.That(_combat.TryPlayCards(new[] { FindView(c => c.Rank == CardData.Rank.Three) }, enemy), Is.True,
+            "The bonus action does not recurse; enemy response follows it.");
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        _combat.TakeRemainingDamage();
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(_combat.IsBonusPlayerAction, Is.False);
+        Assert.That(_combat.TryPlayCards(new[] { FindView(c => c.Rank == CardData.Rank.Four) }, enemy), Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn),
+            "The next ordinary action receives its own single bonus action.");
+    }
+
+    [TestCase("rel_015", 2)]
+    [TestCase("rel_021", 3)]
+    public void Overflow_AutoPlaysNestedDrawsWithinTheSharedPerActionBudget(string artifactId, int budget)
+    {
+        var common = AssetDatabaseArtifact("rel_015");
+        var overflow = AssetDatabaseArtifact(artifactId);
+        _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
+            new[] { common, overflow, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
+        if (artifactId == "rel_021") Buy(common);
+        Buy(overflow);
+        _combat.CriticalChancePercent = 0;
+        var enemy = StartTarget(1000, 1);
+        _cards.DrawToHand(CardManager.HAND_SIZE);
+        Assert.That(_cards.HandCount, Is.EqualTo(CardManager.HAND_SIZE));
+        var draw = ScriptableObject.CreateInstance<CardEnhancementData>();
+        draw.displayName = "Draw Two on Play";
+        draw.drawOnPlay = 2;
+        _assets.Add(draw);
+        foreach (var card in _cards.ownedCards)
+            Assert.That(card.TryApplyEnhancement(draw), Is.True);
+        var selected = FindView(_ => true);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+        Assert.That(_combat.TryPlayCards(new[] { selected }, enemy), Is.True);
+        Assert.That(results, Has.Count.EqualTo(budget + 1),
+            "Nested on-play draws share the root action's Overflow budget.");
+        long rootActionId = results[0].Request.Action.ActionId;
+        Assert.That(results[0].Request.Action.IsOverflowAutoPlay, Is.False);
+        for (int i = 1; i < results.Count; i++)
+        {
+            Assert.That(results[i].Request.Action.IsOverflowAutoPlay, Is.True);
+            Assert.That(results[i].Request.Action.RootActionId, Is.EqualTo(rootActionId));
+        }
+        Assert.That(_combat.QueuedOverflowAutoPlayCount, Is.Zero,
+            "No committed overflow card remains queued after the root action resolves.");
+        Assert.That(_cards.HandCount, Is.LessThanOrEqualTo(_cards.HandCapacity));
+        foreach (var result in results)
+            Assert.That(_cards.discardPile, Does.Contain(result.Request.Action.Card),
+                "Each auto-played card has the normal discard disposition.");
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        _combat.TakeRemainingDamage();
+        var beforeSecondAction = results.Count;
+        var nextAction = FindView(_ => true);
+        Assert.That(_combat.TryPlayCards(new[] { nextAction }, enemy), Is.True);
+        Assert.That(results.Count - beforeSecondAction, Is.EqualTo(budget + 1),
+            "A later player action receives a fresh Overflow budget.");
+    }
+
+    [Test]
+    public void Overflow_AutoPlayFallsBackToFirstLivingEnemyAndClearsCommittedQueue()
+    {
+        var overflow = AssetDatabaseArtifact("rel_015");
+        _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
+            new[] { overflow, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
+        Buy(overflow);
+        _combat.CriticalChancePercent = 0;
+        var first = new EnemyRuntime(Type("First target", 1, 1));
+        var fallback = new EnemyRuntime(Type("Fallback target", 1000, 1));
+        _combat.StartEncounter(new[] { first, fallback });
+        _cards.DrawToHand(CardManager.HAND_SIZE);
+        var draw = ScriptableObject.CreateInstance<CardEnhancementData>();
+        draw.displayName = "Draw Two on Play"; draw.drawOnPlay = 2;
+        _assets.Add(draw);
+        foreach (var card in _cards.ownedCards) Assert.That(card.TryApplyEnhancement(draw), Is.True);
+        var selected = FindView(_ => true);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+        Assert.That(_combat.TryPlayCards(new[] { selected }, first), Is.True);
+        Assert.That(results, Has.Count.EqualTo(3));
+        Assert.That(results[0].Request.Target, Is.SameAs(first));
+        Assert.That(results.Skip(1).All(result => ReferenceEquals(result.Request.Target, fallback)), Is.True,
+            "Auto-plays select the first living encounter enemy after the selected target dies.");
+        Assert.That(_combat.QueuedOverflowAutoPlayCount, Is.Zero);
+        Assert.That(_cards.HandCount, Is.LessThanOrEqualTo(_cards.HandCapacity));
+    }
+
+    [Test]
+    public void Overflow_EncounterTerminationDropsPendingQueueWithoutOrphaningCards()
+    {
+        var overflow = AssetDatabaseArtifact("rel_015");
+        _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
+            new[] { overflow, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
+        Buy(overflow);
+        _combat.CriticalChancePercent = 0;
+        var lastEnemy = new EnemyRuntime(Type("Last target", 1, 1));
+        _combat.StartEncounter(new[] { lastEnemy });
+        _cards.DrawToHand(CardManager.HAND_SIZE);
+        var draw = ScriptableObject.CreateInstance<CardEnhancementData>();
+        draw.displayName = "Draw Two on Play"; draw.drawOnPlay = 2;
+        _assets.Add(draw);
+        foreach (var card in _cards.ownedCards) Assert.That(card.TryApplyEnhancement(draw), Is.True);
+        var selected = FindView(_ => true);
+        int hits = 0;
+        _combat.OnDamageResolved += _ => hits++;
+        Assert.That(_combat.TryPlayCards(new[] { selected }, lastEnemy), Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameWon));
+        Assert.That(hits, Is.EqualTo(1), "No queued overflow card plays after encounter victory.");
+        Assert.That(_combat.QueuedOverflowAutoPlayCount, Is.Zero);
+        Assert.That(Views().Length, Is.EqualTo(_cards.HandCount),
+            "Undelivered overflow cards remain valid hand-owned cards, with no orphan/destroyed views.");
     }
 
     [Test]
