@@ -187,20 +187,86 @@ public sealed class Phase7B5CombatFoundationTests
     }
 
     [Test]
-    public void Recover_TemporarilyUsesCombatShieldPolicyAndStillDrawsOnce()
+    public void Recover_MultiEnemyAggregateAppliesReductionThenConsumesOneShieldAndDrawsOnce()
     {
-        var enemy = new EnemyRuntime(CreateEnemyType("Shielded Recover", 100, 6, 0));
-        _combat.StartEnemy(enemy);
+        var reduction = ScriptableObject.CreateInstance<RelicData>();
+        reduction.id = "recover-reduction";
+        reduction.effects = new[]
+        {
+            new GameplayEffectDefinition
+            {
+                kind = GameplayEffectKind.IncomingCombatDamageReduction,
+                trigger = GameplayEffectTrigger.IncomingDamageCalculated,
+                amount = 2,
+                conditions = Array.Empty<GameplayEffectCondition>()
+            }
+        };
+        _created.Add(reduction);
+        var type = CreateEnemyType("Shielded Recover", 100, 6, 0);
+        var firstEnemy = new EnemyRuntime(type, 1, 3);
+        var secondEnemy = new EnemyRuntime(type, 2, 3);
+        _cards.ownedArtifacts.Add(reduction);
+        _combat.StartEncounter(new[] { firstEnemy, secondEnemy });
+        Assert.That(_combat.TotalEnemyAttack, Is.EqualTo(12));
         foreach (var view in HandViews().ToArray())
             Assert.That(_cards.TryDiscard(view), Is.True);
         _combat.GrantPlayerShield(1);
+        var damageResults = new List<DamageResult>();
+        _combat.OnDamageResolved += damageResults.Add;
 
         _combat.Recover();
 
-        Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
-        Assert.That(_combat.player.ShieldCharges, Is.Zero);
-        Assert.That(_cards.HandCount, Is.EqualTo(1));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(30), "Typed incoming reduction applies before Shield.");
+        Assert.That(_combat.player.ShieldCharges, Is.Zero, "One positive post-reduction aggregate hit consumes one Shield charge.");
+        Assert.That(damageResults.Count, Is.EqualTo(1), "One aggregate Recover hit; no second enemy attack/Retaliation.");
+        Assert.That(damageResults[0].Request.Origin, Is.EqualTo(CombatDamageOrigin.Recovery));
+        Assert.That(damageResults[0].ModifiedDamage, Is.EqualTo(10));
+        Assert.That(damageResults[0].ShieldConsumed, Is.True);
+        Assert.That(damageResults[0].ShieldBlockedDamage, Is.EqualTo(10));
+        Assert.That(_cards.HandCount, Is.EqualTo(1), "Survival makes one draw request.");
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+    }
+
+    [Test]
+    public void Recover_ZeroPostReductionDamagePreservesShieldAndStillDrawsOnce()
+    {
+        var reduction = ScriptableObject.CreateInstance<RelicData>();
+        reduction.id = "recover-full-reduction";
+        reduction.effects = new[]
+        {
+            new GameplayEffectDefinition
+            {
+                kind = GameplayEffectKind.IncomingCombatDamageReduction,
+                trigger = GameplayEffectTrigger.IncomingDamageCalculated,
+                amount = 10,
+                conditions = Array.Empty<GameplayEffectCondition>()
+            }
+        };
+        _created.Add(reduction);
+        _cards.ownedArtifacts.Add(reduction);
+        var type = CreateEnemyType("Fully Reduced Recover", 100, 4, 0);
+        var firstEnemy = new EnemyRuntime(type, 1, 4);
+        var secondEnemy = new EnemyRuntime(type, 2, 4);
+        _combat.StartEncounter(new[] { firstEnemy, secondEnemy });
+        foreach (var view in HandViews().ToArray())
+            Assert.That(_cards.TryDiscard(view), Is.True);
+        _combat.GrantPlayerShield(1);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+
+        _combat.Recover();
+
+        Assert.That(results.Count, Is.EqualTo(1), "Both enemies contribute to one Recovery damage request.");
+        Assert.That(results[0].RequestedDamage, Is.EqualTo(8));
+        Assert.That(results[0].ModifiedDamage, Is.Zero);
+        Assert.That(results[0].ShieldConsumed, Is.False);
+        Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
+        Assert.That(_cards.HandCount, Is.EqualTo(1));
+
+        Assert.That(_combat.TakeRunDamage(2), Is.EqualTo(2), "Direct Run/Event HP costs bypass Shield.");
+        Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(28));
     }
 
     [Test]

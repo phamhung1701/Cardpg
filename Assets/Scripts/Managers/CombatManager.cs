@@ -678,7 +678,7 @@ public class CombatManager : Singleton<CombatManager>
             return;
 
         int damage = TotalEnemyAttack;
-        // Temporary Phase 7B.5 policy: Recover is combat damage and may consume one Shield charge.
+        // Recover is one aggregate combat-damage hit; apply reductions before its single Shield check.
         ResolvePlayerDamageAction(
             CombatActionOrigin.Recovery,
             CombatDamageOrigin.Recovery,
