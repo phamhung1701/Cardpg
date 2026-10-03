@@ -6,7 +6,8 @@ public enum ShopOfferKind
     Enhancement,
     Investment,
     Guidance,
-    Consumable
+    Consumable,
+    Contract
 }
 
 [Serializable]
@@ -17,6 +18,7 @@ public sealed class ShopOffer
     public CardEnhancementData enhancement;
     public ConsumableData consumable;
     public int slot;
+    public int basePrice;
     public int price;
 
     public string StableId => kind switch
@@ -26,6 +28,7 @@ public sealed class ShopOffer
         ShopOfferKind.Investment => "investment",
         ShopOfferKind.Guidance => "guidance",
         ShopOfferKind.Consumable => $"consumable:{consumable?.id}",
+        ShopOfferKind.Contract => "contract:quest",
         _ => "unknown"
     };
 
@@ -36,6 +39,7 @@ public sealed class ShopOffer
         ShopOfferKind.Investment => "Investment",
         ShopOfferKind.Guidance => "Guidance",
         ShopOfferKind.Consumable => consumable != null ? consumable.displayName : "Unknown Consumable",
+        ShopOfferKind.Contract => "Quest Contract",
         _ => "Unknown Offer"
     };
 
@@ -64,6 +68,8 @@ public sealed class ShopOffer
             return "Invest 5 Gold. At the next Shop, there is a 50% chance to receive 15 Gold; otherwise receive nothing.";
         if (kind == ShopOfferKind.Guidance)
             return "Reveal one reachable hidden Event or Risk node on the current map.";
+        if (kind == ShopOfferKind.Contract)
+            return "Pay 20 Gold, then choose one run-local objective. Complete it for a reward; failure costs 5 HP.";
         return string.Empty;
     }
 }

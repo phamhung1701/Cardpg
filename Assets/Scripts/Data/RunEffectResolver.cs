@@ -22,7 +22,6 @@ public static class RunEffectResolver
         int simulatedGold = infiniteGold ? int.MaxValue : cards.gold;
         int simulatedHealth = infiniteHealth ? int.MaxValue : combat.player.currentHealth;
         int simulatedMaxHealth = infiniteHealth ? int.MaxValue : combat.player.maxHealth;
-        int simulatedBackpackSlots = cards.BackpackSlotsUsed;
         foreach (var effect in choice.effects ?? Array.Empty<RunEffect>())
         {
             switch (effect.type)
@@ -58,9 +57,8 @@ public static class RunEffectResolver
                     var consumable = cards.FindConsumable(effect.consumableId);
                     if (consumable == null || !consumable.eventAvailable) return "Consumable unavailable";
                     int slotCount = Math.Max(1, effect.amount);
-                    if (slotCount > CardManager.BACKPACK_CAPACITY - simulatedBackpackSlots)
+                    if (!cards.CanAddConsumable(consumable, slotCount))
                         return "Backpack Full";
-                    simulatedBackpackSlots += slotCount;
                     break;
                 case RunEffectType.RandomArtifactEnhancementOrNothing:
                     if (run == null) return "Reward unavailable";

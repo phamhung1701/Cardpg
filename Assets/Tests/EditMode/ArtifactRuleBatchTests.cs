@@ -172,13 +172,17 @@ public sealed class ArtifactRuleBatchTests
 
     [TestCase("rel_015", 2)]
     [TestCase("rel_021", 3)]
+    [TestCase("rel_110", 3)]
     public void Overflow_AutoPlaysNestedDrawsWithinTheSharedPerActionBudget(string artifactId, int budget)
     {
         var common = AssetDatabaseArtifact("rel_015");
+        var rare = AssetDatabaseArtifact("rel_021");
         var overflow = AssetDatabaseArtifact(artifactId);
         _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
-            new[] { common, overflow, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
-        if (artifactId == "rel_021") Buy(common);
+            new[] { common, rare, overflow, _hands, _dwarf, _dagger, _healingLight }.Distinct().ToArray(),
+            Array.Empty<CardEnhancementData>());
+        if (artifactId != "rel_015") Buy(common);
+        if (artifactId == "rel_110") Buy(rare);
         Buy(overflow);
         _combat.CriticalChancePercent = 0;
         var enemy = StartTarget(1000, 1);
@@ -196,6 +200,9 @@ public sealed class ArtifactRuleBatchTests
         Assert.That(_combat.TryPlayCards(new[] { selected }, enemy), Is.True);
         Assert.That(results, Has.Count.EqualTo(budget + 1),
             "Nested on-play draws share the root action's Overflow budget.");
+        if (artifactId == "rel_110")
+            Assert.That(results[1].Request.RequestedDamage, Is.GreaterThan(results[1].Request.Action.Card.BaseAttackValue),
+                "Overflow Epic adds its current unplayed hand count to auto-play damage.");
         long rootActionId = results[0].Request.Action.ActionId;
         Assert.That(results[0].Request.Action.IsOverflowAutoPlay, Is.False);
         for (int i = 1; i < results.Count; i++)
@@ -634,6 +641,91 @@ public sealed class ArtifactRuleBatchTests
         Assert.That(_combat.QueuedExtraPlayerTurns, Is.Zero);
         Assert.That(_cards.ownedArtifacts, Is.Empty);
         Assert.That(_cards.ownedCards, Has.Count.EqualTo(40));
+    }
+
+    [Test]
+    public void Phase5Artifacts_AuthorExpectedCatalogMetadataAndUpgradeChains()
+    {
+        var club = AssetDatabaseArtifact("rel_034");
+        var overflow = AssetDatabaseArtifact("rel_110");
+        var crest = AssetDatabaseArtifact("rel_136");
+        var bounty = AssetDatabaseArtifact("rel_126");
+        var gilded = AssetDatabaseArtifact("rel_128");
+        Assert.That(club.rarity, Is.EqualTo("Epic"));
+        Assert.That(club.upgradeFromId, Is.EqualTo("rel_025"));
+        Assert.That(club.specialRule, Is.EqualTo(ArtifactSpecialRule.ClubEpic));
+        Assert.That(overflow.upgradeFromId, Is.EqualTo("rel_021"));
+        Assert.That(overflow.specialRule, Is.EqualTo(ArtifactSpecialRule.OverflowEpic));
+        Assert.That(crest.rarity, Is.EqualTo("Common"));
+        Assert.That(bounty.rarity, Is.EqualTo("Common"));
+        Assert.That(gilded.rarity, Is.EqualTo("Common"));
+        Assert.That(new[] { crest.price, bounty.price, gilded.price }, Is.All.EqualTo(20));
+    }
+
+    [Test]
+    public void ClubEpic_MultipliesByEachOtherClubHeldAndExcludesPlayedCards()
+    {
+        var epic = AssetDatabaseArtifact("rel_034");
+        _cards.ownedArtifacts.Add(epic);
+        var clubViews = EnsureInHand(c => c.Suit == CardData.Suit.Clubs, 2);
+        var played = clubViews[0].data;
+        int expected = (int)((long)played.BaseAttackValue * 5 / 4);
+        Assert.That(_combat.CalculateCardAttackDamage(played, new[] { played }), Is.EqualTo(expected));
+        Assert.That(_combat.CalculateCardAttackDamage(played, Array.Empty<CardInstance>()),
+            Is.EqualTo((int)((long)played.BaseAttackValue * 25 / 16)),
+            "The still-held Club is counted when it is not part of the committed cards.");
+    }
+
+    [Test]
+    public void ChallengerCrest_GrantsOneShieldOnlyForEliteOrBossCombat()
+    {
+        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_136"));
+        _combat.StartEncounter(new[] { new EnemyRuntime(Type("Crest Test", 100, 1)) }, MapNodeType.Combat);
+        Assert.That(_combat.player.ShieldCharges, Is.Zero);
+        _combat.Reset();
+        _combat.StartEncounter(new[] { new EnemyRuntime(Type("Elite Crest Test", 100, 1)) }, MapNodeType.Elite);
+        Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
+        _combat.Reset();
+        _combat.StartEncounter(new[] { new EnemyRuntime(Type("Boss Crest Test", 100, 1)) }, MapNodeType.Boss);
+        Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void GildedBlade_UsesOpeningGoldSnapshotAndOnlyAddsItsBonusOncePerAttack()
+    {
+        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_128"));
+        _cards.gold = 29;
+        var target = StartTarget(500, 1);
+        var first = FindView(_ => true);
+        int firstBase = first.data.BaseAttackValue;
+        Assert.That(_combat.CalculateCardAttackDamage(first.data), Is.EqualTo(firstBase + 2));
+        Assert.That(_combat.TryPlayCards(new[] { first }, target), Is.True);
+        _combat.TakeRemainingDamage();
+        var next = FindView(_ => true);
+        Assert.That(_combat.CalculateCardAttackDamage(next.data), Is.EqualTo(next.data.BaseAttackValue),
+            "The bonus does not repeat after the opening attack.");
+    }
+
+    [Test]
+    public void OverflowEpic_UsesRareBudgetAndKeepsEpicEffectOutOfOrdinaryAttacks()
+    {
+        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_110"));
+        Assert.That(_cards.OverflowCapacity, Is.EqualTo(3));
+        var ordinary = FindView(_ => true).data;
+        Assert.That(_combat.CalculateCardAttackDamage(ordinary), Is.EqualTo(ordinary.BaseAttackValue));
+    }
+
+    [TestCase(MapNodeType.Elite, 3, 5)]
+    [TestCase(MapNodeType.Boss, 5, 6)]
+    public void BountyLedger_ModifiesOnlyBaseRewardWithSingleHalfUpRounding(MapNodeType kind, int baseGold, int expected)
+    {
+        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_126"));
+        _combat.StartEncounter(new[] { new EnemyRuntime(Type("Bounty Test", 100, 1)) }, kind);
+        typeof(CombatManager).GetField("_earnedGoldReward", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(_combat, baseGold);
+        typeof(CombatManager).GetMethod("ResolveEncounter", BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(_combat, new object[] { EncounterResult.Victory });
+        Assert.That(_cards.gold, Is.EqualTo(expected));
     }
 
     void Buy(RelicData artifact) => Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);

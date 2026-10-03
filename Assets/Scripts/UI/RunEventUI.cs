@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -15,6 +16,7 @@ public class RunEventUI : MonoBehaviour
 
     readonly HashSet<int> _selectedDiscardCardIds = new();
     int _discardChoiceIndex = -1;
+    Action<int> _artifactDiscardChoiceResolved;
     RunEventChoiceInteraction _discardInteraction = RunEventChoiceInteraction.Immediate;
 
 
@@ -24,6 +26,7 @@ public class RunEventUI : MonoBehaviour
         {
             RunManager.Instance.OnShowEvent += Show;
             RunManager.Instance.OnHideEvent += Hide;
+            RunManager.Instance.OnShowArtifactDiscardChoice += ShowArtifactDiscardChoice;
             RunManager.Instance.OnShowUpgrade += ShowUpgrade;
             RunManager.Instance.OnHideUpgrade += Hide;
         }
@@ -36,6 +39,7 @@ public class RunEventUI : MonoBehaviour
         {
             RunManager.Instance.OnShowEvent -= Show;
             RunManager.Instance.OnHideEvent -= Hide;
+            RunManager.Instance.OnShowArtifactDiscardChoice -= ShowArtifactDiscardChoice;
             RunManager.Instance.OnShowUpgrade -= ShowUpgrade;
             RunManager.Instance.OnHideUpgrade -= Hide;
         }
@@ -100,6 +104,12 @@ public class RunEventUI : MonoBehaviour
     {
         switch (interaction)
         {
+            case RunEventChoiceInteraction.HammerRetry:
+                RunManager.Instance.RetryHammerReward();
+                break;
+            case RunEventChoiceInteraction.HammerDecline:
+                RunManager.Instance.DeclineHammerReward();
+                break;
             case RunEventChoiceInteraction.ChooseEnhancementTarget:
                 enhancementTargetUI?.OpenEventEnhancement(choiceIndex);
                 break;
@@ -111,6 +121,48 @@ public class RunEventUI : MonoBehaviour
                 RunManager.Instance.ChooseEventOption(choiceIndex);
                 break;
         }
+    }
+
+    void ShowArtifactDiscardChoice(string title, string description,
+        IReadOnlyList<CardInstance> choices, Action<int> onResolved)
+    {
+        if (panel == null || choicesContainer == null || choiceButtonPrefab == null || choices == null || onResolved == null)
+        {
+            onResolved?.Invoke(0);
+            return;
+        }
+        _artifactDiscardChoiceResolved = onResolved;
+        ClearChoices();
+        if (titleLabel) titleLabel.text = title;
+        if (descriptionLabel) descriptionLabel.text = description;
+        foreach (var card in choices)
+        {
+            if (card == null) continue;
+            int id = card.Id;
+            var buttonObject = Instantiate(choiceButtonPrefab, choicesContainer);
+            buttonObject.name = $"ArtifactDiscard_{id}";
+            var label = buttonObject.GetComponentInChildren<TMP_Text>();
+            if (label) label.text = $"{card.SuitSymbol} {card.DisplayName}  Value {card.BaseAttackValue}  #{id}";
+            var button = buttonObject.GetComponent<Button>();
+            if (button) button.onClick.AddListener(() => ResolveArtifactDiscardChoice(id));
+        }
+        var cancelObject = Instantiate(choiceButtonPrefab, choicesContainer);
+        cancelObject.name = "ArtifactDiscardCancel";
+        var cancelLabel = cancelObject.GetComponentInChildren<TMP_Text>();
+        if (cancelLabel) cancelLabel.text = "Cancel (skip this draw)";
+        var cancel = cancelObject.GetComponent<Button>();
+        if (cancel) cancel.onClick.AddListener(() => ResolveArtifactDiscardChoice(0));
+        panel.SetActive(true);
+        panel.transform.SetAsLastSibling();
+    }
+
+    void ResolveArtifactDiscardChoice(int cardId)
+    {
+        var callback = _artifactDiscardChoiceResolved;
+        _artifactDiscardChoiceResolved = null;
+        ClearChoices();
+        if (panel) panel.SetActive(false);
+        callback?.Invoke(cardId);
     }
 
     void ShowDiscardSelection(int choiceIndex)
@@ -269,12 +321,20 @@ public class RunEventUI : MonoBehaviour
     void ClearChoices()
     {
         if (choicesContainer == null) return;
+        var children = new List<GameObject>();
         foreach (Transform child in choicesContainer)
-            Destroy(child.gameObject);
+            if (child != null) children.Add(child.gameObject);
+        foreach (var child in children)
+        {
+            child.SetActive(false);
+            if (Application.isPlaying) Destroy(child);
+            else DestroyImmediate(child);
+        }
     }
 
     void Hide()
     {
+        _artifactDiscardChoiceResolved = null;
         _discardChoiceIndex = -1;
         _discardInteraction = RunEventChoiceInteraction.Immediate;
         _selectedDiscardCardIds.Clear();

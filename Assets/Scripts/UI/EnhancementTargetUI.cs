@@ -138,7 +138,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
     public void OpenEventEnhancement(int choiceIndex)
     {
         var run = RunManager.Instance;
-        if (run == null || GameplayInputGate.IsBlocked ||
+        if (run == null || IsInputBlockedForCurrentChoice() ||
             !string.IsNullOrEmpty(run.GetEventOptionUnavailableReason(choiceIndex))) return;
         _shopOfferId = null;
         _upgradeIndex = -1;
@@ -176,7 +176,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     void SelectEventEnhancement(CardEnhancementData enhancement)
     {
-        if (GameplayInputGate.IsBlocked || enhancement == null || _eventChoiceIndex < 0) return;
+        if (IsInputBlockedForCurrentChoice() || enhancement == null || _eventChoiceIndex < 0) return;
         _eventEnhancement = enhancement;
         Show(new ShopOffer { kind = ShopOfferKind.Enhancement, enhancement = enhancement, price = 0 });
     }
@@ -206,6 +206,10 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         if (panel) panel.SetActive(false);
         if (confirmButton) confirmButton.interactable = false;
     }
+
+    bool IsInputBlockedForCurrentChoice() => GameplayInputGate.IsBlocked &&
+        !(RunManager.Instance != null && RunManager.Instance.IsPendingHammerReward &&
+          GameplayInputGate.Reasons == GameplayInputBlockReason.ArtifactChoice);
 
     void Back()
     {
@@ -268,7 +272,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     void SelectCard(int id)
     {
-        if (GameplayInputGate.IsBlocked || !panel || !panel.activeSelf) return;
+        if (IsInputBlockedForCurrentChoice() || !panel || !panel.activeSelf) return;
         if (_mutationSlotIndex >= 0)
         {
             var cards = CardManager.Instance;
@@ -311,7 +315,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     void Confirm()
     {
-        if (GameplayInputGate.IsBlocked || !panel || !panel.activeSelf) return;
+        if (IsInputBlockedForCurrentChoice() || !panel || !panel.activeSelf) return;
         if (_mutationSlotIndex >= 0)
         {
             var cards = CardManager.Instance;

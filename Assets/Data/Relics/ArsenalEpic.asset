@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc333c80492e32a4981ae457376add7e, type: 3}
+  m_Name: ArsenalEpic
+  m_EditorClassIdentifier: CardPG.Runtime::RelicData
+  id: rel_030
+  displayName: Arsenal Emblem
+  icon: ARSENAL+
+  description: "Face cards in hand grant diminishing hand capacity: floor(1 + 1/2
+    + \u2026 + 1/n). Does not inherit earlier tiers."
+  price: 30
+  capacityCategory: 0
+  canonicalId: rel_030
+  rarity: Epic
+  tier: 3
+  upgradeFromId: rel_029
+  effects: []
+  ruleModifiers: []
+  specialRule: 41
+  restrictToSuit: 0
+  affectedSuit: 0
+  requiresEnhancedCard: 0
+  damageMultiplier: 1
+  flatDamageBonus: 0
+  defenseBonus: 0
+  reduceEnemyAttackByCardValue: 0
+  recycleDiscardByCardValue: 0
+  drawByCardValue: 0
+  healAfterVictory: 0
+  bonusGold: 0

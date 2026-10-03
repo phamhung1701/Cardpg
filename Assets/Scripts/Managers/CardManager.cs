@@ -7,7 +7,11 @@ public class CardManager : Singleton<CardManager>
 {
     public const int HAND_SIZE = 8;
     public const int BASE_ARTIFACT_CAPACITY = 5;
-    public const int BACKPACK_CAPACITY = 3;
+    public const int BASE_BACKPACK_CAPACITY = 3;
+    // Kept for existing content/tests that explicitly mean the backpack's unmodified baseline.
+    public const int BACKPACK_CAPACITY = BASE_BACKPACK_CAPACITY;
+    public const int TRAVELER_BACKPACK_CAPACITY = 5;
+    public const int RARE_CONSUMABLES_PER_SLOT = 3;
 
     [Header("References")]
     public Field handField;
@@ -30,19 +34,29 @@ public class CardManager : Singleton<CardManager>
     readonly List<CardView> _selectedCards = new();
     readonly List<CardData> _generatedDefinitions = new();
     readonly Dictionary<RelicData, ArtifactRuntimeInstance> _artifactInstances = new();
-    readonly List<ConsumableInstance> _backpack = new(BACKPACK_CAPACITY);
+    readonly List<ConsumableStack> _backpack = new(BASE_BACKPACK_CAPACITY);
     CardView _activeDragCard;
     int _nextCardId = 1;
+    bool _consumableUsedThisEncounter;
 
     public IReadOnlyList<CardInstance> ownedCards => _cards.OwnedCards;
     public IReadOnlyList<CardInstance> deck => _cards.Deck;
     public IReadOnlyList<CardInstance> hand => _cards.Hand;
     public IReadOnlyList<CardInstance> discardPile => _cards.DiscardPile;
-    public IReadOnlyList<ConsumableData> Backpack => _backpack.Select(slot => slot.Definition).ToArray();
+    public IReadOnlyList<ConsumableData> Backpack => _backpack
+        .SelectMany(stack => stack.Items).Select(item => item.Definition).ToArray();
     public ConsumableInstance GetConsumableInstanceAtSlot(int slotIndex) =>
-        slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex] : null;
+        slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex].GetPartiallyUsedFirst() : null;
+    public int GetConsumableStackCountAtSlot(int slotIndex) =>
+        slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex].Count : 0;
     public int BackpackSlotsUsed => _backpack.Count;
-    public bool IsBackpackFull => _backpack.Count >= BACKPACK_CAPACITY;
+    public int BackpackCapacity => HasArtifactSpecialRule(ArtifactSpecialRule.TravelerPackCommon) ||
+        HasArtifactSpecialRule(ArtifactSpecialRule.TravelerPackRare)
+            ? TRAVELER_BACKPACK_CAPACITY : BASE_BACKPACK_CAPACITY;
+    public int ConsumablesPerSlot => HasArtifactSpecialRule(ArtifactSpecialRule.TravelerPackRare)
+        ? RARE_CONSUMABLES_PER_SLOT : 1;
+    public int DistinctConsumableTypeCount => _backpack.Select(stack => stack.Definition).Distinct().Count();
+    public bool IsBackpackFull => _backpack.Count >= BackpackCapacity;
     public int HandCount => _cards.HandCount;
     public int HandCapacity => GameplayEffectResolver.CalculateHandCapacity(HAND_SIZE, this);
     public int OverflowCapacity
@@ -53,7 +67,7 @@ public class CardManager : Singleton<CardManager>
             for (int i = 0; i < ownedArtifacts.Count; i++)
             {
                 var rule = ownedArtifacts[i]?.specialRule;
-                if (rule == ArtifactSpecialRule.OverflowRare) return 3;
+                if (rule is ArtifactSpecialRule.OverflowRare or ArtifactSpecialRule.OverflowEpic) return 3;
                 if (rule == ArtifactSpecialRule.OverflowCommon) capacity = 2;
             }
             return capacity;
@@ -89,6 +103,7 @@ public class CardManager : Singleton<CardManager>
     public event Action OnBuildChanged;
     public event Action<CardView> OnCardSelected;
     public event Action OnConsumablesChanged;
+    public event Action<ConsumableData> OnConsumableUsed;
 
 
     public void Configure(
@@ -132,18 +147,61 @@ public class CardManager : Singleton<CardManager>
         if (consumable == null) return 0;
         int count = 0;
         for (int i = 0; i < _backpack.Count; i++)
-            if (_backpack[i].Definition == consumable) count++;
+            if (_backpack[i].Definition == consumable) count += _backpack[i].Count;
         return count;
     }
 
-    public bool CanAddConsumable(ConsumableData consumable, int count = 1) =>
-        consumable != null && count > 0 && consumableCatalog.Contains(consumable) &&
-        count <= BACKPACK_CAPACITY - _backpack.Count;
+    public bool CanAddConsumable(ConsumableData consumable, int count = 1)
+    {
+        if (consumable == null || count <= 0 || !consumableCatalog.Contains(consumable) ||
+            !IsBackpackWithinCurrentLimits()) return false;
+        int capacity = BackpackCapacity;
+        int maxPerSlot = ConsumablesPerSlot;
+        var definitions = _backpack.Select(stack => stack.Definition).ToList();
+        var stackCounts = _backpack.Select(stack => stack.Count).ToList();
+        for (int item = 0; item < count; item++)
+        {
+            int stackIndex = -1;
+            if (maxPerSlot > 1)
+            {
+                for (int i = 0; i < definitions.Count; i++)
+                    if (definitions[i] == consumable && stackCounts[i] < maxPerSlot)
+                    {
+                        stackIndex = i;
+                        break;
+                    }
+            }
+            if (stackIndex >= 0) stackCounts[stackIndex]++;
+            else if (definitions.Count < capacity)
+            {
+                definitions.Add(consumable);
+                stackCounts.Add(1);
+            }
+            else return false;
+        }
+        return true;
+    }
 
     public bool AddConsumable(ConsumableData consumable, int count = 1)
     {
         if (!CanAddConsumable(consumable, count)) return false;
-        for (int i = 0; i < count; i++) _backpack.Add(new ConsumableInstance(consumable));
+        for (int i = 0; i < count; i++) AddConsumableInstance(new ConsumableInstance(consumable));
+        OnConsumablesChanged?.Invoke();
+        return true;
+    }
+
+    public bool ReplaceConsumableSlot(int slotIndex, ConsumableData replacement)
+    {
+        if (slotIndex < 0 || slotIndex >= _backpack.Count || replacement == null ||
+            !consumableCatalog.Contains(replacement)) return false;
+        var removed = _backpack[slotIndex];
+        _backpack.RemoveAt(slotIndex);
+        if (!CanAddConsumable(replacement))
+        {
+            _backpack.Insert(slotIndex, removed);
+            return false;
+        }
+        AddConsumableInstance(new ConsumableInstance(replacement));
         OnConsumablesChanged?.Invoke();
         return true;
     }
@@ -154,6 +212,32 @@ public class CardManager : Singleton<CardManager>
             price < 0 || !CanAfford(price)) return false;
         if (!SpendGold(price)) return false;
         return AddConsumable(consumable);
+    }
+
+    bool IsBackpackWithinCurrentLimits()
+    {
+        if (_backpack.Count > BackpackCapacity) return false;
+        int maxPerSlot = ConsumablesPerSlot;
+        for (int i = 0; i < _backpack.Count; i++)
+            if (_backpack[i].Count > maxPerSlot) return false;
+        return true;
+    }
+
+    void AddConsumableInstance(ConsumableInstance instance)
+    {
+        if (ConsumablesPerSlot > 1)
+        {
+            var target = _backpack.FirstOrDefault(stack =>
+                stack.Definition == instance.Definition && stack.Count < ConsumablesPerSlot);
+            if (target != null)
+            {
+                target.Add(instance);
+                return;
+            }
+        }
+        var created = new ConsumableStack(instance.Definition);
+        created.Add(instance);
+        _backpack.Add(created);
     }
 
     public bool CanUseConsumable(ConsumableData consumable, CombatManager combat)
@@ -196,26 +280,20 @@ public class CardManager : Singleton<CardManager>
     public bool UseConsumableAtSlot(int slotIndex, CombatManager combat)
     {
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
-        var instance = _backpack[slotIndex];
+        var instance = GetConsumableInstanceAtSlot(slotIndex);
         var consumable = instance.Definition;
         if (consumable.effectType is ConsumableEffectType.ApplyEnhancement or
             ConsumableEffectType.DuplicateCard or ConsumableEffectType.DestroyCards or
             ConsumableEffectType.ChangeSuit) return false;
-
-        // Remove before effects that can complete an encounter so a same-victory drop can use the freed slot.
-        _backpack.RemoveAt(slotIndex);
+        bool wasInEncounter = IsActiveEncounter(combat);
         bool succeeded = consumable.effectType switch
         {
             ConsumableEffectType.Heal => combat.HealPlayer(consumable.healAmount) > 0,
             ConsumableEffectType.DirectEnemyDamage => combat.TryUseConsumableDamage(consumable.damageAmount),
             _ => false
         };
-        if (!succeeded)
-        {
-            _backpack.Insert(slotIndex, instance);
-            return false;
-        }
-        OnConsumablesChanged?.Invoke();
+        if (!succeeded) return false;
+        CompleteConsumableUse(slotIndex, instance, combat, wasInEncounter);
         return true;
     }
 
@@ -223,15 +301,15 @@ public class CardManager : Singleton<CardManager>
     {
         var combat = CombatManager.Instance;
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
-        var consumable = _backpack[slotIndex].Definition;
+        var instance = GetConsumableInstanceAtSlot(slotIndex);
+        var consumable = instance.Definition;
         if (consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
             consumable.enhancementToApply == null ||
             !_cards.OwnedCards.Any(card => card != null && card.Enhancement == null)) return false;
         var card = FindOwnedCard(cardId);
         if (card == null || card.Enhancement != null ||
             !ApplyEnhancement(cardId, consumable.enhancementToApply)) return false;
-        _backpack.RemoveAt(slotIndex);
-        OnConsumablesChanged?.Invoke();
+        CompleteConsumableUse(slotIndex, instance, combat, IsActiveEncounter(combat));
         return true;
     }
 
@@ -239,8 +317,9 @@ public class CardManager : Singleton<CardManager>
     {
         var combat = CombatManager.Instance;
         if (!CanUseConsumableAtSlot(slotIndex, combat) || cardIds == null) return false;
-        var item = _backpack[slotIndex];
+        var item = GetConsumableInstanceAtSlot(slotIndex);
         var definition = item.Definition;
+        bool wasInEncounter = IsActiveEncounter(combat);
         if (definition.effectType is not (ConsumableEffectType.DuplicateCard or
             ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)) return false;
         bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
@@ -273,9 +352,7 @@ public class CardManager : Singleton<CardManager>
                 break;
         }
         if (!success) return false;
-        item.SpendCharge();
-        if (item.RemainingCharges == 0) _backpack.RemoveAt(slotIndex);
-        OnConsumablesChanged?.Invoke();
+        CompleteConsumableUse(slotIndex, item, combat, wasInEncounter);
         OnDeckChanged?.Invoke();
         OnBuildChanged?.Invoke();
         return true;
@@ -294,6 +371,41 @@ public class CardManager : Singleton<CardManager>
             (definition.effectType != ConsumableEffectType.ChangeSuit || card.Suit != definition.targetSuit);
     }
 
+    static bool IsActiveEncounter(CombatManager combat) => combat != null &&
+        combat.currentState is GameState.PlayerTurn or GameState.EnemyAttacking;
+
+    void CompleteConsumableUse(int slotIndex, ConsumableInstance item, CombatManager combat, bool wasInEncounter)
+    {
+        if (slotIndex < 0 || slotIndex >= _backpack.Count || item == null ||
+            !_backpack[slotIndex].Items.Contains(item) || !item.SpendCharge()) return;
+        if (item.RemainingCharges == 0)
+        {
+            _backpack[slotIndex].Remove(item);
+            if (_backpack[slotIndex].Count == 0) _backpack.RemoveAt(slotIndex);
+        }
+        OnConsumablesChanged?.Invoke();
+        OnConsumableUsed?.Invoke(item.Definition);
+        if (!wasInEncounter || _consumableUsedThisEncounter) return;
+        _consumableUsedThisEncounter = true;
+        for (int i = 0; i < ownedArtifacts.Count; i++)
+        {
+            var artifact = ownedArtifacts[i];
+            if (artifact == null) continue;
+            if (artifact.specialRule == ArtifactSpecialRule.ScavengersPouch)
+                DrawToHand(1);
+            else if (artifact.specialRule == ArtifactSpecialRule.FieldMedicsKit)
+                combat?.HealPlayer(3);
+        }
+    }
+
+    void NormalizeBackpackStacks()
+    {
+        if (ConsumablesPerSlot <= 1 || _backpack.Count == 0) return;
+        var items = _backpack.SelectMany(stack => stack.Items).ToArray();
+        _backpack.Clear();
+        for (int i = 0; i < items.Length; i++) AddConsumableInstance(items[i]);
+    }
+
     void RemoveTrackedViews(CardInstance card)
     {
         var views = new List<CardView>();
@@ -310,6 +422,8 @@ public class CardManager : Singleton<CardManager>
 
     public bool HasRelic(string id) => relics.Contains(id);
     public bool HasArtifact(RelicData artifact) => artifact != null && HasRelic(artifact.id);
+    public bool HasArtifactSpecialRule(ArtifactSpecialRule rule) => ownedArtifacts.Any(artifact =>
+        artifact != null && artifact.specialRule == rule);
 
     public string GetArtifactAcquisitionUnavailableReason(RelicData artifact)
     {
@@ -353,6 +467,56 @@ public class CardManager : Singleton<CardManager>
         var run = RunManager.Instance;
         GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(instance),
             run != null ? run.CompletedNodeCount : 0);
+        if (artifact.specialRule == ArtifactSpecialRule.Hammer)
+            instance.State.SetCounter(-140, run != null ? run.CompletedNodeCount : 0);
+        if (artifact.specialRule is ArtifactSpecialRule.TravelerPackCommon or ArtifactSpecialRule.TravelerPackRare)
+        {
+            if (artifact.specialRule == ArtifactSpecialRule.TravelerPackRare) NormalizeBackpackStacks();
+            OnConsumablesChanged?.Invoke();
+        }
+        run?.RefreshCurrentMapEffects();
+        OnBuildChanged?.Invoke();
+        return true;
+    }
+
+    public bool GrantArtifactReward(RelicData artifact, RelicData replacement = null)
+    {
+        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id) ||
+            !relicCatalog.Contains(artifact) || HasArtifact(artifact)) return false;
+
+        RelicData predecessor = artifact.tier > 1
+            ? ownedArtifacts.FirstOrDefault(value => value != null &&
+                string.Equals(value.canonicalId, artifact.upgradeFromId, StringComparison.Ordinal))
+            : null;
+        if (artifact.tier > 1 && predecessor == null) return false;
+        if (artifact.tier <= 1 && !string.IsNullOrEmpty(artifact.upgradeFromId)) return false;
+        if (replacement == null && predecessor != null) replacement = predecessor;
+        if (replacement != null && (!ownedArtifacts.Contains(replacement) ||
+            predecessor != null && replacement != predecessor)) return false;
+        if (replacement == null && artifact.OccupiesCapacitySlot && ArtifactSlotsUsed >= ArtifactCapacity)
+            return false;
+
+        int index = replacement != null ? ownedArtifacts.IndexOf(replacement) : ownedArtifacts.Count;
+        if (replacement != null)
+        {
+            ownedArtifacts[index] = artifact;
+            relics.Remove(replacement.id);
+            _artifactInstances.Remove(replacement);
+        }
+        else ownedArtifacts.Add(artifact);
+        relics.Add(artifact.id);
+        var instance = new ArtifactRuntimeInstance(artifact);
+        _artifactInstances[artifact] = instance;
+        var run = RunManager.Instance;
+        GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(instance),
+            run != null ? run.CompletedNodeCount : 0);
+        if (artifact.specialRule == ArtifactSpecialRule.Hammer)
+            instance.State.SetCounter(-140, run != null ? run.CompletedNodeCount : 0);
+        if (artifact.specialRule is ArtifactSpecialRule.TravelerPackCommon or ArtifactSpecialRule.TravelerPackRare)
+        {
+            if (artifact.specialRule == ArtifactSpecialRule.TravelerPackRare) NormalizeBackpackStacks();
+            OnConsumablesChanged?.Invoke();
+        }
         run?.RefreshCurrentMapEffects();
         OnBuildChanged?.Invoke();
         return true;
@@ -368,8 +532,9 @@ public class CardManager : Singleton<CardManager>
 
     public void ResetArtifactEncounterEffectState()
     {
+        _consumableUsedThisEncounter = false;
         foreach (var artifact in ownedArtifacts)
-            GetArtifactInstance(artifact)?.State.ClearEncounter();
+            GetArtifactInstance(artifact)?.ResetEncounterState();
         foreach (var card in ownedCards)
             card?.EffectState.ClearEncounter();
     }
@@ -500,6 +665,14 @@ public class CardManager : Singleton<CardManager>
 
         OnDeckChanged?.Invoke();
         return drawn;
+    }
+
+    public bool TryReturnDiscardCardToHand(CardInstance card)
+    {
+        if (!_cards.TryReturnDiscardToHand(card, HandCapacity)) return false;
+        if (CanCreateViews()) CreateView(card);
+        OnDeckChanged?.Invoke();
+        return true;
     }
 
     public void DealHand() => DrawToHand(HandCapacity);
@@ -659,7 +832,7 @@ public class CardManager : Singleton<CardManager>
             OnGoldChanged?.Invoke(gold);
             return;
         }
-        gold += amount;
+        gold = (int)Math.Clamp((long)gold + amount, 0L, int.MaxValue);
         OnGoldChanged?.Invoke(gold);
     }
 
@@ -686,6 +859,7 @@ public class CardManager : Singleton<CardManager>
         ownedArtifacts.Clear();
         _artifactInstances.Clear();
         _backpack.Clear();
+        _consumableUsedThisEncounter = false;
 
         OnGoldChanged?.Invoke(gold);
         OnDeckChanged?.Invoke();

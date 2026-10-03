@@ -12,7 +12,7 @@ public readonly struct RunMapSplit
     }
 
     public int MapIndex { get; }
-    public int MapNumber => MapIndex + 1;
+    public int MapNumber => MapIndex == int.MaxValue ? int.MaxValue : MapIndex + 1;
     public double ElapsedSeconds { get; }
     public bool IsComplete { get; }
 }
@@ -21,6 +21,8 @@ public readonly struct RunMapSplit
 public sealed class RunTimingStatistics
 {
     readonly List<RunMapSplit> _completedSplits = new();
+    const int MaximumInfiniteModeSplits = 100;
+    bool _rollingSplitHistory;
 
     public bool IsActive { get; private set; }
     public int CurrentMapIndex { get; private set; }
@@ -34,6 +36,7 @@ public sealed class RunTimingStatistics
     {
         Reset();
         CurrentMapIndex = Math.Max(0, startingMapIndex);
+        _rollingSplitHistory = false;
         IsActive = true;
     }
 
@@ -51,9 +54,21 @@ public sealed class RunTimingStatistics
         if (!IsActive) return false;
 
         _completedSplits.Add(new RunMapSplit(CurrentMapIndex, CurrentMapElapsedSeconds, true));
+        if (_rollingSplitHistory && _completedSplits.Count > MaximumInfiniteModeSplits)
+            _completedSplits.RemoveAt(0);
         CurrentMapElapsedSeconds = 0d;
-        if (beginNextMap)
+        if (beginNextMap && CurrentMapIndex < int.MaxValue)
             CurrentMapIndex++;
+        return true;
+    }
+
+    public bool ResumeAtNextMap()
+    {
+        if (IsActive || _completedSplits.Count == 0) return false;
+        if (CurrentMapIndex < int.MaxValue) CurrentMapIndex++;
+        CurrentMapElapsedSeconds = 0d;
+        _rollingSplitHistory = true;
+        IsActive = true;
         return true;
     }
 
@@ -68,6 +83,7 @@ public sealed class RunTimingStatistics
         CurrentMapIndex = 0;
         TotalElapsedSeconds = 0d;
         CurrentMapElapsedSeconds = 0d;
+        _rollingSplitHistory = false;
         _completedSplits.Clear();
     }
 }

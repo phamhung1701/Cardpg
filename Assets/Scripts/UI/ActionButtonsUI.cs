@@ -128,9 +128,13 @@ public class ActionButtonsUI : MonoBehaviour
         RefreshBackpackSlots(cards, combat);
 
         if (playerHealthLabel)
+        {
+            string block = combat.player.EncounterBlock > 0 ? $"  •  BLOCK {combat.player.EncounterBlock}" : string.Empty;
+            string shield = combat.player.ShieldCharges > 0 ? $"  •  SHIELD {combat.player.ShieldCharges}" : string.Empty;
             playerHealthLabel.text = combat.HasInfiniteHealthForDev
-                ? "PLAYER HP  ∞"
-                : $"PLAYER HP  {combat.player.currentHealth}/{combat.player.maxHealth}";
+                ? $"PLAYER HP  ∞{block}{shield}"
+                : $"PLAYER HP  {combat.player.currentHealth}/{combat.player.maxHealth}{block}{shield}";
+        }
 
         if (turnStateLabel)
         {
@@ -294,12 +298,22 @@ public class ActionButtonsUI : MonoBehaviour
         {
             var button = backpackSlotButtons[i];
             if (!button) continue;
+            bool visible = i < Mathf.Max(cards.BackpackCapacity, cards.BackpackSlotsUsed);
+            button.gameObject.SetActive(visible);
+            if (!visible) continue;
             var consumable = cards.GetConsumableAtSlot(i);
             var label = button.GetComponentInChildren<TMP_Text>(true);
-            if (label) label.text = consumable == null
-                ? $"EMPTY SLOT {i + 1}"
-                : $"{consumable.icon} {consumable.displayName}" +
-                    (consumable.uses > 1 ? $" ({cards.GetConsumableInstanceAtSlot(i).RemainingCharges}/{consumable.uses})" : "");
+            if (label)
+            {
+                int stackCount = cards.GetConsumableStackCountAtSlot(i);
+                var activeItem = cards.GetConsumableInstanceAtSlot(i);
+                label.text = consumable == null
+                    ? $"EMPTY SLOT {i + 1}"
+                    : $"{consumable.icon} {consumable.displayName}" +
+                        (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
+                        (consumable.uses > 1 && activeItem != null
+                            ? $" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
+            }
             button.interactable = cards.CanUseConsumableAtSlot(i, combat) &&
                 (consumable == null || consumable.effectType is not
                     (ConsumableEffectType.ApplyEnhancement or ConsumableEffectType.DuplicateCard or

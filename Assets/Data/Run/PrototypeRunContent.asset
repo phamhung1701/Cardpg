@@ -18,6 +18,12 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 190c7f06bbf4153429c9f2f030089994, type: 2}
   - {fileID: 11400000, guid: eebe928cdd822a84d9a73cadc36ea448, type: 2}
   - {fileID: 11400000, guid: 3fc15e9ace73cec4598577014da993f0, type: 2}
+  - {fileID: 11400000, guid: 29081c6be0723fe49b906e0abf538194, type: 2}
+  - {fileID: 11400000, guid: 2fd812602f602b84088a41990d9297fd, type: 2}
+  eliteEnemies:
+  - {fileID: 11400000, guid: e53fded2dea04734981d7a2006cf3d2c, type: 2}
+  - {fileID: 11400000, guid: f750125b5fbe30d46830bcb2df989055, type: 2}
+  - {fileID: 11400000, guid: a7b7391a4df62ac4d91b57554a41935b, type: 2}
   eliteAbility: {fileID: 11400000, guid: f84b541f748adf048a3c39827d6f1fea, type: 2}
   clubsBossAbility: {fileID: 11400000, guid: 53482898301764e4595a1ae179aa2ab0, type: 2}
   diamondsBossAbility: {fileID: 11400000, guid: bb29b3d4b94735745ab8194247764ed2, type: 2}
@@ -38,3 +44,4 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 06cc4a77c49f79a45b5e48421015bc87, type: 2}
   - {fileID: 11400000, guid: 9ad8fd364bddeed49b28f46cf63aba01, type: 2}
   - {fileID: 11400000, guid: 2aa05c43ec43e4a4ab5a2c0705834396, type: 2}
+  - {fileID: 11400000, guid: 3e921bf8626e13149b2f4757c4054d8e, type: 2}

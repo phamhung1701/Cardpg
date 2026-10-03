@@ -85,7 +85,7 @@ public sealed class BreadConsumableTests
     }
 
     [Test]
-    public void FullBackpack_DoesNotStackOrAcceptEncounterDrop()
+    public void FullBackpack_QueuesEncounterDropForExplicitReplaceOrDecline()
     {
         Assert.That(_cards.AddConsumable(_bread, CardManager.BACKPACK_CAPACITY), Is.True);
         const int nodeId = 23;
@@ -101,10 +101,12 @@ public sealed class BreadConsumableTests
         var method = typeof(RunManager).GetMethod("TryGrantConsumableDropForNode",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
-        Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.False);
+        Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.True);
+        Assert.That(_run.PendingConsumableReward, Is.Not.Null);
         Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(CardManager.BACKPACK_CAPACITY));
         Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.False, "A resolved drop is not rolled twice for the same node.");
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(CardManager.BACKPACK_CAPACITY));
+        Assert.That(_run.DeclinePendingConsumableReward(), Is.True);
     }
 
     [Test]
@@ -167,6 +169,8 @@ public sealed class BreadConsumableTests
         Assert.That(method, Is.Not.Null);
 
         Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.True);
+        Assert.That(_run.PendingConsumableReward, Is.Not.Null);
+        Assert.That(_run.ClaimPendingConsumableReward(0), Is.True);
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1));
         Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.False);
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1));

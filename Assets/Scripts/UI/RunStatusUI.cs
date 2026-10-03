@@ -108,18 +108,41 @@ public class RunStatusUI : MonoBehaviour
 
         if (runProgressLabel)
         {
-            runProgressLabel.text = run.IsRunCompleted
+            string mapProgress = run.IsInfiniteMode
+                ? $"Map {run.CurrentCycle}/∞"
+                : $"Map {Mathf.Clamp(run.CurrentCycle, 1, run.BossTotal)}/{run.BossTotal}";
+            string routeProgress = run.IsRunCompleted
                 ? "Run Complete"
-                : $"Map {Mathf.Clamp(run.CurrentCycle, 1, run.BossTotal)}/{run.BossTotal}  •  Route {completedNodes}/{run.currentPath.Count}";
+                : $"{mapProgress}  •  Route {completedNodes}/{run.currentPath.Count}";
+            runProgressLabel.text = routeProgress;
+            if (run.ActiveContract != null)
+                runProgressLabel.text += $"\n{FormatContractProgress(run.ActiveContract)}";
         }
 
         if (bossProgressLabel)
         {
             string bossName = run.CurrentBoss != null ? run.CurrentBoss.enemyName : "Complete";
-            bossProgressLabel.text = $"Boss {Mathf.Min(run.bossIndex + 1, run.BossTotal)}/{run.BossTotal}  •  {bossName}";
+            bossProgressLabel.text = run.IsInfiniteMode
+                ? $"Map {run.CurrentCycle} Boss  •  {bossName}"
+                : $"Boss {Mathf.Min(run.bossIndex + 1, run.BossTotal)}/{run.BossTotal}  •  {bossName}";
         }
 
         RefreshTiming();
+    }
+
+    static string FormatContractProgress(RunContractState contract)
+    {
+        long lastMap = (long)contract.deadlineMapExclusive + 1L;
+        return contract.objective switch
+        {
+            RunContractObjective.WinTwoEncounters =>
+                $"Contract • Encounters {contract.encounterWins}/2 • due before Map {lastMap}",
+            RunContractObjective.DefeatEliteThisMap =>
+                $"Contract • Elite 0/1 • Map {(long)contract.startedAtMapIndex + 1L}",
+            RunContractObjective.WinCombatWithoutHpLoss =>
+                $"Contract • Flawless 0/1 • due before Map {lastMap}",
+            _ => "Contract active"
+        };
     }
 
     void RefreshBackpack(CardManager cards)
@@ -129,10 +152,16 @@ public class RunStatusUI : MonoBehaviour
         {
             var label = backpackSlotLabels[i];
             if (!label) continue;
-            var slot = cards != null ? cards.GetConsumableInstanceAtSlot(i) : null;
+            bool visible = cards != null && i < Mathf.Max(cards.BackpackCapacity, cards.BackpackSlotsUsed);
+            label.transform.parent.gameObject.SetActive(visible);
+            if (!visible) continue;
+            var slot = cards.GetConsumableInstanceAtSlot(i);
+            int stackCount = cards.GetConsumableStackCountAtSlot(i);
             label.text = slot == null ? $"EMPTY SLOT {i + 1}" :
                 $"{slot.Definition.icon} {slot.Definition.displayName}" +
-                (slot.Definition.uses > 1 ? $" ({slot.RemainingCharges}/{slot.Definition.uses})" : "");
+                (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
+                (slot.Definition.uses > 1
+                    ? $" ({slot.RemainingCharges}/{slot.Definition.uses} first)" : string.Empty);
         }
     }
 

@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc333c80492e32a4981ae457376add7e, type: 3}
+  m_Name: CashbackToken
+  m_EditorClassIdentifier: CardPG.Runtime::RelicData
+  id: rel_125
+  displayName: Cashback Token
+  icon: 15%
+  description: "Refund 15% of actual Gold spent on paid Shop items, rounded to nearest
+    with ties up. Free purchases and this Token\u2019s own purchase grant no refund."
+  price: 20
+  capacityCategory: 0
+  canonicalId: rel_125
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects: []
+  ruleModifiers: []
+  specialRule: 23
+  restrictToSuit: 0
+  affectedSuit: 0
+  requiresEnhancedCard: 0
+  damageMultiplier: 1
+  flatDamageBonus: 0
+  defenseBonus: 0
+  reduceEnemyAttackByCardValue: 0
+  recycleDiscardByCardValue: 0
+  drawByCardValue: 0
+  healAfterVictory: 0
+  bonusGold: 0

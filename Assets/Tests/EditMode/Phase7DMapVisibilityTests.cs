@@ -8,17 +8,20 @@ public sealed class Phase7DMapVisibilityTests
     [Test]
     public void DistantElitesRemainRevealedWithoutExposingHiddenEventsOrRisk()
     {
+        int totalElites = 0;
         for (int mapIndex = 0; mapIndex < 12; mapIndex++)
         {
             var nodes = RunMapGenerator.Generate(new RunRandomContext("elite-visibility"), mapIndex, null);
             var elites = nodes.Where(node => node.kind == MapNodeType.Elite).ToArray();
 
-            Assert.That(elites.Length, Is.GreaterThan(0));
+            Assert.That(elites.Length, Is.InRange(0, 2));
+            totalElites += elites.Length;
             Assert.That(elites.All(node => node.col > 0 && node.revealed && !node.hidden), Is.True);
             Assert.That(nodes.Where(node => node.hidden).All(node => !node.revealed), Is.True);
             Assert.That(nodes.Where(node => node.kind == MapNodeType.Shop && node.col > 0)
                 .All(node => !node.revealed), Is.True, "This slice reveals only distant Elites.");
         }
+        Assert.That(totalElites, Is.GreaterThan(0), "The visibility assertions must include actual Elite nodes.");
     }
 
     [Test]
@@ -51,9 +54,8 @@ public sealed class Phase7DMapVisibilityTests
     {
         var method = typeof(PathScreenUI).GetMethod("GetNodeColor", BindingFlags.Static | BindingFlags.NonPublic);
         Assert.That(method, Is.Not.Null);
-        var nodes = RunMapGenerator.Generate(new RunRandomContext("elite-colors"), 0, null);
-        var elite = nodes.First(node => node.kind == MapNodeType.Elite);
-        var unknown = nodes.First(node => node.kind == MapNodeType.Combat && node.col > 0);
+        var elite = new PathNode { kind = MapNodeType.Elite, revealed = true, accessible = false };
+        var unknown = new PathNode { kind = MapNodeType.Combat, revealed = false, accessible = false };
 
         Assert.That(elite.accessible, Is.False);
         Assert.That((Color)method.Invoke(null, new object[] { elite }), Is.EqualTo(new Color(0.64f, 0.3f, 0.26f)));

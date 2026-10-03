@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc333c80492e32a4981ae457376add7e, type: 3}
+  m_Name: DwarfRare
+  m_EditorClassIdentifier: CardPG.Runtime::RelicData
+  id: rel_112
+  displayName: Dwarf Emblem
+  icon: LOW+
+  description: Keep Common bonus action. Playing a rank below Five prepares +1 damage
+    for the next higher-rank attack.
+  price: 30
+  capacityCategory: 0
+  canonicalId: rel_112
+  rarity: Rare
+  tier: 2
+  upgradeFromId: rel_013
+  effects: []
+  ruleModifiers:
+  - ruleId: dwarf-all-ranks-below-five
+    kind: 0
+    extraTurn:
+      trigger: 1
+      oncePerEncounter: 0
+      cannotTriggerFromBonusAction: 0
+      requireAllPlayedCardsBelowRank: 1
+      exclusiveRank: 4
+    sameRankMultiCard:
+      requireMatchingRank: 0
+      maximumCards: 0
+  specialRule: 33
+  restrictToSuit: 0
+  affectedSuit: 0
+  requiresEnhancedCard: 0
+  damageMultiplier: 1
+  flatDamageBonus: 0
+  defenseBonus: 0
+  reduceEnemyAttackByCardValue: 0
+  recycleDiscardByCardValue: 0
+  drawByCardValue: 0
+  healAfterVictory: 0
+  bonusGold: 0

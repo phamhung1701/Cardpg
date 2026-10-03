@@ -7,7 +7,20 @@ public enum EnemyAbilityEffect
     HealAfterPlayerCard,
     ReduceIncomingCardDamage,
     StartWithShield,
-    AlternateChargedAttack
+    AlternateChargedAttack,
+    Captaincy,
+    RoyalGuard,
+    HeavySwing,
+    Desperation,
+    Regeneration,
+    Guarded,
+    Silence,
+    Withering,
+    Oppression,
+    DoubleStrike,
+    SuitCall,
+    WarDrum,
+    MasterThief
 }
 
 [CreateAssetMenu(fileName = "EnemyAbility", menuName = "Game/Enemy Ability")]

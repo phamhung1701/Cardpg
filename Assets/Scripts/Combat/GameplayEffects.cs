@@ -179,9 +179,18 @@ public sealed class ArtifactRuntimeInstance
 {
     public RelicData Definition { get; }
     public GameplayEffectState State { get; } = new();
+    public CardInstance PreparedDwarfSourceCard { get; set; }
+    public CardInstance PendingDwarfSourceCard { get; set; }
 
     public ArtifactRuntimeInstance(RelicData definition) =>
         Definition = definition != null ? definition : throw new ArgumentNullException(nameof(definition));
+
+    public void ResetEncounterState()
+    {
+        State.ClearEncounter();
+        PreparedDwarfSourceCard = null;
+        PendingDwarfSourceCard = null;
+    }
 }
 
 public readonly struct GameplayEffectSource
@@ -245,9 +254,11 @@ public readonly struct CardCommittedEffectContext
     public int CardOrder { get; }
     public int HitIndex => -1 - CardOrder; // Once per committed card, never once per hit.
     public int HitCount => Action.HitCount;
+    public int CardEffectActivations { get; }
 
     public CardCommittedEffectContext(CombatActionContext action, CardInstance card,
-        EnemyRuntime target, CombatManager combat, CardManager cards, int cardOrder)
+        EnemyRuntime target, CombatManager combat, CardManager cards, int cardOrder,
+        int cardEffectActivations = 1)
     {
         Action = action;
         Card = card;
@@ -255,6 +266,7 @@ public readonly struct CardCommittedEffectContext
         Combat = combat;
         Cards = cards;
         CardOrder = cardOrder;
+        CardEffectActivations = Math.Max(1, cardEffectActivations);
     }
 }
 
@@ -505,6 +517,15 @@ public static class GameplayEffectResolver
         return false;
     }
 
+    public static bool HeldCardEffectsSuppressed(CombatManager combat)
+    {
+        if (combat == null) return false;
+        var enemies = combat.Enemies;
+        for (int i = 0; i < enemies.Count; i++)
+            if (enemies[i] != null && !enemies[i].IsDefeated && enemies[i].HasSilence) return true;
+        return false;
+    }
+
     public static int CardLocalFlat(CardInstance card, GameplayEffectKind kind)
     {
         if (card?.Enhancement == null) return 0;
@@ -520,7 +541,8 @@ public static class GameplayEffectResolver
         return flat;
     }
 
-    public static int CalculateAttack(CardInstance card, CardManager cards)
+    public static int CalculateAttack(CardInstance card, CardManager cards, IReadOnlyList<CardInstance> playedCards = null,
+        int overflowHandCount = -1, int openingAttackBonus = 0)
     {
         if (card == null) return 0;
         int localFlat = 0, localMultiplier = 1, artifactFlat = 0, artifactMultiplier = 1;
@@ -530,6 +552,17 @@ public static class GameplayEffectResolver
                 ref localFlat, ref localMultiplier, includeThresholdEffects: false);
         localFlat += SumInHandAttackBonuses(card, cards);
         localFlat += SumMimickedInHandAttackBonuses(card, cards);
+        int unplayedClubCount = 0;
+        if (cards != null)
+            for (int i = 0; i < cards.hand.Count; i++)
+            {
+                var held = cards.hand[i];
+                if (held == null || !held.MatchesSuit(CardData.Suit.Clubs)) continue;
+                bool played = false;
+                for (int j = 0; playedCards != null && j < playedCards.Count; j++)
+                    if (ReferenceEquals(held, playedCards[j])) { played = true; break; }
+                if (!played) unplayedClubCount++;
+            }
         if (cards != null)
             for (int i = 0; i < cards.ownedArtifacts.Count; i++)
             {
@@ -567,6 +600,22 @@ public static class GameplayEffectResolver
                 if (artifact == null) continue;
                 switch (artifact.specialRule)
                 {
+                    case ArtifactSpecialRule.ClubEpic when card.MatchesSuit(CardData.Suit.Clubs):
+                    {
+                        long numerator = 1, denominator = 1;
+                        for (int clubIndex = 0; clubIndex < unplayedClubCount; clubIndex++)
+                        {
+                            numerator *= 5;
+                            denominator *= 4;
+                        }
+                        resolved = ClampToInt((long)resolved * numerator / denominator);
+                        break;
+                    }
+                    case ArtifactSpecialRule.OverflowEpic when CombatManager.Instance?.IsResolvingOverflowAttack == true:
+                        resolved = ClampToInt((long)resolved + Math.Max(0, overflowHandCount));
+                        break;
+                    case ArtifactSpecialRule.GildedBlade:
+                        break;
                     case ArtifactSpecialRule.RareClub when card.MatchesSuit(CardData.Suit.Clubs):
                         resolved = ClampToInt((long)resolved * 2);
                         break;
@@ -581,13 +630,20 @@ public static class GameplayEffectResolver
                         break;
                 }
             }
+        if (openingAttackBonus > 0 && cards?.ownedArtifacts.Any(artifact => artifact != null &&
+            artifact.specialRule is ArtifactSpecialRule.GildedBlade or ArtifactSpecialRule.HuntersLedger or
+                ArtifactSpecialRule.TrophyRack or ArtifactSpecialRule.KingslayersMark or
+                ArtifactSpecialRule.DwarfRare or ArtifactSpecialRule.DwarfEpic or
+                ArtifactSpecialRule.BalancersScale or ArtifactSpecialRule.SpadeEpic or ArtifactSpecialRule.HeartEpic) == true)
+            resolved = ClampToInt((long)resolved + openingAttackBonus);
         return resolved;
     }
 
     static int SumMimickedInHandAttackBonuses(CardInstance target, CardManager cards)
     {
-        if (target == null || cards == null) return 0;
+        if (target == null || cards == null || HeldCardEffectsSuppressed(CombatManager.Instance)) return 0;
         int repetitions = 0;
+        int epicExtraRepetitions = 0;
         for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
             var artifact = cards.ownedArtifacts[artifactIndex];
@@ -596,22 +652,25 @@ public static class GameplayEffectResolver
             for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
             {
                 var effect = EffectAt(source, effectIndex);
-                if (effect.kind == GameplayEffectKind.MimicInHandEffects &&
-                    effect.trigger == GameplayEffectTrigger.CardCommitted && effect.Matches(target))
-                    repetitions += Mathf.Max(1, effect.amount);
+                if (effect.kind != GameplayEffectKind.MimicInHandEffects ||
+                    effect.trigger != GameplayEffectTrigger.CardCommitted || !effect.Matches(target)) continue;
+                repetitions += Mathf.Max(1, effect.amount);
+                if (artifact.specialRule == ArtifactSpecialRule.MimicEpic)
+                    epicExtraRepetitions += Mathf.Max(1, effect.amount);
             }
         }
-        return repetitions * SumInHandAttackBonuses(target, cards);
+        return repetitions * SumInHandAttackBonuses(target, cards) +
+            epicExtraRepetitions * SumInHandAttackBonuses(target, cards, requireMatchingRank: true);
     }
 
-    static int SumInHandAttackBonuses(CardInstance target, CardManager cards)
+    static int SumInHandAttackBonuses(CardInstance target, CardManager cards, bool requireMatchingRank = false)
     {
-        if (target == null || cards == null) return 0;
+        if (target == null || cards == null || HeldCardEffectsSuppressed(CombatManager.Instance)) return 0;
         int total = 0;
         for (int handIndex = 0; handIndex < cards.hand.Count; handIndex++)
         {
             var sourceCard = cards.hand[handIndex];
-            if (sourceCard?.Enhancement == null) continue;
+            if (sourceCard?.Enhancement == null || requireMatchingRank && sourceCard.Rank != target.Rank) continue;
             var source = new GameplayEffectSource(sourceCard);
             for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
             {
@@ -719,6 +778,13 @@ public static class GameplayEffectResolver
             if (card?.Enhancement != null)
                 ApplyCriticalChanceOverrides(new GameplayEffectSource(card), committedCards,
                     ref chancePercent, ref found);
+        }
+        if (manager != null && manager.HasArtifactSpecialRule(ArtifactSpecialRule.AceEpic) &&
+            committedCards.Any(card => card?.Rank == CardData.Rank.Ace) &&
+            committedCards.Any(card => card?.Rank is CardData.Rank.Jack or CardData.Rank.Queen or CardData.Rank.King))
+        {
+            chancePercent = 100f;
+            return true;
         }
         return found;
     }
@@ -874,6 +940,13 @@ public static class GameplayEffectResolver
             capacity += SumSourceEffects(new GameplayEffectSource(cards.GetArtifactInstance(artifact)),
                 GameplayEffectTrigger.HandCapacityCalculated, GameplayEffectKind.HandSizeBonus, null);
             if (artifact.specialRule == ArtifactSpecialRule.RareArsenal) capacity += 3;
+            else if (artifact.specialRule == ArtifactSpecialRule.ArsenalEpic)
+            {
+                int faces = cards.hand.Count(card => card?.Rank is CardData.Rank.Jack or CardData.Rank.Queen or CardData.Rank.King);
+                double harmonic = 0d;
+                for (int faceIndex = 1; faceIndex <= faces; faceIndex++) harmonic += 1d / faceIndex;
+                capacity += (int)Math.Floor(harmonic);
+            }
         }
         for (int i = 0; i < cards.hand.Count; i++)
         {
@@ -945,6 +1018,13 @@ public static class GameplayEffectResolver
                     continue;
                 if (!context.Run.TryRevealEligibleHiddenNode()) continue;
                 source.State.SetCounter(effectIndex, context.MapIndex + 1);
+                changed = true;
+            }
+            if (artifact.specialRule == ArtifactSpecialRule.HiddenTrail &&
+                source.State.GetCounter(-135) != context.MapIndex + 1 &&
+                context.Run.TryRerollEligibleHiddenNode())
+            {
+                source.State.SetCounter(-135, context.MapIndex + 1);
                 changed = true;
             }
         }
@@ -1061,7 +1141,7 @@ public static class GameplayEffectResolver
 
     public static bool IsHandsMultiCardAction(IReadOnlyList<CardInstance> cards, CardManager manager)
     {
-        if (cards == null || cards.Count < 2 || cards.Count > 3 || manager == null || cards[0] == null) return false;
+        if (cards == null || cards.Count < 2 || cards.Count > 4 || manager == null || cards[0] == null) return false;
         // A legal two-card Ace action retains its existing Ace-pair semantics, even A+A.
         if (cards.Count == 2 && cards.Any(card => card?.Rank == CardData.Rank.Ace)) return false;
         for (int i = 1; i < cards.Count; i++)
@@ -1171,7 +1251,7 @@ public static class GameplayEffectResolver
     {
         if (target == null || target.IsDefeated || cards == null || cards.Count == 0 || cards.Count > 5) return false;
         if (!cards.All(card => card != null && card.data != null)) return false;
-        if (cards.Count <= 3 && (cards.Count == 1 || CanPlayAsAcePair(cards) || IsSameRankMultiCardAction(cards, manager))) return true;
+        if (cards.Count <= 4 && (cards.Count == 1 || CanPlayAsAcePair(cards) || IsSameRankMultiCardAction(cards, manager))) return true;
         if (cards.Count == 5)
             return IsRoyalFamilySelection(cards.Select(card => card.data).ToArray(), manager);
         return false;
@@ -1186,19 +1266,33 @@ public static class GameplayEffectResolver
             {
                 EnqueueCommittedSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
                     context, queue, i);
-                if (artifact.specialRule == ArtifactSpecialRule.RareHeart && context.Card.MatchesSuit(CardData.Suit.Hearts))
+                if (artifact.specialRule is ArtifactSpecialRule.RareHeart or ArtifactSpecialRule.HeartEpic &&
+                    context.Card.MatchesSuit(CardData.Suit.Hearts))
                     queue.Enqueue(context.Action.ActionId, context.HitIndex, CombatReactionPhase.CardCommitted,
                         CombatReactionSourceCategory.Artifact, i, int.MaxValue - 1,
-                        () => { int before = context.Combat.player.currentHealth; context.Combat.HealPlayer(3);
-                            if (before * 2 < context.Combat.player.maxHealth) context.Cards.AddGold(3); });
-                if (artifact.specialRule == ArtifactSpecialRule.RareDiamond && context.Card.MatchesSuit(CardData.Suit.Diamonds))
+                        () =>
+                        {
+                            int before = context.Combat.player.currentHealth;
+                            int healed = context.Combat.HealPlayer(3);
+                            if (before * 2 < context.Combat.player.maxHealth) context.Cards.AddGold(3);
+                            if (artifact.specialRule == ArtifactSpecialRule.HeartEpic && context.Combat.CanPlayerHeal())
+                            {
+                                var state = context.Cards.GetArtifactInstance(artifact).State;
+                                int overheal = Math.Max(0, 3 - healed);
+                                state.SetCounter(-1050, Math.Min(10, state.GetCounter(-1050) + overheal));
+                            }
+                        });
+                if (artifact.specialRule is ArtifactSpecialRule.RareDiamond or ArtifactSpecialRule.DiamondEpic &&
+                    context.Card.MatchesSuit(CardData.Suit.Diamonds))
                     queue.Enqueue(context.Action.ActionId, context.HitIndex, CombatReactionPhase.CardCommitted,
                         CombatReactionSourceCategory.Artifact, i, int.MaxValue,
                         () => context.Cards.DrawToHand(2));
             }
         }
-        if (context.Card.Enhancement != null)
-            EnqueueCommittedSource(new GameplayEffectSource(context.Card), context, queue, 0);
+        if (context.Card.Enhancement != null && !HeldCardEffectsSuppressed(context.Combat))
+            for (int activation = 0; activation < context.CardEffectActivations; activation++)
+                EnqueueCommittedSource(new GameplayEffectSource(context.Card), context, queue,
+                    activation * 10000);
     }
 
     static void EnqueueCommittedSource(GameplayEffectSource source, CardCommittedEffectContext context,
@@ -1227,6 +1321,7 @@ public static class GameplayEffectResolver
     static void EnqueueMimickedInHandEffects(CardCommittedEffectContext context,
         CombatReactionQueue queue, int mimicSourceOrder)
     {
+        if (HeldCardEffectsSuppressed(context.Combat)) return;
         var cards = context.Cards;
         for (int handIndex = 0; handIndex < cards.hand.Count; handIndex++)
         {
@@ -1237,13 +1332,18 @@ public static class GameplayEffectResolver
             {
                 var effect = EffectAt(source, effectIndex);
                 if (!IsMimicRetriggerableHandEffect(effect) || !effect.Matches(card)) continue;
+                bool epicExtra = cards.ownedArtifacts.Any(artifact => artifact != null &&
+                    artifact.specialRule == ArtifactSpecialRule.MimicEpic && context.Card != null &&
+                    card.Rank == context.Card.Rank);
+                int repeats = epicExtra ? 2 : 1;
                 int capturedIndex = effectIndex;
                 int sourceOrder = cards.ownedArtifacts.Count + handIndex + mimicSourceOrder;
-                queue.Enqueue(context.Action.ActionId, context.HitIndex,
-                    CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Enhancement,
-                    sourceOrder, capturedIndex,
-                    () => ApplyReactive(source, effect, context.Combat, cards, card, context.Target,
-                        sourceOrder, capturedIndex));
+                for (int repeat = 0; repeat < repeats; repeat++)
+                    queue.Enqueue(context.Action.ActionId, context.HitIndex,
+                        CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Enhancement,
+                        sourceOrder, capturedIndex + repeat * 10000,
+                        () => ApplyReactive(source, effect, context.Combat, cards, card, context.Target,
+                            sourceOrder, capturedIndex));
             }
         }
     }
@@ -1295,16 +1395,40 @@ public static class GameplayEffectResolver
                 () => ApplyReactive(source, effect, context.Combat, context.Cards,
                     context.BlockingCard, context.AttackedEnemy, sourceOrder, capturedIndex));
         }
-        if (source.Artifact?.Definition.specialRule == ArtifactSpecialRule.RareRetaliation)
+        var spadeRule = source.Artifact?.Definition.specialRule;
+        if (spadeRule is ArtifactSpecialRule.SpadeRare or ArtifactSpecialRule.SpadeEpic &&
+            context.BlockingCard.MatchesSuit(CardData.Suit.Spades))
+        {
+            int block = context.Combat.CalculateCardDefense(context.BlockingCard);
+            int attack = Math.Max(0, context.BlockedAttackDamage);
+            if (block >= attack && attack > 0)
+                queue.Enqueue(context.Action.ActionId, int.MinValue + context.BlockOrder,
+                    CombatReactionPhase.AttackBlocked, source.Category, sourceOrder, int.MaxValue - 1,
+                    () => context.Cards.DrawToHand(1));
+            if (spadeRule == ArtifactSpecialRule.SpadeEpic && block > attack)
+                source.State.SetEncounterCounter(-1071, source.State.GetEncounterCounter(-1071) + 1);
+        }
+        var retaliationRule = source.Artifact?.Definition.specialRule;
+        if (retaliationRule is ArtifactSpecialRule.RareRetaliation or ArtifactSpecialRule.RetaliationEpic)
         {
             int block = context.Combat.CalculateCardDefense(context.BlockingCard);
             int attack = context.BlockedAttackDamage;
-            int retaliation = CalculateRetaliationDamage(block, attack);
+            int growth = retaliationRule == ArtifactSpecialRule.RetaliationEpic
+                ? source.State.GetCounter(-111) : 0;
+            int retaliation = CalculateRetaliationDamage(block, attack) + growth;
             if (retaliation > 0)
                 queue.Enqueue(context.Action.ActionId, int.MinValue + context.BlockOrder,
                     CombatReactionPhase.AttackBlocked, source.Category, sourceOrder, int.MaxValue,
                     () => context.Combat.QueueReactiveDamage(context.Combat.player, context.AttackedEnemy,
-                        retaliation, sourceOrder, int.MaxValue, sourceCategory: source.Category));
+                        retaliation, sourceOrder, int.MaxValue, sourceCategory: source.Category,
+                        onResolved: retaliationRule == ArtifactSpecialRule.RetaliationEpic
+                            ? result =>
+                            {
+                                if (!result.WasLethal) return;
+                                source.State.SetCounter(-111, growth + 1);
+                                context.Combat.LogEffect($"{source.DisplayName}: counterattack kill permanently gained +1 counter damage.");
+                            }
+                            : null));
         }
     }
 
@@ -1330,7 +1454,7 @@ public static class GameplayEffectResolver
                 EnqueueAttackCommittedSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
                     context, queue, sourceOrder);
         }
-        if (context.HandSnapshot == null) return;
+        if (context.HandSnapshot == null || HeldCardEffectsSuppressed(context.Combat)) return;
         for (int handOrder = 0; handOrder < context.HandSnapshot.Count; handOrder++)
         {
             var card = context.HandSnapshot[handOrder];
@@ -1374,6 +1498,7 @@ public static class GameplayEffectResolver
                     null, context, queue, i);
         }
         // Snapshot hand order and identity at the authoritative turn-start boundary.
+        if (HeldCardEffectsSuppressed(context.Combat)) return;
         for (int i = 0; i < context.Cards.hand.Count; i++)
         {
             var card = context.Cards.hand[i];
@@ -1419,6 +1544,7 @@ public static class GameplayEffectResolver
         CombatManager combat, CardManager cards, CardInstance card, EnemyRuntime target,
         int sourceOrder = 0, int handlerOrder = 0)
     {
+        if (source.Card != null && HeldCardEffectsSuppressed(combat)) return;
         int amount = Mathf.Max(0, effect.amount);
         switch (effect.kind)
         {

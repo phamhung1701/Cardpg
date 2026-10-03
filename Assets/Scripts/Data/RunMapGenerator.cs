@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public static class RunMapGenerator
@@ -29,9 +30,10 @@ public static class RunMapGenerator
                 MapNodeType kind = kinds[row];
                 bool hidden = kind == MapNodeType.Risk ||
                     (kind == MapNodeType.Event && contentRandom.NextInt(0, 2) == 0);
+                int nodeId = nextId++;
                 var node = new PathNode
                 {
-                    id = nextId++,
+                    id = nodeId,
                     type = ToLegacyType(kind),
                     kind = kind,
                     col = col,
@@ -41,7 +43,7 @@ public static class RunMapGenerator
                     hidden = hidden,
                     completed = false,
                     mapIndex = mapIndex,
-                    contentId = PickContentId(kind, mapIndex, catalog, fallbackEnemies, contentRandom)
+                    contentId = PickContentId(kind, mapIndex, catalog, fallbackEnemies, contentRandom, randomContext, nodeId)
                 };
                 columns[col].Add(node);
                 nodes.Add(node);
@@ -79,7 +81,61 @@ public static class RunMapGenerator
             AddUnique(node.next, boss.id);
         nodes.Add(boss);
 
+        ApplyEliteRoutePolicy(randomContext, mapIndex, catalog, fallbackEnemies, columns);
+
         return nodes;
+    }
+
+    static void ApplyEliteRoutePolicy(
+        RunRandomContext randomContext,
+        int mapIndex,
+        RunContentCatalog catalog,
+        EnemyTypeData[] fallbackEnemies,
+        List<PathNode>[] columns)
+    {
+        var eliteNodes = columns.SelectMany(column => column)
+            .Where(node => node.kind == MapNodeType.Elite)
+            .ToArray();
+        var presenceRandom = randomContext.CreateStream("map-elite-presence", mapIndex);
+        var eliteContentRandom = randomContext.CreateStream("map-elite-content", mapIndex);
+        EnemyTypeData[] authoredElites = catalog != null ? catalog.eliteEnemies : null;
+        var eligibleElites = authoredElites == null
+            ? new List<EnemyTypeData>()
+            : authoredElites.Where(enemy => enemy != null).ToList();
+
+        foreach (var elite in eliteNodes)
+        {
+            if (presenceRandom.NextInt(0, 2) == 0)
+            {
+                elite.kind = MapNodeType.Combat;
+                elite.type = ToLegacyType(MapNodeType.Combat);
+                elite.contentId = PickContentId(MapNodeType.Combat, mapIndex, catalog, fallbackEnemies,
+                    randomContext.CreateStream("map-elite-fallback", unchecked(mapIndex * 31 + elite.id)),
+                    randomContext, elite.id);
+                elite.revealed = elite.col == 0 && !elite.hidden;
+            }
+            else if (eligibleElites.Count > 0)
+            {
+                elite.contentId = eligibleElites[eliteContentRandom.NextInt(0, eligibleElites.Count)].name;
+            }
+        }
+
+        // An Elite must never be the only selectable destination from its predecessor.
+        for (int col = 0; col < RouteColumnCount - 1; col++)
+        {
+            foreach (var predecessor in columns[col])
+            {
+                bool hasEliteSuccessor = predecessor.next.Any(id =>
+                    columns[col + 1].Any(node => node.id == id && node.kind == MapNodeType.Elite));
+                bool hasNonEliteSuccessor = predecessor.next.Any(id =>
+                    columns[col + 1].Any(node => node.id == id && node.kind != MapNodeType.Elite));
+                if (!hasEliteSuccessor || hasNonEliteSuccessor) continue;
+
+                var alternative = columns[col + 1].Where(node => node.kind != MapNodeType.Elite)
+                    .OrderBy(node => node.row).ThenBy(node => node.id).FirstOrDefault();
+                if (alternative != null) AddUnique(predecessor.next, alternative.id);
+            }
+        }
     }
 
     static List<MapNodeType> GetColumnKinds(int column) => column switch
@@ -96,7 +152,9 @@ public static class RunMapGenerator
         int mapIndex,
         RunContentCatalog catalog,
         EnemyTypeData[] fallbackEnemies,
-        IRandomSource random)
+        IRandomSource random,
+        RunRandomContext randomContext,
+        int nodeId)
     {
         if (kind == MapNodeType.Combat || kind == MapNodeType.Elite)
         {
@@ -118,6 +176,18 @@ public static class RunMapGenerator
         {
             var events = catalog != null ? catalog.GetEvents(kind) : null;
             if (events == null || events.Length == 0) return string.Empty;
+            if (kind == MapNodeType.Risk)
+            {
+                var ritual = events.FirstOrDefault(value => value != null && value.id == "evt_100");
+                if (ritual != null && randomContext != null)
+                {
+                    int context = unchecked(mapIndex * 7919 ^ nodeId);
+                    if (randomContext.CreateStream("blood-ritual-appearance", context).NextInt(0, 20) == 0)
+                        return ritual.id;
+                    events = events.Where(value => value != null && value.id != "evt_100").ToArray();
+                }
+            }
+            if (events.Length == 0) return string.Empty;
             var definition = events[random.NextInt(0, events.Length)];
             return definition != null ? definition.id : string.Empty;
         }

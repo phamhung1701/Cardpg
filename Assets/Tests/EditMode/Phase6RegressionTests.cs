@@ -161,8 +161,8 @@ public sealed class Phase6RegressionTests
         _run.OnShowPathScreen += () => showPathCount++;
         _run.OnPathChosen(shop.id);
 
-        Assert.That(_run.GetCurrentShopOffers(), Has.Count.EqualTo(2));
-        CollectionAssert.AreEquivalent(new[] { ShopOfferKind.Investment, ShopOfferKind.Guidance },
+        Assert.That(_run.GetCurrentShopOffers(), Has.Count.EqualTo(3));
+        CollectionAssert.AreEquivalent(new[] { ShopOfferKind.Investment, ShopOfferKind.Guidance, ShopOfferKind.Contract },
             _run.GetCurrentShopOffers().Select(offer => offer.kind));
         _run.OnShopDone();
         _run.OnShopDone();

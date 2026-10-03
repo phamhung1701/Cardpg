@@ -19,6 +19,7 @@ public readonly struct DamageRequest
     public ICombatDamageTarget Target { get; }
     public int RequestedDamage { get; }
     public bool AllowShield { get; }
+    public CardInstance HitCard { get; }
 
     public DamageRequest(
         CombatActionContext action,
@@ -27,7 +28,8 @@ public readonly struct DamageRequest
         ICombatDamageTarget source,
         ICombatDamageTarget target,
         int requestedDamage,
-        bool allowShield = true)
+        bool allowShield = true,
+        CardInstance hitCard = null)
     {
         Action = action ?? throw new ArgumentNullException(nameof(action));
         if (hitIndex < 0) throw new ArgumentOutOfRangeException(nameof(hitIndex));
@@ -37,5 +39,6 @@ public readonly struct DamageRequest
         HitIndex = hitIndex;
         RequestedDamage = Math.Max(0, requestedDamage);
         AllowShield = allowShield;
+        HitCard = hitCard;
     }
 }

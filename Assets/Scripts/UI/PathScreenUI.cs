@@ -97,7 +97,11 @@ public class PathScreenUI : MonoBehaviour
 
     void HandleCycleStarted(string header)
     {
-        if (headerText) headerText.text = header;
+        var run = RunManager.Instance;
+        string bossDescription = run != null ? run.CurrentBossDescription : string.Empty;
+        if (headerText) headerText.text = string.IsNullOrEmpty(bossDescription)
+            ? header
+            : $"{header}\n<size=80%>{bossDescription}</size>";
         BuildMap();
     }
 

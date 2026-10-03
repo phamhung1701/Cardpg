@@ -27,7 +27,9 @@ public enum RunEventChoiceInteraction
     Immediate = 0,
     ChooseEnhancementTarget = 1,
     DiscardTwoForRandomEnhancement = 2,
-    DiscardCardsForTotalValue = 3
+    DiscardCardsForTotalValue = 3,
+    HammerRetry = 4,
+    HammerDecline = 5
 }
 
 [Serializable]

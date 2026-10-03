@@ -7,10 +7,13 @@ public sealed class PlayerRuntime : ICombatDamageTarget
     public int maxHealth { get; private set; }
     public int currentHealth { get; private set; }
     public int shieldCharges { get; private set; }
+    public int encounterBlock { get; private set; }
+    public Func<bool> HealingAllowed { get; set; }
 
     public string CombatDisplayName => "Player";
     public int CurrentHealth => currentHealth;
     public int ShieldCharges => shieldCharges;
+    public int EncounterBlock => encounterBlock;
     public bool IsDefeated => currentHealth <= 0;
 
     public PlayerRuntime(int maxHealth = DefaultMaxHealth)
@@ -31,6 +34,7 @@ public sealed class PlayerRuntime : ICombatDamageTarget
     {
         currentHealth = maxHealth;
         ResetShield();
+        ResetEncounterBlock();
     }
 
     public int ModifyIncomingCombatDamage(DamageRequest request, CombatManager context, int damage)
@@ -43,8 +47,10 @@ public sealed class PlayerRuntime : ICombatDamageTarget
                 CombatDamageOrigin.Card or CombatDamageOrigin.EnemyAggregate or
                 CombatDamageOrigin.Recovery or CombatDamageOrigin.Reactive))
             return Math.Max(0, damage);
-        return GameplayEffectResolver.ModifyIncomingCombatDamage(
+        int modified = GameplayEffectResolver.ModifyIncomingCombatDamage(
             new IncomingDamageEffectContext(request, context, CardManager.Instance, damage));
+        return request.Origin is CombatDamageOrigin.EnemyAggregate or CombatDamageOrigin.Recovery
+            ? ConsumeEncounterBlock(modified) : modified;
     }
 
     public int ApplyResolvedCombatDamage(int amount) => TakeDamage(amount);
@@ -52,8 +58,9 @@ public sealed class PlayerRuntime : ICombatDamageTarget
     public int GainShield(int amount)
     {
         if (amount <= 0 || IsDefeated) return 0;
-        shieldCharges += amount;
-        return amount;
+        int previous = shieldCharges;
+        shieldCharges = (int)Math.Min(int.MaxValue, (long)shieldCharges + amount);
+        return shieldCharges - previous;
     }
 
     public bool TryConsumeShield()
@@ -66,6 +73,27 @@ public sealed class PlayerRuntime : ICombatDamageTarget
     public void ResetShield()
     {
         shieldCharges = 0;
+    }
+
+    public int GainEncounterBlock(int amount)
+    {
+        if (amount <= 0 || IsDefeated) return 0;
+        int previous = encounterBlock;
+        encounterBlock = (int)Math.Min(int.MaxValue, (long)encounterBlock + amount);
+        return encounterBlock - previous;
+    }
+
+    public int ConsumeEncounterBlock(int amount)
+    {
+        if (amount <= 0 || encounterBlock <= 0) return Math.Max(0, amount);
+        int absorbed = Math.Min(encounterBlock, amount);
+        encounterBlock -= absorbed;
+        return amount - absorbed;
+    }
+
+    public void ResetEncounterBlock()
+    {
+        encounterBlock = 0;
     }
 
     public int TakeDamage(int amount)
@@ -83,22 +111,34 @@ public sealed class PlayerRuntime : ICombatDamageTarget
 
     public int Heal(int amount)
     {
-        if (amount <= 0 || IsDefeated)
+        if (amount <= 0 || IsDefeated || HealingAllowed != null && !HealingAllowed())
             return 0;
 
         int previousHealth = currentHealth;
-        currentHealth = Math.Min(maxHealth, currentHealth + amount);
+        currentHealth = (int)Math.Min(maxHealth, (long)currentHealth + amount);
         return currentHealth - previousHealth;
+    }
+
+    public int SetMaxHealthAndClamp(int value)
+    {
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+        int previous = maxHealth;
+        maxHealth = value;
+        currentHealth = Math.Min(currentHealth, maxHealth);
+        return maxHealth - previous;
     }
 
     public int IncreaseMaxHealth(int amount, bool healIncrease = true)
     {
         if (amount <= 0) return 0;
 
-        maxHealth += amount;
-        if (healIncrease)
-            currentHealth += amount;
-        return amount;
+        long requestedMax = (long)maxHealth + amount;
+        int nextMax = (int)Math.Min(int.MaxValue, requestedMax);
+        int actualIncrease = nextMax - maxHealth;
+        maxHealth = nextMax;
+        if (healIncrease && actualIncrease > 0 && (HealingAllowed == null || HealingAllowed()))
+            currentHealth = (int)Math.Min(maxHealth, (long)currentHealth + actualIncrease);
+        return actualIncrease;
     }
 
     static void ValidateMaxHealth(int maxHealth)

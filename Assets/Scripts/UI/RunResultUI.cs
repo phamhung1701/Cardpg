@@ -136,8 +136,11 @@ public class RunResultUI : MonoBehaviour
 
     public void RetrySameSeed()
     {
+        var run = RunManager.Instance;
+        bool continueInfinite = run != null && run.CanContinueInfiniteMode;
         HideAll();
-        RunManager.Instance?.RestartRun();
+        if (continueInfinite) run.ContinueInfiniteMode();
+        else run?.RestartRun();
     }
 
     public void NewRun()
@@ -174,6 +177,12 @@ public class RunResultUI : MonoBehaviour
         string timingSummary = BuildTimingSummary(run?.Timing, victory);
 
         if (resultTitleLabel) resultTitleLabel.text = victory ? "RUN VICTORY" : "RUN DEFEAT";
+        if (retrySameSeedButton)
+        {
+            var retryLabel = retrySameSeedButton.GetComponentInChildren<TMP_Text>();
+            if (retryLabel) retryLabel.text = run != null && run.CanContinueInfiniteMode
+                ? "CONTINUE INFINITE MODE" : "RETRY SAME SEED";
+        }
         if (resultBodyLabel)
         {
             resultBodyLabel.text =

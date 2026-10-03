@@ -23,6 +23,7 @@ public class ShopUI : MonoBehaviour
         {
             RunManager.Instance.OnShowShop += Open;
             RunManager.Instance.OnHideShop += Close;
+            RunManager.Instance.OnShopOffersChanged += RefreshItems;
         }
         if (CardManager.Instance != null)
         {
@@ -40,6 +41,7 @@ public class ShopUI : MonoBehaviour
         {
             RunManager.Instance.OnShowShop -= Open;
             RunManager.Instance.OnHideShop -= Close;
+            RunManager.Instance.OnShopOffersChanged -= RefreshItems;
         }
         if (CardManager.Instance != null)
         {

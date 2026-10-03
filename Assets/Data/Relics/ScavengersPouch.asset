@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc333c80492e32a4981ae457376add7e, type: 3}
+  m_Name: ScavengersPouch
+  m_EditorClassIdentifier: CardPG.Runtime::RelicData
+  id: rel_117
+  displayName: "Scavenger\u2019s Pouch"
+  icon: DRAW
+  description: The first successful consumable use each encounter draws 1 card.
+  price: 20
+  capacityCategory: 0
+  canonicalId: rel_117
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects: []
+  ruleModifiers: []
+  specialRule: 21
+  restrictToSuit: 0
+  affectedSuit: 0
+  requiresEnhancedCard: 0
+  damageMultiplier: 1
+  flatDamageBonus: 0
+  defenseBonus: 0
+  reduceEnemyAttackByCardValue: 0
+  recycleDiscardByCardValue: 0
+  drawByCardValue: 0
+  healAfterVictory: 0
+  bonusGold: 0

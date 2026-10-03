@@ -5,6 +5,8 @@ public class RunContentCatalog : ScriptableObject
 {
     [Header("Encounters")]
     public EnemyTypeData[] normalEnemies;
+    [Tooltip("Authored elite bases; do not apply the legacy generic elite bonuses.")]
+    public EnemyTypeData[] eliteEnemies;
     public EnemyAbility eliteAbility;
 
     [Header("Boss Suit Abilities")]

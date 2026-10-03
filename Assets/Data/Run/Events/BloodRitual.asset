@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56ede82db3e0bdd49bbf245bd4ba24ac, type: 3}
+  m_Name: BloodRitual
+  m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
+  id: evt_100
+  category: 5
+  title: Blood Ritual
+  description: A forbidden ritual offers power at a severe cost. Choose only if you
+    can bear the price.
+  choices:
+  - label: Everything
+    description: Set maximum HP to 5 (current HP is clamped, never healed) and gain
+      a Legendary Artifact.
+    effects: []
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: A Pool
+    description: Pay 15 current HP (must remain alive) and gain an Epic Artifact.
+    effects: []
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: A Drop
+    description: Pay 5 current HP (must remain alive) and upgrade a random eligible
+      Artifact by one tier.
+    effects: []
+    interaction: 0
+    requiredDiscardValue: 0

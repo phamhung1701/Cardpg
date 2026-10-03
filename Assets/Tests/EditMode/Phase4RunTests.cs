@@ -55,7 +55,7 @@ public sealed class Phase4DeterminismTests
         var incoming = first.SelectMany(node => node.next).GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
         Assert.That(incoming.Values.Any(count => count > 1), Is.True, "Expected at least one merge.");
         Assert.That(first.Any(node => node.hidden), Is.True);
-        Assert.That(first.Select(node => node.kind), Does.Contain(MapNodeType.Elite));
+        Assert.That(first.Count(node => node.kind == MapNodeType.Elite), Is.InRange(0, 2));
         Assert.That(first.Select(node => node.kind), Does.Contain(MapNodeType.Shop));
         Assert.That(first.Select(node => node.kind), Does.Contain(MapNodeType.Event));
         Assert.That(first.Select(node => node.kind), Does.Contain(MapNodeType.Upgrade));

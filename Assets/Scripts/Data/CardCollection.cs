@@ -152,6 +152,13 @@ public sealed class CardCollection
         return true;
     }
 
+    public bool TryReturnDiscardToHand(CardInstance card, int handCapacity)
+    {
+        if (card == null || _hand.Count >= handCapacity || !_discardPile.Remove(card)) return false;
+        _hand.Add(card);
+        return true;
+    }
+
     public int ReturnRandomDiscardToDeck(int requestedCount)
     {
         if (requestedCount <= 0 || _discardPile.Count == 0) return 0;

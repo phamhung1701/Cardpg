@@ -85,7 +85,7 @@ public class EnemyDisplayUI : MonoBehaviour
 
         if (nameText) nameText.text = hasEnemy ? enemy.DisplayName.ToUpperInvariant() : "AWAITING ENCOUNTER";
         if (hpText) hpText.text = hasEnemy ? $"HP  {enemy.currentHp}/{enemy.maxHp}" : "HP  —";
-        if (atkText) atkText.text = hasEnemy ? $"ATTACK  {enemy.currentAttack}" : "ATTACK  —";
+        if (atkText) atkText.text = hasEnemy ? $"ATTACK  {enemy.EffectiveAttack}" : "ATTACK  —";
         if (healthBar)
         {
             healthBar.minValue = 0;
@@ -94,6 +94,7 @@ public class EnemyDisplayUI : MonoBehaviour
         }
 
         RefreshPortrait(enemy);
+        RefreshStateGuidance();
     }
 
     void RefreshPortrait(EnemyRuntime enemy)
@@ -154,10 +155,36 @@ public class EnemyDisplayUI : MonoBehaviour
                 _ => "Choose your next encounter"
             };
             var enemy = DisplayedEnemy;
+            if (enemy != null && state == GameState.PlayerTurn && enemy.HasDoubleStrike)
+            {
+                int budget = enemy.ResponseAttack + (enemy.HasOppression
+                    ? Mathf.Max(0, (CardManager.Instance?.HandCount ?? 0) - 3) * 2 : 0);
+                guidance += $"\nDouble Strike next: 2 hits, {Mathf.FloorToInt(budget * 0.6f + 0.5f)} damage each";
+            }
+            else if (enemy != null && state == GameState.EnemyAttacking && enemy.HasDoubleStrike)
+                guidance = $"Double Strike incoming: 2 hits, {Mathf.FloorToInt(enemy.PreparedResponseBudget * 0.6f + 0.5f)} damage each";
+            if (enemy != null && enemy.HasSuitCall)
+                guidance += $"\nCalled suit: {enemy.AnnouncedSuit}{(enemy.DuelistCallConsumed ? " (used)" : " (first matching hit -50%)")}";
+            if (enemy != null && enemy.HasSilence)
+                guidance += "\nSilence active: held-card effects disabled";
+            if (enemy != null && enemy.HasAbilityEffect(EnemyAbilityEffect.Silence))
+                guidance += "\nSilence inactive at/below 50% HP";
+            if (enemy != null && enemy.HasWithering)
+                guidance += "\nWithering active: player healing prevented";
+            else if (enemy != null && enemy.HasAbilityEffect(EnemyAbilityEffect.Withering))
+                guidance += "\nWithering inactive at/below 50% HP";
+            if (enemy != null && enemy.HasOppression && state == GameState.PlayerTurn)
+                guidance += $"\nOppression: +{Mathf.Max(0, (CardManager.Instance?.HandCount ?? 0) - 3) * 2} next response damage";
             if (enemy != null && state == GameState.PlayerTurn && enemy.NextAttackIsCharged)
-                guidance += $"\nWarning: charged attack next ({enemy.currentAttack * 2} damage)";
+                guidance += $"\nWarning: charged attack next ({enemy.EffectiveAttack * 2} damage)";
             else if (enemy != null && state == GameState.EnemyAttacking && enemy.CurrentResponseIsCharged)
                 guidance = $"Charged attack incoming ({enemy.ResponseAttack} damage)";
+            if (enemy != null && state == GameState.PlayerTurn && enemy.HasRoyalGuard && !enemy.NextAttackIsCharged)
+                guidance += $"\nNext: +1 Shield and {enemy.EffectiveAttack} damage";
+            if (enemy != null && enemy.ShieldCharges > 0)
+                guidance += $"\nShield: {enemy.ShieldCharges}";
+            if (enemy != null && enemy.CaptainAttackBonus > 0)
+                guidance += "\nCaptain alive: +1 ATK";
             string abilities = enemy?.AbilitySummary;
             statusText.text = string.IsNullOrEmpty(abilities)
                 ? guidance
