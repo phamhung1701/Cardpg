@@ -18,6 +18,10 @@ public sealed class ArtifactRailUITests
     GameObject _tooltipPanel;
     GameObject _detailPanel;
     Button _close;
+    Button _mergeMode;
+    Button _mergeConfirm;
+    Button _mergeCancel;
+    TMP_Text _mergeStatus;
 
     [SetUp]
     public void SetUp()
@@ -35,6 +39,10 @@ public sealed class ArtifactRailUITests
         _detail = _detailPanel.AddComponent<TextMeshProUGUI>();
         _detailPanel.SetActive(false);
         _close = CreateUI("Close").AddComponent<Button>();
+        _mergeMode = CreateUI("Merge Mode").AddComponent<Button>();
+        _mergeConfirm = CreateUI("Merge Confirm").AddComponent<Button>();
+        _mergeCancel = CreateUI("Merge Cancel").AddComponent<Button>();
+        _mergeStatus = CreateUI("Merge Status").AddComponent<TextMeshProUGUI>();
         _rail.source = _cards;
         _rail.slotsRoot = _slots;
         _rail.capacityLabel = _capacity;
@@ -43,6 +51,10 @@ public sealed class ArtifactRailUITests
         _rail.detailPanel = _detailPanel;
         _rail.detailText = _detail;
         _rail.detailCloseButton = _close;
+        _rail.mergeModeButton = _mergeMode;
+        _rail.mergeConfirmButton = _mergeConfirm;
+        _rail.mergeCancelButton = _mergeCancel;
+        _rail.mergeStatusText = _mergeStatus;
         host.SetActive(true);
         InvokeRail("OnEnable"); // EditMode does not consistently run MonoBehaviour lifecycle callbacks.
         _rail.Refresh();
@@ -55,6 +67,80 @@ public sealed class ArtifactRailUITests
         for (int i = _created.Count - 1; i >= 0; i--)
             if (_created[i]) Object.DestroyImmediate(_created[i]);
         _created.Clear();
+    }
+
+    [Test]
+    public void RuntimeControlsAreCreatedInTheRailAndWireSelectionLifecycle()
+    {
+        InvokeRail("OnDisable");
+        _rail.mergeModeButton = null;
+        _rail.mergeConfirmButton = null;
+        _rail.mergeCancelButton = null;
+        _rail.mergeStatusText = null;
+
+        var bar = CreateUI("Runtime Rail Root");
+        bar.transform.SetParent(_rail.transform, false);
+        var viewport = CreateUI("Runtime Viewport");
+        viewport.transform.SetParent(bar.transform, false);
+        var slots = CreateUI("Runtime Slots");
+        slots.transform.SetParent(viewport.transform, false);
+        _rail.slotsRoot = slots.GetComponent<RectTransform>();
+        InvokeRail("OnEnable");
+
+        Assert.That(_rail.mergeModeButton, Is.Not.Null);
+        Assert.That(_rail.mergeConfirmButton, Is.Not.Null);
+        Assert.That(_rail.mergeCancelButton, Is.Not.Null);
+        Assert.That(_rail.mergeStatusText, Is.Not.Null);
+        Assert.That(_rail.mergeModeButton.transform.parent, Is.SameAs(bar.transform));
+        Assert.That(viewport.GetComponent<RectTransform>().anchoredPosition.y, Is.LessThan(0f));
+        _rail.mergeModeButton.onClick.Invoke();
+        Assert.That(_rail.mergeCancelButton.interactable, Is.True);
+        Assert.That(_rail.mergeConfirmButton.interactable, Is.False);
+        _rail.mergeCancelButton.onClick.Invoke();
+        Assert.That(_rail.mergeCancelButton.interactable, Is.False);
+    }
+
+    [Test]
+    public void ManualMergeRequiresTwoDistinctMatchingInstancesAndExplicitConfirmation()
+    {
+        var common = Artifact("common", "Common", "C", "Common detail");
+        common.canonicalId = "family-common";
+        common.tier = 1;
+        var next = Artifact("rare", "Rare", "R", "Rare detail");
+        next.canonicalId = "family-rare";
+        next.tier = 2;
+        next.upgradeFromId = "family-common";
+        _cards.relicCatalog.AddRange(new[] { common, next });
+        _cards.ownedArtifacts.AddRange(new[] { common, common });
+        InvokeRail("Refresh");
+        _mergeMode.onClick.Invoke();
+        var first = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
+        var second = _slots.GetChild(1).GetComponent<ArtifactIconSlotUI>();
+        first.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(_mergeConfirm.interactable, Is.False);
+        second.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(_mergeConfirm.interactable, Is.True);
+        Assert.That(_mergeStatus.text, Does.Contain("Rare"));
+        Assert.That(_cards.ownedArtifacts.Count, Is.EqualTo(2));
+        _mergeConfirm.onClick.Invoke();
+        Assert.That(_cards.ownedArtifacts, Is.EqualTo(new[] { next }));
+    }
+
+    [Test]
+    public void ManualMergeDoesNotEnableForDifferentArtifactFamilies()
+    {
+        var firstArtifact = Artifact("one", "One", "1", "One detail");
+        firstArtifact.canonicalId = "family-one";
+        var secondArtifact = Artifact("two", "Two", "2", "Two detail");
+        secondArtifact.canonicalId = "family-two";
+        _cards.relicCatalog.AddRange(new[] { firstArtifact, secondArtifact });
+        _cards.ownedArtifacts.AddRange(new[] { firstArtifact, secondArtifact });
+        InvokeRail("Refresh");
+        _mergeMode.onClick.Invoke();
+        _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>().OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        _slots.GetChild(1).GetComponent<ArtifactIconSlotUI>().OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(_mergeConfirm.interactable, Is.False);
+        Assert.That(_cards.ownedArtifacts.Count, Is.EqualTo(2));
     }
 
     [Test]

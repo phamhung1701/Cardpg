@@ -35,51 +35,59 @@ public sealed class LowerEffortShopTests
     }
 
     [Test]
-    public void ShopOffers_ContainInvestmentAndGuidanceAtFiveGoldEach()
+    public void ShopOffers_ContainSeededInvestmentAndGuidanceWithVariableStakeDescription()
     {
-        OpenShop(Shop(1, 0));
+        OpenShop(Shop(3, 0));
         var investment = FindOffer(ShopOfferKind.Investment);
         var guidance = FindOffer(ShopOfferKind.Guidance);
-        Assert.That(investment.price, Is.EqualTo(5));
-        Assert.That(guidance.price, Is.EqualTo(5));
-        Assert.That(investment.Description(_cards), Does.Contain("50%"));
+        Assert.That(investment.investmentStake, Is.Zero);
+        Assert.That(investment.Description(_cards), Does.Contain("3×"));
         Assert.That(guidance.Description(_cards), Does.Contain("hidden"));
     }
 
     [Test]
     public void Investment_ResolvesOnceOnTheNextShopWithSeededFiftyPercentReturn()
     {
-        var first = Shop(1, 0, 2);
+        var first = Shop(3, 0, 2);
         var second = Shop(2, 0, 3);
-        var third = Shop(3, 0);
+        var third = Shop(4, 0);
         _run.currentPath.Clear();
         _run.currentPath.AddRange(new[] { first, second, third });
         _cards.AddGold(5);
         _run.OnPathChosen(first.id);
         var investment = FindOffer(ShopOfferKind.Investment);
 
+        Assert.That(_run.SetInvestmentStake(investment.StableId, 5), Is.True);
+        Assert.That(_run.SetInvestmentStake(investment.StableId, 0), Is.False);
+        Assert.That(_run.SetInvestmentStake(investment.StableId, int.MaxValue), Is.False);
         Assert.That(_run.PurchaseShopOffer(investment.StableId), Is.True);
         Assert.That(_cards.gold, Is.Zero);
         Assert.That(_run.PendingInvestmentCount, Is.EqualTo(1));
         Assert.That(_run.CanPurchaseShopOffer(investment.StableId), Is.False, "Investment is one purchase per shop visit.");
+        int resultNotifications = 0;
+        string resultMessage = null;
+        _run.OnInvestmentResult += message => { resultNotifications++; resultMessage = message; };
         _run.OnShopDone();
         _run.OnPathChosen(second.id);
 
-        var expectedRandom = new RunRandomContext(Seed).CreateStream("shop-investment", unchecked(second.mapIndex * 7919 ^ second.id));
+        var expectedRandom = new RunRandomContext(Seed).CreateStream("shop-investment-payout", unchecked(second.mapIndex * 7919 ^ second.id));
         int expectedGold = expectedRandom.NextInt(0, 2) == 0 ? 15 : 0;
         Assert.That(_cards.gold, Is.EqualTo(expectedGold));
+        Assert.That(resultNotifications, Is.EqualTo(1));
+        Assert.That(resultMessage, Does.Contain(expectedGold > 0 ? "1 success" : "1 loss").IgnoreCase);
         Assert.That(_run.PendingInvestmentCount, Is.Zero);
         int resolvedGold = _cards.gold;
         _run.OnShopDone();
         _run.OnPathChosen(third.id);
         Assert.That(_cards.gold, Is.EqualTo(resolvedGold), "A settled investment must not resolve twice.");
         Assert.That(_run.PendingInvestmentCount, Is.Zero);
+        Assert.That(resultNotifications, Is.EqualTo(1), "The investment result is announced only once.");
     }
 
     [Test]
     public void Guidance_CostsFiveGoldRevealsOneReachableHiddenEventOrRiskAndIsOneTime()
     {
-        var shop = Shop(1, 0, 2, 3);
+        var shop = Shop(3, 0, 2, 3);
         var farther = new PathNode { id = 2, mapIndex = 0, kind = MapNodeType.Event, hidden = true, col = 2, row = 0 };
         var nearer = new PathNode { id = 3, mapIndex = 0, kind = MapNodeType.Risk, hidden = true, col = 1, row = 0 };
         _run.currentPath.Clear();
@@ -102,7 +110,7 @@ public sealed class LowerEffortShopTests
     [Test]
     public void Guidance_IsUnavailableWithoutReachableEligibleHiddenNode()
     {
-        var shop = Shop(1, 0);
+        var shop = Shop(3, 0);
         _run.currentPath.Clear();
         _run.currentPath.Add(shop);
         _cards.AddGold(5);

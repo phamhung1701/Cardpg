@@ -1,7 +1,10 @@
 using System.Linq;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class ActionButtonsUI : MonoBehaviour
@@ -23,7 +26,11 @@ public class ActionButtonsUI : MonoBehaviour
 
     TMP_Text _primaryActionLabel;
     UnityAction[] _backpackSlotListeners;
+    ConsumableSlotDragUI[] _backpackSlotDragInputs;
     EnhancementTargetUI _enhancementTargetUI;
+    int _directConsumableTargetSlot = -1;
+    readonly List<int> _directRuneTargetIds = new();
+    readonly List<CardView> _directRuneTargetViews = new();
 
     void OnEnable()
     {
@@ -64,13 +71,20 @@ public class ActionButtonsUI : MonoBehaviour
             CombatManager.Instance.OnPlayerHealthChanged -= HandlePlayerHealthChanged;
             CombatManager.Instance.OnCombatLog -= HandleCombatLog;
         }
-        if (CardManager.Instance != null)
+        var cards = CardManager.Instance;
+        if (cards != null)
         {
-            CardManager.Instance.OnCardSelected -= HandleSelectionChanged;
-            CardManager.Instance.OnDeckChanged -= HandleDeckChanged;
-            CardManager.Instance.OnConsumablesChanged -= HandleDeckChanged;
+            cards.OnCardSelected -= HandleSelectionChanged;
+            cards.OnDeckChanged -= HandleDeckChanged;
+            cards.OnConsumablesChanged -= HandleDeckChanged;
         }
 
+        if (cards != null && cards.IsHandEnhancementTargeting && _directConsumableTargetSlot >= 0)
+        {
+            ClearDirectRuneSelection();
+            cards.EndHandEnhancementTargeting();
+            _directConsumableTargetSlot = -1;
+        }
         if (playButton) playButton.onClick.RemoveListener(OnPlayClicked);
         if (blockButton) blockButton.onClick.RemoveListener(OnBlockClicked);
         if (rankSortButton) rankSortButton.onClick.RemoveListener(OnRankSortClicked);
@@ -78,6 +92,12 @@ public class ActionButtonsUI : MonoBehaviour
         if (takeDamageButton) takeDamageButton.onClick.RemoveListener(OnTakeDamageClicked);
         if (recoverButton) recoverButton.onClick.RemoveListener(OnRecoverClicked);
         UnbindBackpackSlots();
+    }
+
+    void Update()
+    {
+        if (_directConsumableTargetSlot >= 0 && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            CancelDirectConsumableTargeting();
     }
 
     void HandleStateChanged(GameState _) => RefreshAll();
@@ -141,7 +161,7 @@ public class ActionButtonsUI : MonoBehaviour
             turnStateLabel.text = combat.currentState switch
             {
                 GameState.PlayerTurn => combat.IsBonusPlayerAction ? "PLAYER TURN  •  BONUS ACTION" : "PLAYER TURN",
-                GameState.EnemyAttacking => "DEFENSE WINDOW",
+                GameState.EnemyAttacking => "BLOCKING PHASE  •  BLOCK OR TAKE DAMAGE",
                 GameState.GameWon => "ENCOUNTER WON",
                 GameState.GameOver => "RUN DEFEAT",
                 _ => "CHOOSE A ROUTE"
@@ -150,16 +170,25 @@ public class ActionButtonsUI : MonoBehaviour
 
         if (pendingDamageLabel)
         {
-            bool showDamage = combat.currentState == GameState.EnemyAttacking && combat.pendingDamage > 0;
+            bool showDamage = combat.currentState == GameState.EnemyAttacking;
             pendingDamageLabel.gameObject.SetActive(showDamage);
             pendingDamageLabel.text = showDamage
-                ? $"ATTACKS BLOCKED  {combat.BlockedAttackCount}  •  PENDING  {combat.PendingAttackCount}  •  REMAINING DAMAGE  {combat.pendingDamage}"
+                ? combat.pendingDamage > 0
+                    ? $"BLOCKING  •  {combat.BlockedAttackCount} BLOCKED  •  {combat.PendingAttackCount} ATTACKS LEFT  •  {combat.pendingDamage} DAMAGE"
+                    : "ALL ATTACKS BLOCKED"
                 : string.Empty;
         }
 
         if (selectionLabel)
         {
-            selectionLabel.text = combat.currentState switch
+        if (cards.IsHandEnhancementTargeting && _directConsumableTargetSlot >= 0)
+        {
+            var activeConsumable = cards.GetConsumableAtSlot(_directConsumableTargetSlot);
+            selectionLabel.text = activeConsumable != null && activeConsumable.effectType == ConsumableEffectType.ChangeSuit
+                ? $"Select 1–3 distinct hand cards for {activeConsumable.displayName} ({_directRuneTargetIds.Count}/3), then click its slot to apply; Esc cancels"
+                : "Choose a card in your hand to use the selected consumable, or press Esc to cancel";
+        }
+        else selectionLabel.text = combat.currentState switch
             {
                 GameState.PlayerTurn when cards.HandCount == 0 =>
                     $"Hand empty: Recover takes {combat.TotalEnemyAttack} damage, then draws 1 card",
@@ -252,11 +281,21 @@ public class ActionButtonsUI : MonoBehaviour
         UnbindBackpackSlots();
         if (backpackSlotButtons == null) return;
         _backpackSlotListeners = new UnityAction[backpackSlotButtons.Length];
+        _backpackSlotDragInputs = new ConsumableSlotDragUI[backpackSlotButtons.Length];
         for (int i = 0; i < backpackSlotButtons.Length; i++)
         {
             if (!backpackSlotButtons[i]) continue;
             int slotIndex = i;
-            _backpackSlotListeners[i] = () => UseBackpackSlot(slotIndex);
+            var dragInput = backpackSlotButtons[i].GetComponent<ConsumableSlotDragUI>();
+            if (!dragInput) dragInput = backpackSlotButtons[i].gameObject.AddComponent<ConsumableSlotDragUI>();
+            dragInput.Configure(this, slotIndex);
+            _backpackSlotDragInputs[i] = dragInput;
+            _backpackSlotListeners[i] = () =>
+            {
+                if (_backpackSlotDragInputs[slotIndex] != null &&
+                    _backpackSlotDragInputs[slotIndex].ConsumeClickSuppression()) return;
+                UseBackpackSlot(slotIndex);
+            };
             backpackSlotButtons[i].onClick.AddListener(_backpackSlotListeners[i]);
         }
     }
@@ -269,21 +308,152 @@ public class ActionButtonsUI : MonoBehaviour
             if (backpackSlotButtons[i] && _backpackSlotListeners[i] != null)
                 backpackSlotButtons[i].onClick.RemoveListener(_backpackSlotListeners[i]);
         _backpackSlotListeners = null;
+        _backpackSlotDragInputs = null;
+    }
+
+    public void HandleConsumableSlotDrop(int sourceSlot, PointerEventData eventData)
+    {
+        if (GameplayInputGate.IsBlocked || CardManager.Instance == null || EventSystem.current == null ||
+            _directConsumableTargetSlot >= 0 && sourceSlot != _directConsumableTargetSlot) return;
+        var results = new System.Collections.Generic.List<RaycastResult>();
+        EventSystem.current.RaycastAll(eventData, results);
+        CardActionDropTarget enemyTarget = null;
+        int destinationSlot = -1;
+        for (int i = 0; i < results.Count; i++)
+        {
+            var hit = results[i].gameObject;
+            var targetCard = hit.GetComponentInParent<CardView>();
+            if (targetCard != null)
+            {
+                var sourceConsumable = CardManager.Instance.GetConsumableAtSlot(sourceSlot);
+                if (sourceConsumable != null &&
+                    sourceConsumable.effectType is (ConsumableEffectType.ApplyEnhancement or ConsumableEffectType.ChangeSuit) &&
+                    _directConsumableTargetSlot < 0)
+                    BeginDirectConsumableTargeting(sourceSlot);
+                HandleDirectConsumableHandCard(sourceSlot, targetCard);
+                return;
+            }
+            var dropTarget = hit.GetComponentInParent<CardActionDropTarget>();
+            if (dropTarget != null)
+            {
+                enemyTarget = dropTarget;
+                break;
+            }
+            for (int slot = 0; slot < backpackSlotButtons.Length; slot++)
+                if (backpackSlotButtons[slot] && (hit == backpackSlotButtons[slot].gameObject ||
+                    hit.transform.IsChildOf(backpackSlotButtons[slot].transform)))
+                {
+                    destinationSlot = slot;
+                    break;
+                }
+            if (destinationSlot >= 0) break;
+        }
+        if (enemyTarget != null)
+            enemyTarget.TryUseConsumableAtSlot(sourceSlot);
+        else if (destinationSlot >= 0)
+            CardManager.Instance.MoveConsumableSlot(sourceSlot, destinationSlot);
+    }
+
+    void BeginDirectConsumableTargeting(int slotIndex)
+    {
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        var item = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
+        if (cards == null || combat == null || item == null ||
+            item.effectType is not (ConsumableEffectType.ApplyEnhancement or ConsumableEffectType.ChangeSuit) ||
+            !cards.CanUseConsumableAtSlot(slotIndex, combat)) return;
+        ClearDirectRuneSelection();
+        _directConsumableTargetSlot = slotIndex;
+        cards.BeginHandEnhancementTargeting(view => HandleDirectConsumableHandCard(slotIndex, view));
+        RefreshAll();
+    }
+
+    bool HandleDirectConsumableHandCard(int slotIndex, CardView view)
+    {
+        var cards = CardManager.Instance;
+        if (cards == null || view == null || view.data == null ||
+            _directConsumableTargetSlot != slotIndex) return false;
+        var definition = cards.GetConsumableAtSlot(slotIndex);
+        if (definition == null) return false;
+        if (definition.effectType == ConsumableEffectType.ChangeSuit)
+        {
+            if (!cards.CanTargetDeckMutationAtSlot(slotIndex, view.data.Id)) return false;
+            int existing = _directRuneTargetIds.IndexOf(view.data.Id);
+            if (existing >= 0)
+            {
+                _directRuneTargetIds.RemoveAt(existing);
+                _directRuneTargetViews.Remove(view);
+                view.SetSelected(false);
+            }
+            else
+            {
+                if (_directRuneTargetIds.Count >= 3) return false;
+                _directRuneTargetIds.Add(view.data.Id);
+                if (!_directRuneTargetViews.Contains(view)) _directRuneTargetViews.Add(view);
+                view.SetSelected(true);
+            }
+            RefreshAll();
+            return true;
+        }
+        if (definition.effectType != ConsumableEffectType.ApplyEnhancement ||
+            !cards.UseEnhancementConsumableAtSlot(slotIndex, view.data.Id)) return false;
+        ClearDirectRuneSelection();
+        cards.EndHandEnhancementTargeting();
+        _directConsumableTargetSlot = -1;
+        RefreshAll();
+        return true;
+    }
+
+    void CommitOrCancelDirectConsumableTargeting()
+    {
+        var cards = CardManager.Instance;
+        var definition = cards != null ? cards.GetConsumableAtSlot(_directConsumableTargetSlot) : null;
+        if (definition != null && definition.effectType == ConsumableEffectType.ChangeSuit &&
+            _directRuneTargetIds.Count >= 1 && _directRuneTargetIds.Count <= 3 &&
+            cards.UseDeckMutationConsumableAtSlot(_directConsumableTargetSlot, _directRuneTargetIds.ToArray()))
+        {
+            ClearDirectRuneSelection();
+            cards.EndHandEnhancementTargeting();
+            _directConsumableTargetSlot = -1;
+            RefreshAll();
+            return;
+        }
+        if (_directRuneTargetIds.Count == 0) CancelDirectConsumableTargeting();
+    }
+
+    void ClearDirectRuneSelection()
+    {
+        foreach (var view in _directRuneTargetViews)
+            if (view) view.SetSelected(false);
+        _directRuneTargetViews.Clear();
+        _directRuneTargetIds.Clear();
+    }
+
+    void CancelDirectConsumableTargeting()
+    {
+        ClearDirectRuneSelection();
+        _directConsumableTargetSlot = -1;
+        CardManager.Instance?.EndHandEnhancementTargeting();
+        RefreshAll();
     }
 
     void UseBackpackSlot(int slotIndex)
     {
+        if (_directConsumableTargetSlot >= 0)
+        {
+            if (_directConsumableTargetSlot == slotIndex) CommitOrCancelDirectConsumableTargeting();
+            return;
+        }
         var cards = CardManager.Instance;
         var combat = CombatManager.Instance;
         var consumable = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
         if (cards == null || combat == null || consumable == null) return;
-        if (consumable.effectType == ConsumableEffectType.ApplyEnhancement)
+        if (consumable.effectType is ConsumableEffectType.ApplyEnhancement or ConsumableEffectType.ChangeSuit)
         {
-            _enhancementTargetUI?.OpenConsumableTarget(slotIndex);
+            BeginDirectConsumableTargeting(slotIndex);
             return;
         }
-        if (consumable.effectType is ConsumableEffectType.DuplicateCard or
-            ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)
+        if (consumable.effectType is ConsumableEffectType.DuplicateCard or ConsumableEffectType.DestroyCards)
         {
             _enhancementTargetUI?.OpenDeckMutationTarget(slotIndex);
             return;
@@ -314,11 +484,9 @@ public class ActionButtonsUI : MonoBehaviour
                         (consumable.uses > 1 && activeItem != null
                             ? $" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
             }
-            button.interactable = cards.CanUseConsumableAtSlot(i, combat) &&
-                (consumable == null || consumable.effectType is not
-                    (ConsumableEffectType.ApplyEnhancement or ConsumableEffectType.DuplicateCard or
-                     ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit) ||
-                    _enhancementTargetUI != null && _enhancementTargetUI.CanOpenConsumableTarget);
+            // Keep slots raycastable for drag/reorder even when use is currently unavailable;
+            // CardManager revalidates every click/drop against current combat state.
+            button.interactable = true;
         }
     }
 }

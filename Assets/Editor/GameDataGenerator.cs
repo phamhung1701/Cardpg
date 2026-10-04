@@ -191,14 +191,16 @@ public static class GameDataGenerator
     public static void GenerateEnhancements()
     {
         EnsureFolder(EnhancementDir);
-        ConfigureCoreEnhancement(CreateEnhancement("Sharpened", "sharpened", "Sharpened", "ATK", "+3 attack damage", 12),
+        ConfigureCoreEnhancement(CreateEnhancement("Sharpened", "sharpened", "Sharpened", "ATK", "This card deals +3 attack damage", 12),
             "enh_001", GameplayEffectKind.FlatAttack, GameplayEffectTrigger.AttackCalculated, 3);
-        ConfigureCoreEnhancement(CreateEnhancement("Reinforced", "reinforced", "Hardened", "DEF", "+3 defensive block", 12),
+        ConfigureCoreEnhancement(CreateEnhancement("Reinforced", "reinforced", "Hardened", "DEF", "This card blocks +3 damage", 12),
             "enh_002", GameplayEffectKind.FlatBlock, GameplayEffectTrigger.DefenseCalculated, 3);
         ConfigureCoreEnhancement(CreateEnhancement("Mending", "mending", "Mending", "HP", "Heal 2 HP at each player-turn start while this card is in hand", 15),
             "enh_003", GameplayEffectKind.Heal, GameplayEffectTrigger.PlayerTurnStart, 2);
         ConfigureCoreEnhancement(CreateEnhancement("Quickdraw", "quickdraw", "Quickdraw", "DRAW", "Draw 1 card when played", 18),
             "enh_004", GameplayEffectKind.Draw, GameplayEffectTrigger.CardCommitted, 1);
+        ConfigureCoreEnhancement(CreateEnhancement("DoubleStrike", "double_strike", "Double Strike", "2×", "This card hits the chosen enemy twice, dealing its full resolved damage on each hit.", 20),
+            "enh_005", GameplayEffectKind.DoubleStrike, GameplayEffectTrigger.AttackCalculated, 1);
         Debug.Log("Enhancement assets created or updated.");
     }
 

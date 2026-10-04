@@ -1,7 +1,9 @@
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class Phase7DMapVisibilityTests
 {
@@ -47,6 +49,178 @@ public sealed class Phase7DMapVisibilityTests
         {
             Object.DestroyImmediate(gameObject);
         }
+    }
+
+    [Test]
+    public void PathNodeButtonUI_UsesCompactLabelsAndKeepsUnknownNodesUnknown()
+    {
+        var root = new GameObject("Path node label test");
+        var labelObject = new GameObject("Label", typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(root.transform);
+        try
+        {
+            var runObject = new GameObject("Path node run");
+            try
+            {
+                var run = runObject.AddComponent<RunManager>();
+                var ui = root.AddComponent<PathNodeButtonUI>();
+                var label = labelObject.GetComponent<TextMeshProUGUI>();
+
+                ui.SetNode(new PathNode { kind = MapNodeType.Combat, revealed = true }, run);
+                Assert.That(label.text, Is.EqualTo("COMBAT"));
+                ui.SetNode(new PathNode { kind = MapNodeType.Elite, revealed = true }, run);
+                Assert.That(label.text, Is.EqualTo("ELITE"));
+                ui.SetNode(new PathNode { kind = MapNodeType.Shop, revealed = true }, run);
+                Assert.That(label.text, Is.EqualTo("SHOP"));
+                ui.SetNode(new PathNode { kind = MapNodeType.Event, revealed = true }, run);
+                Assert.That(label.text, Is.EqualTo("?"));
+                ui.SetNode(new PathNode { kind = MapNodeType.Risk, revealed = true }, run);
+                Assert.That(label.text, Is.EqualTo("?"));
+                ui.SetNode(new PathNode { kind = MapNodeType.Combat, revealed = false }, run);
+                Assert.That(label.text, Is.EqualTo("?"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(runObject);
+            }
+        }
+        finally
+        {
+            Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
+    public void PathNodeButtonUI_PreservesBossIdentityWithoutDescription()
+    {
+        var runObject = new GameObject("Path node boss label test");
+        var root = new GameObject("Path node boss button");
+        var labelObject = new GameObject("Label", typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(root.transform);
+        try
+        {
+            var run = runObject.AddComponent<RunManager>();
+            var ui = root.AddComponent<PathNodeButtonUI>();
+            var node = new PathNode { kind = MapNodeType.Boss, revealed = true };
+            ui.SetNode(node, run);
+            Assert.That(labelObject.GetComponent<TextMeshProUGUI>().text, Is.EqualTo("BOSS"));
+        }
+        finally
+        {
+            Object.DestroyImmediate(root);
+            Object.DestroyImmediate(runObject);
+        }
+    }
+
+    [Test]
+    public void MapVisibilityToggle_RequiresAwaitingRouteAndUnblockedInput()
+    {
+        GameplayInputGate.Clear();
+        var runObject = new GameObject("Map toggle run");
+        var root = new GameObject("Map toggle canvas", typeof(RectTransform), typeof(Canvas));
+        root.SetActive(false);
+        var panelObject = new GameObject("PathPanel", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster), typeof(Image));
+        panelObject.transform.SetParent(root.transform, false);
+        var ui = root.AddComponent<PathScreenUI>();
+        SetField(ui, "panel", panelObject);
+        try
+        {
+            var run = runObject.AddComponent<RunManager>();
+            root.SetActive(true);
+            InvokePrivate(ui, "EnsureMapVisibilityControl");
+            var control = root.transform.Find("MapVisibilityButton");
+            Assert.That(control, Is.Not.Null);
+
+            GameplayInputGate.Set(GameplayInputBlockReason.ConsumableReward, true);
+            InvokePrivate(ui, "ShowImmediately");
+            Assert.That(control.gameObject.activeSelf, Is.True,
+                "A temporary reward gate must not permanently disable the route-map control.");
+            GameplayInputGate.Clear();
+            InvokePrivate(ui, "ToggleMapVisibility");
+            Assert.That(panelObject.activeSelf, Is.False,
+                "The map must remain closeable once the temporary reward gate clears.");
+            InvokePrivate(ui, "ToggleMapVisibility");
+            Assert.That(panelObject.activeSelf, Is.True);
+
+            InvokePrivate(ui, "ToggleMapVisibility");
+            Assert.That(panelObject.activeSelf, Is.False);
+
+            GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, true);
+            InvokePrivate(ui, "ToggleMapVisibility");
+            Assert.That(panelObject.activeSelf, Is.False, "A blocked UI state must not reopen the map.");
+            GameplayInputGate.Clear();
+
+            InvokePrivate(ui, "ToggleMapVisibility");
+            Assert.That(panelObject.activeSelf, Is.True);
+
+            typeof(RunManager).GetProperty(nameof(RunManager.IsRunCompleted))
+                .GetSetMethod(true).Invoke(run, new object[] { true });
+            InvokePrivate(ui, "ToggleMapVisibility");
+            Assert.That(panelObject.activeSelf, Is.True, "A completed run must not toggle the route map.");
+
+            InvokePrivate(ui, "HandleRunCompleted");
+            Assert.That(control.gameObject.activeSelf, Is.False, "The map toggle must be hidden for final victory.");
+        }
+        finally
+        {
+            GameplayInputGate.Clear();
+            Object.DestroyImmediate(root);
+            Object.DestroyImmediate(runObject);
+        }
+    }
+
+    [Test]
+    public void MapVisibilityToggle_IsHiddenWhenMapFlowIsCancelledOrReset()
+    {
+        GameplayInputGate.Clear();
+        var runObject = new GameObject("Map lifecycle run");
+        var root = new GameObject("Map lifecycle canvas", typeof(RectTransform), typeof(Canvas));
+        root.SetActive(false);
+        var panelObject = new GameObject("PathPanel", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster), typeof(Image));
+        panelObject.transform.SetParent(root.transform, false);
+        var ui = root.AddComponent<PathScreenUI>();
+        SetField(ui, "panel", panelObject);
+        try
+        {
+            runObject.AddComponent<RunManager>();
+            root.SetActive(true);
+            InvokePrivate(ui, "EnsureMapVisibilityControl");
+            var control = root.transform.Find("MapVisibilityButton");
+
+            InvokePrivate(ui, "ShowImmediately");
+            Assert.That(control.gameObject.activeSelf, Is.True);
+            InvokePrivate(ui, "HandleRunStarted", "new-seed");
+            Assert.That(control.gameObject.activeSelf, Is.False);
+
+            InvokePrivate(ui, "ShowImmediately");
+            Assert.That(control.gameObject.activeSelf, Is.True);
+            InvokePrivate(ui, "HandlePresentationCancelled");
+            Assert.That(control.gameObject.activeSelf, Is.False);
+
+            InvokePrivate(ui, "ShowImmediately");
+            Assert.That(control.gameObject.activeSelf, Is.True);
+            InvokePrivate(ui, "OnDisable");
+            Assert.That(control.gameObject.activeSelf, Is.False);
+        }
+        finally
+        {
+            GameplayInputGate.Clear();
+            Object.DestroyImmediate(root);
+            Object.DestroyImmediate(runObject);
+        }
+    }
+
+    static void SetField(object target, string name, object value)
+    {
+        typeof(PathScreenUI).GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .SetValue(target, value);
+    }
+
+    static void InvokePrivate(object target, string name, params object[] args)
+    {
+        var method = target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(method, Is.Not.Null, $"Missing callback {name}.");
+        method.Invoke(target, args);
     }
 
     [Test]

@@ -180,6 +180,45 @@ public sealed class CardCollectionTests
     }
 
     [Test]
+    public void RecycleHandToDeck_MovesExactInstancesOnceAndLeavesAttackDiscardsAlone()
+    {
+        var collection = CreateCollection(12);
+        collection.DrawToHand(4, 8);
+        var attack = collection.Hand[0];
+        Assert.That(collection.TryDiscard(attack), Is.True);
+        var blocked = collection.Hand.Take(2).ToArray();
+        int deckCount = collection.Deck.Count;
+
+        Assert.That(collection.TryRecycleHandToDeck(blocked), Is.True);
+        Assert.That(collection.Deck.Count, Is.EqualTo(deckCount + 2));
+        Assert.That(blocked.All(card => collection.Deck.Contains(card)), Is.True);
+        Assert.That(collection.DiscardPile, Is.EqualTo(new[] { attack }));
+        Assert.That(collection.TryRecycleHandToDeck(blocked), Is.False, "A repeated commit cannot return cards twice.");
+        AssertConserved(collection);
+    }
+
+    [Test]
+    public void RecycleHandToDeck_IsSeededAndRejectsInvalidSetsWithoutChangingRandomStream()
+    {
+        var first = CreateCollection(20);
+        var second = CreateCollection(20);
+        first.ConfigureRandom(new DeterministicRandom(2391));
+        second.ConfigureRandom(new DeterministicRandom(2391));
+        first.DrawToHand(4, 8);
+        second.DrawToHand(4, 8);
+        var card = first.Hand[0];
+        Assert.That(first.TryRecycleHandToDeck(new[] { card, card }), Is.False);
+        Assert.That(first.TryRecycleHandToDeck(new[] { card, first.Deck[0] }), Is.False);
+        Assert.That(first.Hand.Count, Is.EqualTo(4));
+        Assert.That(first.TryRecycleHandToDeck(first.Hand), Is.True, "Aliased Hand input is snapshotted.");
+        Assert.That(second.TryRecycleHandToDeck(second.Hand.ToArray()), Is.True);
+        Assert.That(first.Deck.Select(c => c.Id), Is.EqualTo(second.Deck.Select(c => c.Id)));
+        Assert.That(first.Hand, Is.Empty);
+        AssertConserved(first);
+        AssertConserved(second);
+    }
+
+    [Test]
     public void Clear_RemovesOwnedCardsAndAllZoneState()
     {
         var collection = CreateCollection(6);

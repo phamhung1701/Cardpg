@@ -115,12 +115,16 @@ public sealed class Phase7AInteractionTests
         _created.Add(bonus);
         _cards.ownedArtifacts.Add(bonus);
         var defender = HandViews().First(view => _combat.CalculateCardDefense(view.data) >= 5);
+        int discardBeforeBlock = _cards.discardPile.Count;
+        int deckBeforeBlock = _cards.deck.Count;
         _cards.ToggleCardSelection(defender);
         _cards.BeginCardDrag(defender);
 
         Assert.That(target.CanAccept(defender), Is.True);
         Assert.That(target.TryCommit(defender), Is.True);
-        Assert.That(_cards.discardPile.Count, Is.EqualTo(2));
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(discardBeforeBlock), "Blocking returns the selected card to the draw deck rather than the discard pile.");
+        Assert.That(_cards.deck.Count, Is.EqualTo(deckBeforeBlock + 1));
+        Assert.That(_cards.deck, Does.Contain(defender.data));
         Assert.That(_combat.pendingDamage, Is.Zero);
     }
 

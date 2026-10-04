@@ -76,9 +76,11 @@ public sealed class CardInstance
         return copy;
     }
 
-    public bool TryApplyEnhancement(CardEnhancementData value)
+    public bool TryApplyEnhancement(CardEnhancementData value, bool replaceExisting = false)
     {
-        if (value == null || enhancement != null) return false;
+        if (value == null || ReferenceEquals(enhancement, value) || enhancement != null && !replaceExisting)
+            return false;
+        if (enhancement != null) EffectState.Clear();
         enhancement = value;
         return true;
     }

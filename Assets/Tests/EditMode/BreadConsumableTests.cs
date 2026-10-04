@@ -153,6 +153,40 @@ public sealed class BreadConsumableTests
     }
 
     [Test]
+    public void SellingConsumable_UsesExactInstancePaysHalfAndIgnoresRemainingCharges()
+    {
+        _bread.uses = 3;
+        Assert.That(_cards.AddConsumable(_bread), Is.True);
+        var expected = _cards.GetConsumableInstanceAtSlot(0);
+        Assert.That(expected.SpendCharge(), Is.True);
+        Assert.That(expected.RemainingCharges, Is.EqualTo(2));
+        var shop = _run.currentPath.First(node => node.kind == MapNodeType.Shop);
+        shop.accessible = true;
+        _run.OnPathChosen(shop.id);
+        _cards.AddGold(10);
+        int goldBefore = _cards.gold;
+
+        Assert.That(_run.SellConsumable(0, new ConsumableInstance(_bread), _bread.price), Is.False,
+            "A different instance in the same slot must not be removed.");
+        Assert.That(_run.SellConsumable(0, expected, _bread.price + 1), Is.False,
+            "A changed authored price invalidates the selected quote.");
+        Assert.That(_run.SellConsumable(0, expected, _bread.price), Is.True);
+        Assert.That(_cards.gold, Is.EqualTo(goldBefore + _bread.price / 2));
+        Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
+    }
+
+    [Test]
+    public void SellingIsRejectedOutsideActiveShopWithoutChangingInventoryOrGold()
+    {
+        Assert.That(_cards.AddConsumable(_bread), Is.True);
+        var instance = _cards.GetConsumableInstanceAtSlot(0);
+        int goldBefore = _cards.gold;
+        Assert.That(_run.SellConsumable(0, instance, _bread.price), Is.False);
+        Assert.That(_cards.gold, Is.EqualTo(goldBefore));
+        Assert.That(_cards.GetConsumableInstanceAtSlot(0), Is.SameAs(instance));
+    }
+
+    [Test]
     public void BreadDrop_UsesSeededChanceAndCannotResolveTwiceForOneNode()
     {
         const int nodeId = 17;

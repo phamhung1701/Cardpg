@@ -28,7 +28,8 @@ public enum GameplayEffectKind
     PermanentKillAttack = 20,
     WildSuit = 21,
     DestroyBlockingCard = 22,
-    MimicInHandEffects = 23
+    MimicInHandEffects = 23,
+    DoubleStrike = 24
 }
 
 public enum GameplayEffectTrigger
@@ -177,6 +178,8 @@ public sealed class GameplayEffectState
 
 public sealed class ArtifactRuntimeInstance
 {
+    static long s_nextId;
+    public long Id { get; } = System.Threading.Interlocked.Increment(ref s_nextId);
     public RelicData Definition { get; }
     public GameplayEffectState State { get; } = new();
     public CardInstance PreparedDwarfSourceCard { get; set; }
@@ -568,7 +571,7 @@ public static class GameplayEffectResolver
             {
                 var artifact = cards.ownedArtifacts[i];
                 if (artifact == null) continue;
-                Accumulate(new GameplayEffectSource(cards.GetArtifactInstance(artifact)), card,
+                Accumulate(new GameplayEffectSource(cards.GetArtifactInstanceAt(i)), card,
                     GameplayEffectTrigger.AttackCalculated, GameplayEffectKind.FlatAttack,
                     GameplayEffectKind.AttackMultiplier, ref artifactFlat, ref artifactMultiplier,
                     includeThresholdEffects: false);
@@ -587,7 +590,7 @@ public static class GameplayEffectResolver
             {
                 var artifact = cards.ownedArtifacts[i];
                 if (artifact == null) continue;
-                Accumulate(new GameplayEffectSource(cards.GetArtifactInstance(artifact)), card,
+                Accumulate(new GameplayEffectSource(cards.GetArtifactInstanceAt(i)), card,
                     GameplayEffectTrigger.AttackCalculated, GameplayEffectKind.FlatAttack,
                     GameplayEffectKind.AttackMultiplier, ref conditionalFlat, ref conditionalMultiplier,
                     includeThresholdEffects: true, attackValue: qualifyingValue);
@@ -648,7 +651,7 @@ public static class GameplayEffectResolver
         {
             var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null) continue;
-            var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
+            var source = new GameplayEffectSource(cards.GetArtifactInstanceAt(artifactIndex));
             for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
             {
                 var effect = EffectAt(source, effectIndex);
@@ -699,7 +702,7 @@ public static class GameplayEffectResolver
             {
                 var artifact = cards.ownedArtifacts[i];
                 if (artifact == null) continue;
-                Accumulate(new GameplayEffectSource(cards.GetArtifactInstance(artifact)), card,
+                Accumulate(new GameplayEffectSource(cards.GetArtifactInstanceAt(i)), card,
                     GameplayEffectTrigger.DefenseCalculated, GameplayEffectKind.FlatBlock,
                     GameplayEffectKind.BlockMultiplier, ref artifactFlat, ref artifactMultiplier,
                     includeThresholdEffects: false);
@@ -769,7 +772,7 @@ public static class GameplayEffectResolver
             {
                 var artifact = manager.ownedArtifacts[i];
                 if (artifact != null)
-                    ApplyCriticalChanceOverrides(new GameplayEffectSource(manager.GetArtifactInstance(artifact)),
+                    ApplyCriticalChanceOverrides(new GameplayEffectSource(manager.GetArtifactInstanceAt(i)),
                         committedCards, ref chancePercent, ref found);
             }
         for (int i = 0; i < committedCards.Count; i++)
@@ -842,6 +845,14 @@ public static class GameplayEffectResolver
         return false;
     }
 
+    public static bool HasDoubleStrikeEffect(IReadOnlyList<CardInstance> cards)
+    {
+        if (cards == null) return false;
+        for (int i = 0; i < cards.Count; i++)
+            if (HasEnhancementEffect(cards[i], GameplayEffectKind.DoubleStrike)) return true;
+        return false;
+    }
+
     public static bool HasExplosiveEffect(IReadOnlyList<CardInstance> cards)
     {
         if (cards == null) return false;
@@ -862,7 +873,7 @@ public static class GameplayEffectResolver
             {
                 var artifact = manager.ownedArtifacts[i];
                 if (artifact == null) continue;
-                total += SumSourceEffects(new GameplayEffectSource(manager.GetArtifactInstance(artifact)),
+                total += SumSourceEffects(new GameplayEffectSource(manager.GetArtifactInstanceAt(i)),
                     GameplayEffectTrigger.ActionDamageCalculated, kind, null,
                     context.Cards?.Count ?? 0, handsMultiCardAction: context.IsHandsMultiCardAction);
             }
@@ -887,7 +898,7 @@ public static class GameplayEffectResolver
             {
                 var artifact = manager.ownedArtifacts[i];
                 if (artifact == null) continue;
-                cap = MinSourceCap(new GameplayEffectSource(manager.GetArtifactInstance(artifact)), cap, null,
+                cap = MinSourceCap(new GameplayEffectSource(manager.GetArtifactInstanceAt(i)), cap, null,
                     context.Cards?.Count ?? 0, context.IsHandsMultiCardAction);
             }
         if (context.Cards != null)
@@ -937,7 +948,7 @@ public static class GameplayEffectResolver
         {
             var artifact = cards.ownedArtifacts[i];
             if (artifact == null) continue;
-            capacity += SumSourceEffects(new GameplayEffectSource(cards.GetArtifactInstance(artifact)),
+            capacity += SumSourceEffects(new GameplayEffectSource(cards.GetArtifactInstanceAt(i)),
                 GameplayEffectTrigger.HandCapacityCalculated, GameplayEffectKind.HandSizeBonus, null);
             if (artifact.specialRule == ArtifactSpecialRule.RareArsenal) capacity += 3;
             else if (artifact.specialRule == ArtifactSpecialRule.ArsenalEpic)
@@ -967,10 +978,11 @@ public static class GameplayEffectResolver
         bool arsenal = false;
         bool glassCommon = false;
         bool glassRare = false;
-        foreach (var artifact in cards.ownedArtifacts)
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
+            var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null) continue;
-            var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
+            var source = new GameplayEffectSource(cards.GetArtifactInstanceAt(artifactIndex));
             for (int j = 0; j < EffectCount(source); j++)
             {
                 var effect = EffectAt(source, j);
@@ -1008,7 +1020,7 @@ public static class GameplayEffectResolver
         {
             var artifact = context.Cards.ownedArtifacts[sourceOrder];
             if (artifact == null) continue;
-            var source = new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact));
+            var source = new GameplayEffectSource(context.Cards.GetArtifactInstanceAt(sourceOrder));
             for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
             {
                 var effect = EffectAt(source, effectIndex);
@@ -1039,7 +1051,7 @@ public static class GameplayEffectResolver
         {
             var artifact = context.Cards.ownedArtifacts[sourceOrder];
             if (artifact == null) continue;
-            var source = new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact));
+            var source = new GameplayEffectSource(context.Cards.GetArtifactInstanceAt(sourceOrder));
             for (int effectIndex = 0; effectIndex < EffectCount(source); effectIndex++)
             {
                 var effect = EffectAt(source, effectIndex);
@@ -1059,7 +1071,7 @@ public static class GameplayEffectResolver
         {
             var artifact = context.Cards.ownedArtifacts[i];
             if (artifact != null)
-                EnqueueEncounterSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
+                EnqueueEncounterSource(new GameplayEffectSource(context.Cards.GetArtifactInstanceAt(i)),
                     null, context, queue, i);
         }
         for (int i = 0; i < context.Cards.hand.Count; i++)
@@ -1196,7 +1208,7 @@ public static class GameplayEffectResolver
         {
             var artifact = cards.ownedArtifacts[sourceOrder];
             if (artifact == null) continue;
-            var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
+            var source = new GameplayEffectSource(cards.GetArtifactInstanceAt(sourceOrder));
             EnqueueExtraTurnRules(source, artifact.ruleModifiers, context, grants, sourceOrder);
         }
         // If a future Enhancement carries a rule modifier, it follows Artifact sources
@@ -1262,9 +1274,10 @@ public static class GameplayEffectResolver
         for (int i = 0; i < context.Cards.ownedArtifacts.Count; i++)
         {
             var artifact = context.Cards.ownedArtifacts[i];
+            var artifactInstance = context.Cards.GetArtifactInstanceAt(i);
             if (artifact != null)
             {
-                EnqueueCommittedSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
+                EnqueueCommittedSource(new GameplayEffectSource(artifactInstance),
                     context, queue, i);
                 if (artifact.specialRule is ArtifactSpecialRule.RareHeart or ArtifactSpecialRule.HeartEpic &&
                     context.Card.MatchesSuit(CardData.Suit.Hearts))
@@ -1277,7 +1290,7 @@ public static class GameplayEffectResolver
                             if (before * 2 < context.Combat.player.maxHealth) context.Cards.AddGold(3);
                             if (artifact.specialRule == ArtifactSpecialRule.HeartEpic && context.Combat.CanPlayerHeal())
                             {
-                                var state = context.Cards.GetArtifactInstance(artifact).State;
+                                var state = artifactInstance.State;
                                 int overheal = Math.Max(0, 3 - healed);
                                 state.SetCounter(-1050, Math.Min(10, state.GetCounter(-1050) + overheal));
                             }
@@ -1368,7 +1381,7 @@ public static class GameplayEffectResolver
             var artifact = context.Cards.ownedArtifacts[sourceOrder];
             if (artifact == null) continue;
             EnqueueAttackBlockedSource(
-                new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
+                new GameplayEffectSource(context.Cards.GetArtifactInstanceAt(sourceOrder)),
                 context, queue, sourceOrder);
         }
         if (context.BlockingCard.Enhancement != null)
@@ -1451,7 +1464,7 @@ public static class GameplayEffectResolver
         {
             var artifact = context.Cards.ownedArtifacts[sourceOrder];
             if (artifact != null)
-                EnqueueAttackCommittedSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
+                EnqueueAttackCommittedSource(new GameplayEffectSource(context.Cards.GetArtifactInstanceAt(sourceOrder)),
                     context, queue, sourceOrder);
         }
         if (context.HandSnapshot == null || HeldCardEffectsSuppressed(context.Combat)) return;
@@ -1494,7 +1507,7 @@ public static class GameplayEffectResolver
         {
             var artifact = context.Cards.ownedArtifacts[i];
             if (artifact != null)
-                EnqueueTurnSource(new GameplayEffectSource(context.Cards.GetArtifactInstance(artifact)),
+                EnqueueTurnSource(new GameplayEffectSource(context.Cards.GetArtifactInstanceAt(i)),
                     null, context, queue, i);
         }
         // Snapshot hand order and identity at the authoritative turn-start boundary.
@@ -1528,7 +1541,7 @@ public static class GameplayEffectResolver
         {
             var artifact = cards.ownedArtifacts[i];
             if (artifact == null) continue;
-            var source = new GameplayEffectSource(cards.GetArtifactInstance(artifact));
+            var source = new GameplayEffectSource(cards.GetArtifactInstanceAt(i));
             for (int j = 0; j < EffectCount(source); j++)
             {
                 var effect = EffectAt(source, j);

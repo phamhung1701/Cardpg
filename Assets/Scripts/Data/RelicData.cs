@@ -67,6 +67,8 @@ public class RelicData : ScriptableObject
     public string id;
     public string displayName;
     public string icon;
+    [Tooltip("Optional authored artifact icon. The existing icon text is used when this is unassigned.")]
+    public Sprite iconSprite;
     [TextArea] public string description;
     [Min(0)] public int price;
 

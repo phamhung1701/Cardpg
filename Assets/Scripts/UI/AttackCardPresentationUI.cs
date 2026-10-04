@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 /// <summary>Disposable UGUI feedback for committed attacks and defense cards; CombatManager owns gameplay results.</summary>
 public sealed class AttackCardPresentationUI : MonoBehaviour
@@ -17,13 +18,17 @@ public sealed class AttackCardPresentationUI : MonoBehaviour
 
     readonly List<RectTransform> _activeCards = new();
     readonly List<GameObject> _flashes = new();
+    readonly List<GameObject> _hitNumbers = new();
+    float _commitImpactDelay;
     int _pendingCommits;
     bool _wasBusy;
     CombatManager _combat;
     RunManager _run;
 
     public int ActiveVisualCount => _activeCards.Count;
-    public bool IsBusy => _pendingCommits > 0 || _activeCards.Count > 0;
+    public int ActiveHitNumberCount => _hitNumbers.Count;
+    public bool IsBusy => _pendingCommits > 0 || _activeCards.Count > 0 || _hitNumbers.Count > 0 ||
+        enemyGroup != null && enemyGroup.IsDefeatPresentationBusy;
     public event Action OnPresentationCompleted;
     public event Action OnPresentationCancelled;
 
@@ -39,14 +44,24 @@ public sealed class AttackCardPresentationUI : MonoBehaviour
         Instance = this;
         _combat = CombatManager.Instance;
         _run = RunManager.Instance;
-        if (_combat != null) _combat.OnEnemiesChanged += HandleEnemiesChanged;
+        if (_combat != null)
+        {
+            _combat.OnEnemiesChanged += HandleEnemiesChanged;
+            _combat.OnDamageResolved += HandleDamageResolved;
+        }
         if (_run != null) _run.OnRunStarted += HandleRunStarted;
+        if (enemyGroup != null) enemyGroup.OnDefeatPresentationCompleted += HandleDefeatPresentationCompleted;
     }
 
     void OnDisable()
     {
-        if (_combat != null) _combat.OnEnemiesChanged -= HandleEnemiesChanged;
+        if (_combat != null)
+        {
+            _combat.OnEnemiesChanged -= HandleEnemiesChanged;
+            _combat.OnDamageResolved -= HandleDamageResolved;
+        }
         if (_run != null) _run.OnRunStarted -= HandleRunStarted;
+        if (enemyGroup != null) enemyGroup.OnDefeatPresentationCompleted -= HandleDefeatPresentationCompleted;
         _combat = null;
         _run = null;
         CancelAll();
@@ -54,6 +69,7 @@ public sealed class AttackCardPresentationUI : MonoBehaviour
     }
 
     void HandleRunStarted(string _) => CancelAll();
+    void HandleDefeatPresentationCompleted() => NotifyIfIdle();
 
     void HandleEnemiesChanged()
     {
@@ -139,6 +155,7 @@ public sealed class AttackCardPresentationUI : MonoBehaviour
         Vector2 targetPoint, Vector2 deckPoint, System.Func<bool> commit, bool isBlock)
     {
         _pendingCommits++;
+        _commitImpactDelay = isBlock ? 0.14f : draggedFlags.Contains(true) ? 0.22f : 0.18f;
         _wasBusy = true;
         bool committed;
         try
@@ -177,6 +194,10 @@ public sealed class AttackCardPresentationUI : MonoBehaviour
         bool wasBusy = _wasBusy || IsBusy;
         StopAllCoroutines();
         _pendingCommits = 0;
+        _commitImpactDelay = 0f;
+        for (int i = 0; i < _hitNumbers.Count; i++)
+            if (_hitNumbers[i] != null) DestroyVisual(_hitNumbers[i]);
+        _hitNumbers.Clear();
         for (int i = 0; i < _activeCards.Count; i++)
             if (_activeCards[i] != null) DestroyVisual(_activeCards[i].gameObject);
         _activeCards.Clear();
@@ -188,6 +209,62 @@ public sealed class AttackCardPresentationUI : MonoBehaviour
             _wasBusy = false;
             OnPresentationCancelled?.Invoke();
         }
+    }
+
+    // One label per authoritative result, never per animated card. Capture the enemy point
+    // synchronously so lethal hits remain visible after the enemy view is removed.
+    void HandleDamageResolved(DamageResult result)
+    {
+        if (result.TargetAlreadyDefeated || !(result.Request.Target is EnemyRuntime enemy) ||
+            !TryGetEnemyPoint(enemy, out _, out var point)) return;
+        var number = new GameObject("Combat Hit Number", typeof(RectTransform), typeof(TextMeshProUGUI));
+        number.transform.SetParent(presentationCanvas.transform, false);
+        var rect = (RectTransform)number.transform;
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(240f, 64f);
+        point += new Vector2(0f, 135f + result.Request.HitIndex % 3 * 40f);
+        rect.anchoredPosition = point;
+        var label = number.GetComponent<TextMeshProUGUI>();
+        label.text = FormatHitNumber(result);
+        label.fontSize = result.Request.IsCritical ? 38f : 32f;
+        label.fontStyle = FontStyles.Bold;
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = result.Request.IsCritical ? new Color(1f, 0.82f, 0.2f) : Color.white;
+        label.outlineWidth = 0.2f;
+        label.raycastTarget = false;
+        var canvas = number.AddComponent<Canvas>();
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = 66;
+        _hitNumbers.Add(number);
+        _wasBusy = true;
+        float delay = _pendingCommits > 0 ? _commitImpactDelay + Mathf.Min(result.Request.HitIndex, 7) * 0.065f : 0f;
+        StartCoroutine(AnimateHitNumber(number, label, point, delay));
+    }
+
+    public static string FormatHitNumber(DamageResult result)
+    {
+        string value = result.ShieldConsumed ? "Blocked" : result.ActualHpLost.ToString();
+        return result.Request.IsCritical ? $"Crit {value}" : value;
+    }
+
+    IEnumerator AnimateHitNumber(GameObject number, TMP_Text label, Vector2 point, float delay)
+    {
+        label.enabled = false;
+        if (delay > 0f) yield return Wait(delay);
+        label.enabled = true;
+        var rect = (RectTransform)number.transform;
+        float elapsed = 0f;
+        while (elapsed < 0.65f)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / 0.65f);
+            rect.anchoredPosition = point + Vector2.up * (45f * t);
+            label.alpha = 1f - Mathf.InverseLerp(0.45f, 1f, t);
+            yield return null;
+        }
+        _hitNumbers.Remove(number);
+        DestroyVisual(number);
+        NotifyIfIdle();
     }
 
     void NotifyIfIdle(bool cancelled = false)
@@ -214,6 +291,15 @@ public sealed class AttackCardPresentationUI : MonoBehaviour
             !TryPoint(canvasRect, deckTarget, out deckPoint))
             return false;
 
+        return TryGetEnemyPoint(target, out canvasRect, out targetPoint);
+    }
+
+    bool TryGetEnemyPoint(EnemyRuntime target, out RectTransform canvasRect, out Vector2 targetPoint)
+    {
+        canvasRect = presentationCanvas != null ? presentationCanvas.transform as RectTransform : null;
+        targetPoint = default;
+        if (canvasRect == null || !presentationCanvas.isActiveAndEnabled ||
+            presentationCanvas.sortingOrder >= 100 || enemyGroup == null) return false;
         var views = enemyGroup.ActiveViews;
         for (int i = 0; i < views.Count; i++)
         {

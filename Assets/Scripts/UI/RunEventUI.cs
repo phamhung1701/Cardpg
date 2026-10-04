@@ -18,6 +18,12 @@ public class RunEventUI : MonoBehaviour
     int _discardChoiceIndex = -1;
     Action<int> _artifactDiscardChoiceResolved;
     RunEventChoiceInteraction _discardInteraction = RunEventChoiceInteraction.Immediate;
+    bool _choicesLayoutPrepared;
+    bool _descriptionLayoutPrepared;
+    ScrollRect _choicesScrollRect;
+    ScrollRect _descriptionScrollRect;
+    RectTransform _choicesViewport;
+    float _lastChoiceViewportWidth = -1f;
 
 
     void OnEnable()
@@ -31,10 +37,12 @@ public class RunEventUI : MonoBehaviour
             RunManager.Instance.OnHideUpgrade += Hide;
         }
         Hide();
+        Canvas.willRenderCanvases += HandleCanvasWillRender;
     }
 
     void OnDisable()
     {
+        Canvas.willRenderCanvases -= HandleCanvasWillRender;
         if (RunManager.Instance != null)
         {
             RunManager.Instance.OnShowEvent -= Show;
@@ -50,8 +58,10 @@ public class RunEventUI : MonoBehaviour
         if (definition == null || panel == null || choicesContainer == null || choiceButtonPrefab == null)
             return;
 
+        PrepareChoicesLayout();
+        PrepareDescriptionLayout();
         if (titleLabel) titleLabel.text = definition.title;
-        if (descriptionLabel) descriptionLabel.text = definition.description;
+        SetDescription(definition.description);
 
         ClearChoices();
 
@@ -71,7 +81,12 @@ public class RunEventUI : MonoBehaviour
             if (label)
             {
                 string status = available ? string.Empty : $"\n<color=#DFA0A0>{unavailableReason}</color>";
-                label.text = $"<b>{choice.label}</b>\n{choice.description}{status}";
+                string description = choice.description ?? string.Empty;
+                if (choice.interaction == RunEventChoiceInteraction.ChooseEnhancementTarget)
+                    description = description.Replace("owned cards", "cards in your hand")
+                        .Replace("owned card", "card in your hand")
+                        .Replace("then a card.", "then click a card in your hand.");
+                label.text = $"<b>{choice.label}</b>\n{description}{status}";
             }
 
             var button = buttonObject.GetComponent<Button>();
@@ -83,6 +98,7 @@ public class RunEventUI : MonoBehaviour
         }
 
         panel.SetActive(true);
+        FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
 
@@ -98,6 +114,134 @@ public class RunEventUI : MonoBehaviour
                 cards.handField != null && cards.handField.cardsHolder != null;
         }
         return true;
+    }
+
+    void PrepareChoicesLayout()
+    {
+        if (_choicesLayoutPrepared || choicesContainer is not RectTransform content) return;
+        var viewport = CreateScrollViewport(content, "EventChoicesViewport");
+        if (viewport == null) return;
+        _choicesLayoutPrepared = true;
+        _choicesViewport = viewport;
+        _choicesScrollRect = viewport.GetComponent<ScrollRect>();
+        _choicesScrollRect.content = content;
+        var layout = content.GetComponent<VerticalLayoutGroup>();
+        if (layout != null)
+        {
+            layout.childControlHeight = true;
+            layout.childControlWidth = true;
+            layout.childForceExpandWidth = true;
+        }
+        var fitter = content.GetComponent<ContentSizeFitter>() ?? content.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+    }
+
+    void PrepareDescriptionLayout()
+    {
+        if (_descriptionLayoutPrepared || descriptionLabel == null) return;
+        var content = descriptionLabel.rectTransform;
+        var viewport = CreateScrollViewport(content, "EventDescriptionViewport");
+        if (viewport == null) return;
+        _descriptionLayoutPrepared = true;
+        _descriptionScrollRect = viewport.GetComponent<ScrollRect>();
+        _descriptionScrollRect.content = content;
+        var fitter = content.GetComponent<ContentSizeFitter>() ?? content.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        descriptionLabel.overflowMode = TextOverflowModes.Overflow;
+    }
+
+    static RectTransform CreateScrollViewport(RectTransform content, string viewportName)
+    {
+        var parent = content.parent as RectTransform;
+        if (parent == null) return null;
+        var viewportObject = new GameObject(viewportName, typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+        var viewport = viewportObject.GetComponent<RectTransform>();
+        viewport.SetParent(parent, false);
+        viewport.anchorMin = content.anchorMin;
+        viewport.anchorMax = content.anchorMax;
+        viewport.pivot = content.pivot;
+        viewport.anchoredPosition = content.anchoredPosition;
+        viewport.sizeDelta = content.sizeDelta;
+        viewport.localRotation = content.localRotation;
+        viewport.localScale = content.localScale;
+        var image = viewportObject.GetComponent<Image>();
+        image.color = new Color(1f, 1f, 1f, 0f);
+        image.raycastTarget = true;
+
+        content.SetParent(viewport, false);
+        content.anchorMin = new Vector2(0f, 1f);
+        content.anchorMax = new Vector2(1f, 1f);
+        content.pivot = new Vector2(0.5f, 1f);
+        content.anchoredPosition = Vector2.zero;
+        content.sizeDelta = Vector2.zero;
+        var scroll = viewportObject.GetComponent<ScrollRect>();
+        scroll.viewport = viewport;
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        return viewport;
+    }
+
+    void SetDescription(string text)
+    {
+        if (descriptionLabel == null) return;
+        descriptionLabel.text = text;
+    }
+
+    void FinalizeChoiceList()
+    {
+        RefreshChoiceHeights();
+        Canvas.ForceUpdateCanvases();
+        if (_choicesScrollRect != null)
+        {
+            _choicesScrollRect.velocity = Vector2.zero;
+            _choicesScrollRect.verticalNormalizedPosition = 1f;
+        }
+        if (_descriptionScrollRect != null)
+        {
+            _descriptionScrollRect.velocity = Vector2.zero;
+            _descriptionScrollRect.verticalNormalizedPosition = 1f;
+        }
+        _lastChoiceViewportWidth = _choicesViewport != null ? _choicesViewport.rect.width : -1f;
+    }
+
+    void HandleCanvasWillRender()
+    {
+        if (!_choicesLayoutPrepared || panel == null || !panel.activeInHierarchy || _choicesViewport == null) return;
+        float width = _choicesViewport.rect.width;
+        if (Mathf.Abs(width - _lastChoiceViewportWidth) <= 0.5f) return;
+        RefreshChoiceHeights();
+        _lastChoiceViewportWidth = width;
+    }
+
+    void RefreshChoiceHeights()
+    {
+        float availableWidth = _choicesViewport != null ? _choicesViewport.rect.width :
+            choicesContainer is RectTransform content ? content.rect.width : 0f;
+        if (availableWidth <= 0f || choicesContainer == null) return;
+        foreach (Transform child in choicesContainer)
+        {
+            if (child == null || !child.gameObject.activeSelf) continue;
+            var label = child.GetComponentInChildren<TMP_Text>();
+            if (label != null) ConfigureChoiceHeight(child.gameObject, label, availableWidth);
+        }
+    }
+
+    static void ConfigureChoiceHeight(GameObject buttonObject, TMP_Text label, float availableWidth)
+    {
+        var rect = buttonObject.GetComponent<RectTransform>();
+        if (rect == null) return;
+        float textWidth = Mathf.Max(1f, availableWidth - 32f);
+        float textHeight = label.GetPreferredValues(label.text, textWidth, 0f).y;
+        var layout = buttonObject.GetComponent<LayoutElement>() ?? buttonObject.AddComponent<LayoutElement>();
+        layout.minWidth = 0f;
+        layout.preferredWidth = -1f;
+        layout.flexibleWidth = 1f;
+        layout.minHeight = Mathf.Max(92f, textHeight + 24f);
+        layout.preferredHeight = layout.minHeight;
+        label.overflowMode = TextOverflowModes.Overflow;
     }
 
     void HandleChoice(int choiceIndex, RunEventChoiceInteraction interaction)
@@ -126,6 +270,8 @@ public class RunEventUI : MonoBehaviour
     void ShowArtifactDiscardChoice(string title, string description,
         IReadOnlyList<CardInstance> choices, Action<int> onResolved)
     {
+        PrepareChoicesLayout();
+        PrepareDescriptionLayout();
         if (panel == null || choicesContainer == null || choiceButtonPrefab == null || choices == null || onResolved == null)
         {
             onResolved?.Invoke(0);
@@ -134,7 +280,7 @@ public class RunEventUI : MonoBehaviour
         _artifactDiscardChoiceResolved = onResolved;
         ClearChoices();
         if (titleLabel) titleLabel.text = title;
-        if (descriptionLabel) descriptionLabel.text = description;
+        SetDescription(description);
         foreach (var card in choices)
         {
             if (card == null) continue;
@@ -153,6 +299,7 @@ public class RunEventUI : MonoBehaviour
         var cancel = cancelObject.GetComponent<Button>();
         if (cancel) cancel.onClick.AddListener(() => ResolveArtifactDiscardChoice(0));
         panel.SetActive(true);
+        FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
 
@@ -169,6 +316,8 @@ public class RunEventUI : MonoBehaviour
     {
         var run = RunManager.Instance;
         var cards = CardManager.Instance;
+        PrepareChoicesLayout();
+        PrepareDescriptionLayout();
         if (run == null || cards == null ||
             !string.IsNullOrEmpty(run.GetEventOptionUnavailableReason(choiceIndex))) return;
         _discardChoiceIndex = choiceIndex;
@@ -181,7 +330,7 @@ public class RunEventUI : MonoBehaviour
             string prompt = _discardInteraction == RunEventChoiceInteraction.DiscardCardsForTotalValue
                 ? $"Select cards with a total value of exactly {choice.requiredDiscardValue}."
                 : "Choose exactly two cards to discard.";
-            descriptionLabel.text = $"{choice.description} {prompt}";
+            SetDescription($"{choice.description} {prompt}");
         }
         ClearChoices();
 
@@ -215,6 +364,7 @@ public class RunEventUI : MonoBehaviour
         var back = backObject.GetComponent<Button>();
         if (back) back.onClick.AddListener(() => Show(RunManager.Instance != null ? RunManager.Instance.ActiveEvent : null));
         panel.SetActive(true);
+        FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
 
@@ -291,11 +441,13 @@ public class RunEventUI : MonoBehaviour
 
     void ShowUpgrade()
     {
+        PrepareChoicesLayout();
+        PrepareDescriptionLayout();
         if (panel == null || choicesContainer == null || choiceButtonPrefab == null || RunManager.Instance == null)
             return;
 
         if (titleLabel) titleLabel.text = "CARD ENHANCEMENT";
-        if (descriptionLabel) descriptionLabel.text = "Choose one permanent enhancement for this run.";
+        SetDescription("Choose one permanent enhancement for this run.");
         ClearChoices();
 
         var offers = RunManager.Instance.GetCurrentUpgradeOffers();
@@ -307,7 +459,9 @@ public class RunEventUI : MonoBehaviour
             buttonObject.name = $"EnhancementChoice_{choiceIndex + 1}";
             var label = buttonObject.GetComponentInChildren<TMP_Text>();
             if (label)
+            {
                 label.text = $"<b>{offer.Icon} {offer.DisplayName}</b>\n{offer.Description(CardManager.Instance)}";
+            }
 
             var button = buttonObject.GetComponent<Button>();
             if (button)
@@ -315,6 +469,7 @@ public class RunEventUI : MonoBehaviour
         }
 
         panel.SetActive(true);
+        FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
 

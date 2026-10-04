@@ -80,7 +80,9 @@ public sealed class FireEmblemTests
         Assert.That(_combat.TryDefendWithCards(new[] { secondBlock }), Is.True);
 
         Assert.That(_cards.FindOwnedCard(secondId), Is.Not.Null, "Fire Emblem triggers only once per encounter.");
-        Assert.That(_cards.discardPile.Any(card => card.Id == secondId), Is.True);
+        Assert.That(_cards.deck.Any(card => card.Id == secondId), Is.True,
+            "A later Block card returns to the draw deck when Fire Emblem's once-per-encounter destruction has already been used.");
+        Assert.That(_cards.discardPile.Any(card => card.Id == secondId), Is.False);
         Assert.That(_combat.PendingAttackCount, Is.Zero);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
     }

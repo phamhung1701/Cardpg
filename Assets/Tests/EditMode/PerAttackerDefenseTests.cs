@@ -45,6 +45,59 @@ public sealed class PerAttackerDefenseTests
     }
 
     [Test]
+    public void PendingIncomingDamage_IsAttributedToEachAttackerAndUpdatesAfterBlock()
+    {
+        var enemies = StartDefenseWindow(3, 5);
+        AddDefenseBonus(5);
+
+        Assert.That(_combat.GetPendingAttackDamage(enemies[0]), Is.EqualTo(3));
+        Assert.That(_combat.GetPendingAttackDamage(enemies[1]), Is.EqualTo(5));
+
+        var blockFive = HandViews().First(view => _combat.CalculateCardDefense(view.data) >= 5);
+        Assert.That(_combat.TryDefendWithCards(new[] { blockFive }), Is.True);
+        Assert.That(_combat.GetPendingAttackDamage(enemies[0]), Is.EqualTo(3));
+        Assert.That(_combat.GetPendingAttackDamage(enemies[1]), Is.Zero);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(3));
+
+        _combat.TakeRemainingDamage();
+        Assert.That(_combat.GetPendingAttackDamage(enemies[0]), Is.Zero);
+        Assert.That(_combat.pendingDamage, Is.Zero);
+    }
+
+    [Test]
+    public void BossEncounter_AceCanBlockOnePointAttackWithoutChangingAggregateRetaliation()
+    {
+        var bossType = EnemyTypeData.Create("Test Boss", 100, 1, 0);
+        _created.Add(bossType);
+        var ace = FindViewInHand(card => card.Rank == CardData.Rank.Ace);
+        var boss = new EnemyRuntime(bossType);
+        _combat.StartEncounter(new[] { boss }, MapNodeType.Boss);
+        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, boss), Is.True);
+        Assert.That(_combat.CalculateCardDefense(ace.data), Is.EqualTo(1));
+        Assert.That(_combat.CanDefendWithCards(new[] { ace }, boss), Is.True);
+        Assert.That(_combat.TryDefendWithCards(new[] { ace }, boss), Is.True);
+        Assert.That(_combat.pendingDamage, Is.Zero);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+    }
+
+    [Test]
+    public void BossDefense_RejectsInsufficientCardAndDoesNotConsumeIt()
+    {
+        var bossType = EnemyTypeData.Create("Test Boss", 100, 8, 0);
+        _created.Add(bossType);
+        var ace = FindViewInHand(card => card.Rank == CardData.Rank.Ace);
+        var boss = new EnemyRuntime(bossType);
+        _combat.StartEncounter(new[] { boss }, MapNodeType.Boss);
+        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, boss), Is.True);
+
+        int handCount = _cards.HandCount;
+        Assert.That(_combat.CanDefendWithCards(new[] { ace }, boss), Is.False);
+        Assert.That(_combat.TryDefendWithCards(new[] { ace }, boss), Is.False);
+        Assert.That(_cards.HandCount, Is.EqualTo(handCount));
+        Assert.That(_combat.pendingDamage, Is.EqualTo(8));
+    }
+
+    [Test]
     public void OneDefenseSix_BlocksExactlyOneOfTwoThreeAttacks_AndLosesExcess()
     {
         var enemies = StartDefenseWindow(3, 3);
@@ -73,9 +126,17 @@ public sealed class PerAttackerDefenseTests
         Assert.That(_combat.TryPreviewDefense(pair, out int count, out int remaining), Is.True);
         Assert.That((count, remaining), Is.EqualTo((2, 0)));
         int discarded = _cards.discardPile.Count;
+        int deckBefore = _cards.deck.Count;
+        int handBefore = _cards.HandCount;
+        var instances = pair.Select(view => view.data).ToArray();
 
-        Assert.That(_combat.TryDefendWithCards(pair), Is.True);
-        Assert.That(_cards.discardPile.Count, Is.EqualTo(discarded + 2));
+        // Exercise the live selected-list input, which commit cleanup mutates.
+        Assert.That(_combat.TryDefendWithCards(_cards.SelectedCards), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore - 2));
+        Assert.That(_cards.discardPile.Count, Is.EqualTo(discarded));
+        Assert.That(_cards.deck.Count, Is.EqualTo(deckBefore + 2));
+        Assert.That(instances.All(card => _cards.deck.Contains(card)), Is.True);
+        Assert.That(_cards.SelectedCards, Is.Empty);
         Assert.That(_combat.pendingDamage, Is.Zero);
         Assert.That(_combat.PendingAttackCount, Is.Zero);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
@@ -176,6 +237,21 @@ public sealed class PerAttackerDefenseTests
         Assert.That(_combat.TryPlayCards(new[] { HandViews()[0] }, enemies[0]), Is.True);
         Assert.That(_combat.pendingDamage, Is.EqualTo(attacks.Sum()));
         return enemies;
+    }
+
+    CardView FindViewInHand(System.Func<CardInstance, bool> predicate)
+    {
+        for (int pass = 0; pass < 120; pass++)
+        {
+            var found = HandViews().FirstOrDefault(view => predicate(view.data));
+            if (found != null) return found;
+            var discard = HandViews().FirstOrDefault();
+            if (discard == null) break;
+            Assert.That(_cards.TryDiscard(discard), Is.True);
+            _cards.DrawToHand(1);
+        }
+        Assert.Fail("Required card could not be found in the collection.");
+        return null;
     }
 
     void AddDefenseBonus(int bonus)

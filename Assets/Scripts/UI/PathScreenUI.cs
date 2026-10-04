@@ -13,6 +13,9 @@ public class PathScreenUI : MonoBehaviour
     AttackCardPresentationUI _presentation;
     bool _pendingMapShow;
     bool _pendingRunCompleted;
+    bool _mapToggleEnabled;
+    Button _mapVisibilityButton;
+    TMP_Text _mapVisibilityLabel;
 
     [Header("Map Settings")]
     public float colSpacing = 200f;
@@ -22,6 +25,7 @@ public class PathScreenUI : MonoBehaviour
     void OnEnable()
     {
         EnsurePresentationSubscription();
+        EnsureMapVisibilityControl();
         if (RunManager.Instance != null)
         {
             RunManager.Instance.OnShowPathScreen += Show;
@@ -46,6 +50,8 @@ public class PathScreenUI : MonoBehaviour
         }
         UnsubscribeFromPresentation();
         _pendingMapShow = _pendingRunCompleted = false;
+        _mapToggleEnabled = false;
+        if (_mapVisibilityButton != null) _mapVisibilityButton.gameObject.SetActive(false);
     }
 
     void EnsurePresentationSubscription()
@@ -63,10 +69,21 @@ public class PathScreenUI : MonoBehaviour
 
     void UnsubscribeFromPresentation()
     {
-        if (_presentation == null) return;
-        _presentation.OnPresentationCompleted -= HandlePresentationCompleted;
-        _presentation.OnPresentationCancelled -= HandlePresentationCancelled;
-        _presentation = null;
+        if (_presentation != null)
+        {
+            _presentation.OnPresentationCompleted -= HandlePresentationCompleted;
+            _presentation.OnPresentationCancelled -= HandlePresentationCancelled;
+            _presentation = null;
+        }
+    }
+
+    void OnDestroy()
+    {
+        if (_mapVisibilityButton == null) return;
+        if (Application.isPlaying) Destroy(_mapVisibilityButton.gameObject);
+        else DestroyImmediate(_mapVisibilityButton.gameObject);
+        _mapVisibilityButton = null;
+        _mapVisibilityLabel = null;
     }
 
     void HandlePresentationCompleted()
@@ -86,13 +103,17 @@ public class PathScreenUI : MonoBehaviour
     void HandlePresentationCancelled()
     {
         _pendingMapShow = _pendingRunCompleted = false;
+        _mapToggleEnabled = false;
         if (panel) panel.SetActive(false);
+        SetMapVisibilityControl(false);
     }
 
     void HandleRunStarted(string _)
     {
         _pendingMapShow = _pendingRunCompleted = false;
+        _mapToggleEnabled = false;
         if (panel) panel.SetActive(false);
+        SetMapVisibilityControl(false);
     }
 
     void HandleCycleStarted(string header)
@@ -113,7 +134,9 @@ public class PathScreenUI : MonoBehaviour
         {
             _pendingRunCompleted = true;
             _pendingMapShow = false;
+            _mapToggleEnabled = false;
             if (panel) panel.SetActive(false);
+            SetMapVisibilityControl(false);
             return;
         }
         ShowRunCompleted();
@@ -121,8 +144,10 @@ public class PathScreenUI : MonoBehaviour
 
     void ShowRunCompleted()
     {
+        _mapToggleEnabled = false;
         if (headerText) headerText.text = "VICTORY!";
         if (panel) panel.SetActive(true);
+        SetMapVisibilityControl(false);
     }
 
     void Show()
@@ -142,12 +167,19 @@ public class PathScreenUI : MonoBehaviour
         _pendingMapShow = false;
         BuildMap();
         if (panel) panel.SetActive(true);
+        var run = RunManager.Instance;
+        // A reward modal may temporarily own the input gate while the route is shown.
+        // Keep route availability separate from whether a click is allowed this frame.
+        _mapToggleEnabled = run != null && !run.IsRunCompleted && run.ActiveNode == null;
+        SetMapVisibilityControl(_mapToggleEnabled);
     }
 
     void Hide()
     {
         _pendingMapShow = _pendingRunCompleted = false;
+        _mapToggleEnabled = false;
         if (panel) panel.SetActive(false);
+        SetMapVisibilityControl(false);
     }
 
     void BuildMap()
@@ -174,14 +206,9 @@ public class PathScreenUI : MonoBehaviour
         {
             var buttonObject = Instantiate(nodeButtonPrefab, mapContainer);
             buttonObject.name = $"Node_{node.id}_{node.kind}";
-            var label = buttonObject.GetComponentInChildren<TMP_Text>();
-            if (label)
-            {
-                string heading = GetNodeHeading(node, run);
-                label.text = node.revealed || node.completed
-                    ? $"{heading}\n<size=70%>{run.GetNodeDesc(node)}</size>"
-                    : "?\n<size=70%>Unknown route</size>";
-            }
+            var nodeButtonUI = buttonObject.GetComponent<PathNodeButtonUI>();
+            if (nodeButtonUI == null) nodeButtonUI = buttonObject.AddComponent<PathNodeButtonUI>();
+            nodeButtonUI.SetNode(node, run);
 
             buttonObject.transform.localPosition = GridToLocal(node.col, node.row);
 
@@ -208,12 +235,71 @@ public class PathScreenUI : MonoBehaviour
         var rect = connection.GetComponent<RectTransform>();
         Vector2 delta = (Vector2)(to - from);
         rect.anchoredPosition = ((Vector2)from + (Vector2)to) * 0.5f;
-        rect.sizeDelta = new Vector2(delta.magnitude, 4f);
+        rect.sizeDelta = new Vector2(delta.magnitude, 7f);
         rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
 
         var image = connection.GetComponent<Image>();
-        image.color = new Color(0.28f, 0.34f, 0.44f, 0.8f);
+        image.color = new Color(0.52f, 0.62f, 0.78f, 1f);
         image.raycastTarget = false;
+    }
+
+    void EnsureMapVisibilityControl()
+    {
+        if (_mapVisibilityButton != null || panel == null || panel.transform.parent == null) return;
+
+        var control = new GameObject("MapVisibilityButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(Canvas), typeof(GraphicRaycaster));
+        control.transform.SetParent(panel.transform.parent, false);
+        control.transform.SetAsLastSibling();
+        var rect = control.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = new Vector2(-24f, -100f);
+        rect.sizeDelta = new Vector2(150f, 42f);
+
+        var image = control.GetComponent<Image>();
+        image.color = new Color(0.12f, 0.17f, 0.25f, 0.96f);
+        var controlCanvas = control.GetComponent<Canvas>();
+        controlCanvas.overrideSorting = true;
+        controlCanvas.sortingOrder = 45;
+        _mapVisibilityButton = control.GetComponent<Button>();
+        _mapVisibilityButton.targetGraphic = image;
+        _mapVisibilityButton.onClick.AddListener(ToggleMapVisibility);
+
+        var labelObject = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(control.transform, false);
+        var labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = new Vector2(5f, 2f);
+        labelRect.offsetMax = new Vector2(-5f, -2f);
+        _mapVisibilityLabel = labelObject.GetComponent<TextMeshProUGUI>();
+        _mapVisibilityLabel.alignment = TextAlignmentOptions.Center;
+        _mapVisibilityLabel.raycastTarget = false;
+        _mapVisibilityLabel.fontSize = 18f;
+        _mapVisibilityLabel.text = "CLOSE MAP";
+        control.SetActive(false);
+    }
+
+    void SetMapVisibilityControl(bool visible)
+    {
+        if (_mapVisibilityButton == null) EnsureMapVisibilityControl();
+        if (_mapVisibilityButton == null) return;
+        _mapVisibilityButton.gameObject.SetActive(visible);
+        if (_mapVisibilityLabel != null) _mapVisibilityLabel.text = panel != null && panel.activeSelf ? "CLOSE MAP" : "OPEN MAP";
+    }
+
+    bool CanToggleMap()
+    {
+        var run = RunManager.Instance;
+        return run != null && !run.IsRunCompleted && run.ActiveNode == null && !GameplayInputGate.IsBlocked;
+    }
+
+    void ToggleMapVisibility()
+    {
+        if (panel == null || !_mapToggleEnabled || !CanToggleMap()) return;
+        panel.SetActive(!panel.activeSelf);
+        SetMapVisibilityControl(true);
     }
 
     static string GetNodeHeading(PathNode node, RunManager run)

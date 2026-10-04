@@ -67,6 +67,73 @@ public sealed class ArtifactUpgradeIntegrationTests
     }
 
     [Test]
+    public void DuplicateArtifactsHaveIndependentRuntimeStateAndEffectsApplyPerCopy()
+    {
+        var glass = _catalog.Single(item => item != null &&
+            item.specialRule == ArtifactSpecialRule.GlassCommon && item.tier == 1);
+        Assert.That(_cards.BuyArtifact(glass, 0), Is.True);
+        Assert.That(_cards.BuyArtifact(glass, 0), Is.True);
+        var first = _cards.GetArtifactInstanceAt(0);
+        var second = _cards.GetArtifactInstanceAt(1);
+        Assert.That(first.Id, Is.Not.EqualTo(second.Id));
+        first.State.SetCounter(91, 7);
+        Assert.That(second.State.GetCounter(91), Is.Zero);
+        var card = _cards.ownedCards.First(item => item != null);
+        Assert.That(GameplayEffectResolver.CalculateAttack(card, _cards),
+            Is.EqualTo(card.BaseAttackValue + 10));
+        Assert.That(_cards.GetArtifactInstance(glass), Is.Null,
+            "Definition-based lookup is ambiguous when duplicate instances are owned.");
+    }
+
+    [Test]
+    public void ManualMergeConsumesTwoExactCopiesAndCreatesFreshNextTierInstance()
+    {
+        var common = Load("rel_001");
+        var rare = Load("rel_025");
+        Assert.That(_cards.BuyArtifact(common, 0), Is.True);
+        Assert.That(_cards.BuyArtifact(common, 0), Is.True);
+        var first = _cards.GetArtifactInstanceAt(0);
+        var second = _cards.GetArtifactInstanceAt(1);
+        Assert.That(first.Id, Is.Not.EqualTo(second.Id));
+        first.State.SetCounter(4, 10);
+        second.State.SetCounter(4, 20);
+        int goldBefore = _cards.gold;
+        Assert.That(_cards.MergeArtifacts(first.Id, second.Id), Is.True);
+        Assert.That(_cards.gold, Is.EqualTo(goldBefore));
+        Assert.That(_cards.ownedArtifacts, Is.EqualTo(new[] { rare }));
+        Assert.That(_cards.ArtifactSlotsUsed, Is.EqualTo(1));
+        Assert.That(_cards.GetArtifactInstanceAt(0).State.GetCounter(4), Is.Zero);
+        Assert.That(_cards.GetArtifactInstance(common), Is.Null);
+    }
+
+    [Test]
+    public void ExactInstanceRemovalPreservesOtherCopyState()
+    {
+        var glass = _catalog.Single(item => item != null &&
+            item.specialRule == ArtifactSpecialRule.GlassCommon && item.tier == 1);
+        Assert.That(_cards.BuyArtifact(glass, 0), Is.True);
+        Assert.That(_cards.BuyArtifact(glass, 0), Is.True);
+        var first = _cards.GetArtifactInstanceAt(0);
+        var second = _cards.GetArtifactInstanceAt(1);
+        second.State.SetCounter(92, 4);
+        Assert.That(_cards.RemoveArtifactInstance(first.Id), Is.True);
+        Assert.That(_cards.OwnedArtifactInstances.Count, Is.EqualTo(1));
+        Assert.That(_cards.GetArtifactInstanceAt(0).Id, Is.EqualTo(second.Id));
+        Assert.That(_cards.GetArtifactInstanceAt(0).State.GetCounter(92), Is.EqualTo(4));
+        Assert.That(_cards.GetArtifactInstance(glass), Is.SameAs(second));
+    }
+
+    [Test]
+    public void ManualMergeRejectsSameInstanceAndLeavesInventoryUnchanged()
+    {
+        var common = Load("rel_001");
+        Assert.That(_cards.BuyArtifact(common, 0), Is.True);
+        var instance = _cards.GetArtifactInstanceAt(0);
+        Assert.That(_cards.MergeArtifacts(instance.Id, instance.Id), Is.False);
+        Assert.That(_cards.ownedArtifacts, Is.EqualTo(new[] { common }));
+    }
+
+    [Test]
     public void UpgradeReplacesPredecessorInPlaceWithoutUsingAnotherSlotOrRetainingState()
     {
         var predecessor = Load("rel_001");

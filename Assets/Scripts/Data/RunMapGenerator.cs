@@ -28,6 +28,10 @@ public static class RunMapGenerator
             for (int row = 0; row < RowCount; row++)
             {
                 MapNodeType kind = kinds[row];
+                // Map 1 reserves its first two route depths for non-Shop encounters.
+                // Replace after the layout shuffle so link/layout RNG consumption stays unchanged.
+                if (mapIndex == 0 && col < 2 && kind == MapNodeType.Shop)
+                    kind = MapNodeType.Combat;
                 bool hidden = kind == MapNodeType.Risk ||
                     (kind == MapNodeType.Event && contentRandom.NextInt(0, 2) == 0);
                 int nodeId = nextId++;

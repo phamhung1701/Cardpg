@@ -136,7 +136,7 @@ public sealed class Phase5BuildProgressionTests
 
         var enhancementOffer = _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Enhancement);
         int beforeEnhancement = _cards.gold;
-        var chosenCard = _cards.ownedCards.First(card => card.Enhancement == null);
+        var chosenCard = _cards.hand.First(card => card.Enhancement == null);
         Assert.That(_run.PurchaseShopOffer(enhancementOffer.StableId), Is.False, "A target is required");
         Assert.That(_run.PurchaseShopEnhancement(enhancementOffer.StableId, chosenCard.Id), Is.True);
         Assert.That(_cards.gold, Is.EqualTo(beforeEnhancement - enhancementOffer.price));
@@ -153,7 +153,7 @@ public sealed class Phase5BuildProgressionTests
         _run.OnPathChosen(upgrade.id);
         var offer = _run.GetCurrentUpgradeOffers()[0];
 
-        var chosenCard = _cards.ownedCards.First(card => card.Enhancement == null);
+        var chosenCard = _cards.hand.First(card => card.Enhancement == null);
         Assert.That(_run.ChooseUpgradeOffer(0), Is.False, "A target is required");
         Assert.That(_run.ChooseUpgradeOffer(0, chosenCard.Id), Is.True);
         Assert.That(_cards.FindOwnedCard(chosenCard.Id).Enhancement, Is.SameAs(offer.enhancement));

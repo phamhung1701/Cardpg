@@ -161,6 +161,7 @@ public sealed class Phase7ArtifactMechanicsTests
                 $"Assets/Data/Enhancements/{name}.asset"));
         var card = Card(CardData.Suit.Clubs, CardData.Rank.Seven, 910);
         SetOwnedCards(new[] { card });
+        CardCollectionOf(_cards).DrawToHand(1, 1);
         SetPrivate(_run, "_completedNodeCount", 3);
         RunEventDefinition shown = null;
         _run.OnShowEvent += definition => shown = definition;

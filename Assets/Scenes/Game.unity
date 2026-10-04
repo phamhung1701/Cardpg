@@ -529,6 +529,10 @@ MonoBehaviour:
   capacityLabel: {fileID: 1918429082}
   tooltipPanel: {fileID: 807301236}
   tooltipText: {fileID: 1594565235}
+  mergeModeButton: {fileID: 0}
+  mergeConfirmButton: {fileID: 0}
+  mergeCancelButton: {fileID: 0}
+  mergeStatusText: {fileID: 0}
   detailPanel: {fileID: 1018156394}
   detailText: {fileID: 1735023912}
   detailCloseButton: {fileID: 876281787}
@@ -3124,6 +3128,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: c539bb918f9cb3746ae4f25e9acc15fa, type: 2}
   - {fileID: 11400000, guid: dbf29c99350534b4abe5fdf2d8dcd931, type: 2}
   - {fileID: 11400000, guid: 7418c1aa5b7286b4bae8efb932807c9e, type: 2}
+  - {fileID: 11400000, guid: 78bdfe2859dec8545a6476ebd1f2f9df, type: 2}
   consumableCatalog:
   - {fileID: 11400000, guid: 5bfda6f81d9cda940865345962fa1b4b, type: 2}
   - {fileID: 11400000, guid: ecbcc3c6975e13b4bbe29c436d8d3e41, type: 2}
@@ -21181,6 +21186,11 @@ MonoBehaviour:
   discardText: {fileID: 0}
   toggleButton: {fileID: 1406763502}
   closeButton: {fileID: 1090897489}
+  cardPrefab: {fileID: 0}
+  cardsPerRow: 5
+  horizontalSpacing: 12
+  verticalSpacing: 16
+  cardScale: 0.62
 --- !u!114 &2107400367
 MonoBehaviour:
   m_ObjectHideFlags: 0

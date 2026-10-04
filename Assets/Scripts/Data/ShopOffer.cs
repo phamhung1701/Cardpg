@@ -20,6 +20,7 @@ public sealed class ShopOffer
     public int slot;
     public int basePrice;
     public int price;
+    public int investmentStake;
 
     public string StableId => kind switch
     {
@@ -60,12 +61,12 @@ public sealed class ShopOffer
         if (kind == ShopOfferKind.Enhancement)
         {
             string effect = enhancement != null ? enhancement.description : string.Empty;
-            return $"Choose an owned card to enhance: {effect}";
+            return $"Choose a card in your hand to enhance: {effect}";
         }
         if (kind == ShopOfferKind.Consumable)
             return consumable != null ? consumable.description : string.Empty;
         if (kind == ShopOfferKind.Investment)
-            return "Invest 5 Gold. At the next Shop, there is a 50% chance to receive 15 Gold; otherwise receive nothing.";
+            return $"Invest a positive amount of Gold (up to your current Gold). At the next Shop, a seeded 50% chance pays 3× your stake; otherwise you lose the stake.";
         if (kind == ShopOfferKind.Guidance)
             return "Reveal one reachable hidden Event or Risk node on the current map.";
         if (kind == ShopOfferKind.Contract)

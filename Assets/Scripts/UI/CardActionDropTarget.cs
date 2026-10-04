@@ -79,6 +79,17 @@ public class CardActionDropTarget : MonoBehaviour, IPointerEnterHandler, IPointe
         return committed;
     }
 
+    public bool TryUseConsumableAtSlot(int slotIndex)
+    {
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        var consumable = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
+        var target = ResolveEnemyTarget();
+        return cards != null && combat != null && consumable != null &&
+            consumable.effectType == ConsumableEffectType.DirectEnemyDamage &&
+            cards.UseConsumableAtSlot(slotIndex, combat, target);
+    }
+
     public void OnPointerEnter(PointerEventData eventData)
     {
         var draggedCard = CardManager.Instance?.ActiveDragCard;

@@ -282,8 +282,10 @@ public class CardView : MonoBehaviour,
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (GameplayInputGate.IsBlocked || eventData.button != PointerEventData.InputButton.Left) return;
-        CardManager.Instance?.ToggleCardSelection(this);
+        var manager = CardManager.Instance;
+        if (manager == null || GameplayInputGate.IsBlocked && !manager.CanRouteHandEnhancementTargetClick ||
+            eventData.button != PointerEventData.InputButton.Left) return;
+        manager.HandleCardClick(this);
     }
 
     public void OnPointerUp(PointerEventData eventData)

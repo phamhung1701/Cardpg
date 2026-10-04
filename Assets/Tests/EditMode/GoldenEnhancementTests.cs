@@ -53,6 +53,29 @@ public sealed class GoldenEnhancementTests
     }
 
     [Test]
+    public void DoubleStrikeEffect_DerivesExactlyTwoHitsFromSelectedEnhancement()
+    {
+        var doubleStrike = ScriptableObject.CreateInstance<CardEnhancementData>();
+        _created.Add(doubleStrike);
+        doubleStrike.effects = new[] { new GameplayEffectDefinition
+        {
+            kind = GameplayEffectKind.DoubleStrike,
+            trigger = GameplayEffectTrigger.AttackCalculated,
+            amount = 1
+        } };
+        var card = HandViews().First().data;
+        Assert.That(_cards.ApplyEnhancement(card.Id, doubleStrike), Is.True);
+        var target = StartTarget();
+        _combat.CriticalChancePercent = 0f;
+        int damage = _combat.CalculateCardAttackDamage(card);
+
+        Assert.That(_combat.TryPlayCards(new[] { HandViews().First(view => view.data == card) }, target), Is.True);
+
+        Assert.That(target.currentHp, Is.EqualTo(1000 - damage * 2));
+        Assert.That(_cards.discardPile.Count(instance => instance.Id == card.Id), Is.EqualTo(1));
+    }
+
+    [Test]
     public void Asset_UsesCanonicalRareTierOneBonusGoldAttackCommittedEffect()
     {
         Assert.That(_golden.id, Is.EqualTo("enh_007"));

@@ -80,10 +80,13 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(_ui.SelectedOfferId, Is.EqualTo(first.StableId));
         Assert.That(_ui.selectedOfferText.text, Does.Contain(first.DisplayName));
         Assert.That(_ui.selectedOfferText.text, Does.Contain($"{first.price}g"));
-        Assert.That(ButtonFor(first).GetComponentInChildren<TMP_Text>().text, Does.StartWith("SELECTED"));
+        Assert.That(ButtonFor(first).GetComponentInChildren<TMP_Text>().text, Does.Not.StartWith("SELECTED"));
+        Assert.That(ButtonFor(first).GetComponent<Outline>().enabled, Is.True);
         Click(second);
         Assert.That(_ui.SelectedOfferId, Is.EqualTo(second.StableId));
         Assert.That(ButtonFor(first).GetComponentInChildren<TMP_Text>().text, Does.Not.StartWith("SELECTED"));
+        Assert.That(ButtonFor(first).GetComponent<Outline>().enabled, Is.False);
+        Assert.That(ButtonFor(second).GetComponent<Outline>().enabled, Is.True);
         Assert.That(_cards.gold, Is.EqualTo(50));
         Assert.That(_cards.ownedArtifacts, Is.Empty);
         Assert.That(_cards.ownedCards.All(card => card.Enhancement == null), Is.True);
@@ -197,6 +200,29 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(_run.GetCurrentShopOffers(), Does.Contain(offer));
         Assert.That(offer.StableId, Is.EqualTo(stableId));
         Assert.That(offer.price, Is.EqualTo(cachedPrice));
+    }
+
+    [Test]
+    public void SellMode_RequiresExplicitConfirmationAndPaysHalfAuthoredArtifactPrice()
+    {
+        var artifact = ArtifactOffer().artifact;
+        artifact.price = 11; // Odd authored prices verify integer division rounds down.
+        Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+        long instanceId = _cards.OwnedArtifactInstances[0].Id;
+        int goldBefore = _cards.gold;
+        var sellMode = (Button)typeof(ShopUI).GetField("_sellModeButton",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(_ui);
+        sellMode.onClick.Invoke();
+        var row = _ui.itemsContainer.Cast<Transform>().Single(child => child.name == $"Sell_artifact_{instanceId}");
+        row.GetComponent<Button>().onClick.Invoke();
+        Assert.That(_cards.gold, Is.EqualTo(goldBefore), "Selection must not commit a sale.");
+        Assert.That(_cards.GetArtifactInstanceById(instanceId), Is.Not.Null);
+        Assert.That(_ui.selectedOfferText.text, Does.Contain($"{artifact.price / 2}g"));
+
+        _ui.buyButton.onClick.Invoke();
+        Assert.That(_cards.gold, Is.EqualTo(goldBefore + artifact.price / 2));
+        Assert.That(_cards.GetArtifactInstanceById(instanceId), Is.Null);
+        Assert.That(_ui.SellingMode, Is.True);
     }
 
     [Test]

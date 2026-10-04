@@ -15,6 +15,7 @@ public class EnemyDisplayUI : MonoBehaviour
     EnemyRuntime _boundEnemy;
     bool _hasExplicitBinding;
     bool _isDisplayingBossCard;
+    bool _isDisplayingAuthoredPortrait;
     Sprite _placeholderSprite;
     Color _placeholderColor;
     Image.Type _placeholderImageType;
@@ -24,6 +25,10 @@ public class EnemyDisplayUI : MonoBehaviour
     Vector2 _portraitAnchorMax;
     Vector2 _portraitAnchoredPosition;
     Vector2 _portraitSizeDelta;
+    Coroutine _defeatCue;
+    Vector3 _preDefeatScale;
+    Color _preDefeatPortraitColor;
+    CanvasGroup _defeatCanvasGroup;
 
     public EnemyRuntime DisplayedEnemy => _hasExplicitBinding
         ? _boundEnemy
@@ -62,6 +67,7 @@ public class EnemyDisplayUI : MonoBehaviour
             CombatManager.Instance.OnEnemiesChanged += RefreshDisplay;
             CombatManager.Instance.OnEnemyHpChanged += RefreshHp;
             CombatManager.Instance.OnStateChanged += HandleStateChanged;
+            CombatManager.Instance.OnPendingDamageChanged += HandlePendingDamageChanged;
         }
         RefreshDisplay();
         HandleStateChanged(CombatManager.Instance != null ? CombatManager.Instance.currentState : GameState.Idle);
@@ -75,7 +81,49 @@ public class EnemyDisplayUI : MonoBehaviour
             CombatManager.Instance.OnEnemiesChanged -= RefreshDisplay;
             CombatManager.Instance.OnEnemyHpChanged -= RefreshHp;
             CombatManager.Instance.OnStateChanged -= HandleStateChanged;
+            CombatManager.Instance.OnPendingDamageChanged -= HandlePendingDamageChanged;
         }
+    }
+
+    public void PlayDefeatCue()
+    {
+        if (!isActiveAndEnabled) return;
+        CancelDefeatCue();
+        _preDefeatScale = transform.localScale;
+        _preDefeatPortraitColor = portrait != null ? portrait.color : Color.white;
+        _defeatCanvasGroup = GetComponent<CanvasGroup>();
+        if (_defeatCanvasGroup == null) _defeatCanvasGroup = gameObject.AddComponent<CanvasGroup>();
+        _defeatCue = StartCoroutine(DefeatCueRoutine());
+    }
+
+    public void CancelDefeatCue()
+    {
+        if (_defeatCue != null) StopCoroutine(_defeatCue);
+        _defeatCue = null;
+        if (_preDefeatScale != Vector3.zero) transform.localScale = _preDefeatScale;
+        if (portrait != null && _preDefeatScale != Vector3.zero) portrait.color = _preDefeatPortraitColor;
+        if (_defeatCanvasGroup != null) _defeatCanvasGroup.alpha = 1f;
+    }
+
+    System.Collections.IEnumerator DefeatCueRoutine()
+    {
+        var rect = (RectTransform)transform;
+        Vector3 initialScale = _preDefeatScale;
+        float elapsed = 0f;
+        if (portrait != null) portrait.color = new Color(1f, 0.35f, 0.2f, 1f);
+        // Brief warm impact flash, then a compact fade/shrink; presentation only.
+        if (portrait != null) portrait.color = new Color(1f, 0.35f, 0.2f, 1f);
+        yield return new WaitForSeconds(0.09f);
+        while (elapsed < 0.39f)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / 0.39f);
+            float eased = t * t * (3f - 2f * t);
+            rect.localScale = Vector3.LerpUnclamped(initialScale, initialScale * 0.72f, eased);
+            if (_defeatCanvasGroup != null) _defeatCanvasGroup.alpha = 1f - t;
+            yield return null;
+        }
+        _defeatCue = null;
     }
 
     void RefreshDisplay()
@@ -105,12 +153,14 @@ public class EnemyDisplayUI : MonoBehaviour
         Sprite bossSprite = bossCard != null && bossCard.IsFaceCard
             ? CardManager.Instance?.cardPrefab?.ResolveCardSprite(bossCard)
             : null;
+        Sprite enemySprite = enemy?.type ? enemy.type.portraitSprite : null;
         _isDisplayingBossCard = bossSprite != null;
+        _isDisplayingAuthoredPortrait = !_isDisplayingBossCard && enemySprite != null;
 
         var rect = portrait.rectTransform;
-        if (_isDisplayingBossCard)
+        if (_isDisplayingBossCard || _isDisplayingAuthoredPortrait)
         {
-            portrait.sprite = bossSprite;
+            portrait.sprite = _isDisplayingBossCard ? bossSprite : enemySprite;
             portrait.type = Image.Type.Simple;
             portrait.preserveAspect = true;
             portrait.color = Color.white;
@@ -132,10 +182,11 @@ public class EnemyDisplayUI : MonoBehaviour
         }
 
         if (_portraitGlyph)
-            _portraitGlyph.gameObject.SetActive(!_isDisplayingBossCard);
+            _portraitGlyph.gameObject.SetActive(!_isDisplayingBossCard && !_isDisplayingAuthoredPortrait);
     }
 
     void RefreshHp() => RefreshDisplay();
+    void HandlePendingDamageChanged(int _) => RefreshStateGuidance();
 
     public void RefreshStateGuidance()
     {
@@ -155,6 +206,12 @@ public class EnemyDisplayUI : MonoBehaviour
                 _ => "Choose your next encounter"
             };
             var enemy = DisplayedEnemy;
+            if (enemy != null && state == GameState.EnemyAttacking)
+            {
+                int incoming = CombatManager.Instance != null
+                    ? CombatManager.Instance.GetPendingAttackDamage(enemy) : 0;
+                guidance += incoming > 0 ? $"\nINCOMING: {incoming} DAMAGE" : "\nBLOCKED";
+            }
             if (enemy != null && state == GameState.PlayerTurn && enemy.HasDoubleStrike)
             {
                 int budget = enemy.ResponseAttack + (enemy.HasOppression
@@ -193,7 +250,7 @@ public class EnemyDisplayUI : MonoBehaviour
 
         if (portrait)
         {
-            if (_isDisplayingBossCard)
+            if (_isDisplayingBossCard || _isDisplayingAuthoredPortrait)
             {
                 portrait.color = Color.white;
                 return;

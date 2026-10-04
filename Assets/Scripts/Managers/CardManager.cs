@@ -33,12 +33,19 @@ public class CardManager : Singleton<CardManager>
     readonly HashSet<CardView> _trackedViews = new();
     readonly List<CardView> _selectedCards = new();
     readonly List<CardData> _generatedDefinitions = new();
-    readonly Dictionary<RelicData, ArtifactRuntimeInstance> _artifactInstances = new();
+    readonly List<ArtifactRuntimeInstance> _orderedArtifactInstances = new();
     readonly List<ConsumableStack> _backpack = new(BASE_BACKPACK_CAPACITY);
     CardView _activeDragCard;
     int _nextCardId = 1;
     bool _consumableUsedThisEncounter;
+    Action<CardView> _handEnhancementTargetHandler;
 
+    public bool IsHandEnhancementTargeting => _handEnhancementTargetHandler != null;
+
+    public IReadOnlyList<ArtifactRuntimeInstance> OwnedArtifactInstances
+    {
+        get { EnsureArtifactInstances(); return _orderedArtifactInstances; }
+    }
     public IReadOnlyList<CardInstance> ownedCards => _cards.OwnedCards;
     public IReadOnlyList<CardInstance> deck => _cards.Deck;
     public IReadOnlyList<CardInstance> hand => _cards.Hand;
@@ -240,6 +247,35 @@ public class CardManager : Singleton<CardManager>
         _backpack.Add(created);
     }
 
+    public bool RemoveConsumableInstanceAtSlot(int slotIndex, ConsumableInstance expected)
+    {
+        if (slotIndex < 0 || slotIndex >= _backpack.Count || expected == null ||
+            !_backpack[slotIndex].Items.Contains(expected)) return false;
+        var stack = _backpack[slotIndex];
+        if (!stack.Remove(expected)) return false;
+        if (stack.Count == 0) _backpack.RemoveAt(slotIndex);
+        OnConsumablesChanged?.Invoke();
+        OnBuildChanged?.Invoke();
+        return true;
+    }
+
+    public bool MoveConsumableSlot(int fromIndex, int toIndex)
+    {
+        if (fromIndex < 0 || fromIndex >= _backpack.Count || toIndex < 0 || toIndex >= BackpackCapacity ||
+            fromIndex == toIndex) return false;
+        var stack = _backpack[fromIndex];
+        _backpack.RemoveAt(fromIndex);
+        int insertionIndex = Mathf.Min(toIndex, _backpack.Count);
+        if (insertionIndex == fromIndex)
+        {
+            _backpack.Insert(fromIndex, stack);
+            return false;
+        }
+        _backpack.Insert(insertionIndex, stack);
+        OnConsumablesChanged?.Invoke();
+        return true;
+    }
+
     public bool CanUseConsumable(ConsumableData consumable, CombatManager combat)
     {
         if (consumable == null) return false;
@@ -256,17 +292,18 @@ public class CardManager : Singleton<CardManager>
         bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
         bool canEdit = inCombat || combat.currentState == GameState.Idle || combat.currentState == GameState.GameWon;
         bool hasTarget = _cards.OwnedCards.Any(card => DeckMutationService.CanTarget(_cards, card, inCombat));
+        bool hasRuneTarget = _cards.Hand.Any(card => card != null && card.Suit != consumable.targetSuit);
+        bool hasEnhancementTarget = _cards.OwnedCards.Any(card => card != null && card.Enhancement == null &&
+            (!inCombat || _cards.ContainsInHand(card)));
         return consumable.effectType switch
         {
             ConsumableEffectType.Heal => consumable.healAmount > 0 &&
                 combat.player.currentHealth < combat.player.maxHealth,
             ConsumableEffectType.DirectEnemyDamage => combat.CanUseConsumableDamage(consumable.damageAmount),
-            ConsumableEffectType.ApplyEnhancement => consumable.enhancementToApply != null &&
-                _cards.OwnedCards.Any(card => card != null && card.Enhancement == null),
+            ConsumableEffectType.ApplyEnhancement => consumable.enhancementToApply != null && hasEnhancementTarget,
             ConsumableEffectType.DuplicateCard => canEdit && hasTarget,
             ConsumableEffectType.DestroyCards => canEdit && _cards.OwnedCards.Count > 1 && hasTarget,
-            ConsumableEffectType.ChangeSuit => canEdit && _cards.OwnedCards.Any(card =>
-                DeckMutationService.CanTarget(_cards, card, inCombat) && card.Suit != consumable.targetSuit),
+            ConsumableEffectType.ChangeSuit => canEdit && hasRuneTarget,
             _ => false
         };
     }
@@ -275,6 +312,18 @@ public class CardManager : Singleton<CardManager>
     {
         int slot = _backpack.FindIndex(value => value.Definition == consumable);
         return UseConsumableAtSlot(slot, combat);
+    }
+
+    public bool UseConsumableAtSlot(int slotIndex, CombatManager combat, EnemyRuntime target)
+    {
+        if (!CanUseConsumableAtSlot(slotIndex, combat) || target == null) return false;
+        var item = GetConsumableInstanceAtSlot(slotIndex);
+        if (item == null || item.Definition.effectType != ConsumableEffectType.DirectEnemyDamage ||
+            !combat.CanUseConsumableDamage(item.Definition.damageAmount, target)) return false;
+        bool wasInEncounter = IsActiveEncounter(combat);
+        if (!combat.TryUseConsumableDamage(item.Definition.damageAmount, target)) return false;
+        CompleteConsumableUse(slotIndex, item, combat, wasInEncounter);
+        return true;
     }
 
     public bool UseConsumableAtSlot(int slotIndex, CombatManager combat)
@@ -303,11 +352,14 @@ public class CardManager : Singleton<CardManager>
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
         var instance = GetConsumableInstanceAtSlot(slotIndex);
         var consumable = instance.Definition;
+        bool inCombat = combat != null &&
+            combat.currentState is (GameState.PlayerTurn or GameState.EnemyAttacking);
         if (consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
             consumable.enhancementToApply == null ||
-            !_cards.OwnedCards.Any(card => card != null && card.Enhancement == null)) return false;
+            !_cards.OwnedCards.Any(card => card != null && card.Enhancement == null &&
+                (!inCombat || _cards.ContainsInHand(card)))) return false;
         var card = FindOwnedCard(cardId);
-        if (card == null || card.Enhancement != null ||
+        if (card == null || card.Enhancement != null || inCombat && !_cards.ContainsInHand(card) ||
             !ApplyEnhancement(cardId, consumable.enhancementToApply)) return false;
         CompleteConsumableUse(slotIndex, instance, combat, IsActiveEncounter(combat));
         return true;
@@ -323,12 +375,13 @@ public class CardManager : Singleton<CardManager>
         if (definition.effectType is not (ConsumableEffectType.DuplicateCard or
             ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)) return false;
         bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
+        bool requiresHandTarget = inCombat || definition.effectType == ConsumableEffectType.ChangeSuit;
         var selected = new List<CardInstance>(cardIds.Count);
         var unique = new HashSet<int>();
         foreach (int id in cardIds)
         {
             var card = FindOwnedCard(id);
-            if (!unique.Add(id) || !DeckMutationService.CanTarget(_cards, card, inCombat)) return false;
+            if (!unique.Add(id) || !DeckMutationService.CanTarget(_cards, card, requiresHandTarget)) return false;
             selected.Add(card);
         }
         bool success;
@@ -345,11 +398,26 @@ public class CardManager : Singleton<CardManager>
                 if (success)
                     foreach (var card in selected) RemoveTrackedViews(card);
                 break;
-            default:
-                if (selected.Count != 1) return false;
-                success = DeckMutationService.ChangeSuit(_cards, selected[0], definition.targetSuit, inCombat);
-                if (success) RefreshTrackedView(selected[0]);
+            case ConsumableEffectType.ChangeSuit:
+                if (selected.Count < 1 || selected.Count > 3 ||
+                    !Enum.IsDefined(typeof(CardData.Suit), definition.targetSuit) ||
+                    selected.Any(card => card.Suit == definition.targetSuit)) return false;
+                var previousSuits = selected.Select(card => card.Suit).ToArray();
+                int changedCount = 0;
+                while (changedCount < selected.Count &&
+                    selected[changedCount].TryChangeSuit(definition.targetSuit))
+                    changedCount++;
+                if (changedCount != selected.Count)
+                {
+                    for (int i = 0; i < changedCount; i++)
+                        selected[i].TryChangeSuit(previousSuits[i]);
+                    return false;
+                }
+                for (int i = 0; i < selected.Count; i++) RefreshTrackedView(selected[i]);
+                success = true;
                 break;
+            default:
+                return false;
         }
         if (!success) return false;
         CompleteConsumableUse(slotIndex, item, combat, wasInEncounter);
@@ -363,11 +431,10 @@ public class CardManager : Singleton<CardManager>
         var combat = CombatManager.Instance;
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
         var definition = GetConsumableAtSlot(slotIndex);
-        if (definition.effectType is not (ConsumableEffectType.DuplicateCard or
-            ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)) return false;
         bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
+        bool requiresHandTarget = inCombat || definition.effectType == ConsumableEffectType.ChangeSuit;
         var card = FindOwnedCard(cardId);
-        return DeckMutationService.CanTarget(_cards, card, inCombat) &&
+        return DeckMutationService.CanTarget(_cards, card, requiresHandTarget) &&
             (definition.effectType != ConsumableEffectType.ChangeSuit || card.Suit != definition.targetSuit);
     }
 
@@ -428,7 +495,6 @@ public class CardManager : Singleton<CardManager>
     public string GetArtifactAcquisitionUnavailableReason(RelicData artifact)
     {
         if (artifact == null || string.IsNullOrWhiteSpace(artifact.id)) return "Artifact unavailable";
-        if (HasArtifact(artifact)) return "Already owned";
         if (artifact.tier > 1)
         {
             var predecessor = ownedArtifacts.FirstOrDefault(value => value != null &&
@@ -448,22 +514,27 @@ public class CardManager : Singleton<CardManager>
 
     public bool BuyArtifact(RelicData artifact, int price)
     {
+        EnsureArtifactInstances();
         if (price < 0 || !string.IsNullOrEmpty(GetArtifactAcquisitionUnavailableReason(artifact))) return false;
         var predecessor = artifact.tier > 1
             ? ownedArtifacts.FirstOrDefault(value => value != null && value.canonicalId == artifact.upgradeFromId)
             : null;
         if (!SpendGold(price)) return false;
+        ArtifactRuntimeInstance instance;
         if (predecessor != null)
         {
             int index = ownedArtifacts.IndexOf(predecessor);
             ownedArtifacts[index] = artifact;
+            instance = _orderedArtifactInstances[index] = new ArtifactRuntimeInstance(artifact);
             relics.Remove(predecessor.id);
-            _artifactInstances.Remove(predecessor);
         }
-        else ownedArtifacts.Add(artifact);
+        else
+        {
+            ownedArtifacts.Add(artifact);
+            instance = new ArtifactRuntimeInstance(artifact);
+            _orderedArtifactInstances.Add(instance);
+        }
         relics.Add(artifact.id);
-        var instance = new ArtifactRuntimeInstance(artifact);
-        _artifactInstances.Add(artifact, instance);
         var run = RunManager.Instance;
         GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(instance),
             run != null ? run.CompletedNodeCount : 0);
@@ -481,8 +552,8 @@ public class CardManager : Singleton<CardManager>
 
     public bool GrantArtifactReward(RelicData artifact, RelicData replacement = null)
     {
-        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id) ||
-            !relicCatalog.Contains(artifact) || HasArtifact(artifact)) return false;
+        EnsureArtifactInstances();
+        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id) || !relicCatalog.Contains(artifact)) return false;
 
         RelicData predecessor = artifact.tier > 1
             ? ownedArtifacts.FirstOrDefault(value => value != null &&
@@ -500,13 +571,16 @@ public class CardManager : Singleton<CardManager>
         if (replacement != null)
         {
             ownedArtifacts[index] = artifact;
+            _orderedArtifactInstances[index] = new ArtifactRuntimeInstance(artifact);
             relics.Remove(replacement.id);
-            _artifactInstances.Remove(replacement);
         }
-        else ownedArtifacts.Add(artifact);
+        else
+        {
+            ownedArtifacts.Add(artifact);
+            _orderedArtifactInstances.Add(new ArtifactRuntimeInstance(artifact));
+        }
         relics.Add(artifact.id);
-        var instance = new ArtifactRuntimeInstance(artifact);
-        _artifactInstances[artifact] = instance;
+        var instance = _orderedArtifactInstances[index];
         var run = RunManager.Instance;
         GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(instance),
             run != null ? run.CompletedNodeCount : 0);
@@ -524,17 +598,106 @@ public class CardManager : Singleton<CardManager>
 
     public ArtifactRuntimeInstance GetArtifactInstance(RelicData artifact)
     {
-        if (artifact == null || !ownedArtifacts.Contains(artifact)) return null;
-        if (!_artifactInstances.TryGetValue(artifact, out var instance))
-            _artifactInstances.Add(artifact, instance = new ArtifactRuntimeInstance(artifact));
-        return instance;
+        EnsureArtifactInstances();
+        if (artifact == null) return null;
+        ArtifactRuntimeInstance match = null;
+        for (int i = 0; i < _orderedArtifactInstances.Count; i++)
+        {
+            var instance = _orderedArtifactInstances[i];
+            if (instance == null || instance.Definition != artifact) continue;
+            if (match != null) return null;
+            match = instance;
+        }
+        return match;
+    }
+
+    public ArtifactRuntimeInstance GetArtifactInstanceById(long instanceId)
+    {
+        EnsureArtifactInstances();
+        return _orderedArtifactInstances.FirstOrDefault(value => value != null && value.Id == instanceId);
+    }
+
+    public ArtifactRuntimeInstance GetArtifactInstanceAt(int index)
+    {
+        EnsureArtifactInstances();
+        return index >= 0 && index < _orderedArtifactInstances.Count ? _orderedArtifactInstances[index] : null;
+    }
+
+    void EnsureArtifactInstances()
+    {
+        // Keep compatibility with older callers/tests that directly edit ownedArtifacts.
+        for (int i = _orderedArtifactInstances.Count - 1; i >= 0; i--)
+            if (i >= ownedArtifacts.Count || _orderedArtifactInstances[i]?.Definition != ownedArtifacts[i])
+                _orderedArtifactInstances.RemoveAt(i);
+        while (_orderedArtifactInstances.Count < ownedArtifacts.Count)
+        {
+            var definition = ownedArtifacts[_orderedArtifactInstances.Count];
+            _orderedArtifactInstances.Add(definition != null ? new ArtifactRuntimeInstance(definition) : null);
+        }
+    }
+
+    public bool RemoveArtifactInstance(long instanceId)
+    {
+        EnsureArtifactInstances();
+        int index = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == instanceId);
+        if (index < 0) return false;
+        _orderedArtifactInstances.RemoveAt(index);
+        ownedArtifacts.RemoveAt(index);
+        RebuildRelicIds();
+        RunManager.Instance?.RefreshCurrentMapEffects();
+        OnBuildChanged?.Invoke();
+        return true;
+    }
+
+    public bool MergeArtifacts(long firstInstanceId, long secondInstanceId)
+    {
+        EnsureArtifactInstances();
+        if (firstInstanceId == secondInstanceId) return false;
+        int firstIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == firstInstanceId);
+        int secondIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == secondInstanceId);
+        if (firstIndex < 0 || secondIndex < 0) return false;
+        var first = _orderedArtifactInstances[firstIndex];
+        var second = _orderedArtifactInstances[secondIndex];
+        var source = first.Definition;
+        if (source == null || second.Definition == null || source.tier != second.Definition.tier ||
+            string.IsNullOrEmpty(source.canonicalId) || source.canonicalId != second.Definition.canonicalId ||
+            source.tier < 1) return false;
+        var nextCandidates = relicCatalog.Where(value => value != null &&
+            value.tier == source.tier + 1 && value.upgradeFromId == source.canonicalId).ToArray();
+        if (nextCandidates.Length != 1) return false;
+        var next = nextCandidates[0];
+        int firstPosition = Math.Min(firstIndex, secondIndex);
+        int lastPosition = Math.Max(firstIndex, secondIndex);
+        ownedArtifacts.RemoveAt(lastPosition);
+        _orderedArtifactInstances.RemoveAt(lastPosition);
+        ownedArtifacts.RemoveAt(firstPosition);
+        _orderedArtifactInstances.RemoveAt(firstPosition);
+        var merged = new ArtifactRuntimeInstance(next);
+        ownedArtifacts.Insert(firstPosition, next);
+        _orderedArtifactInstances.Insert(firstPosition, merged);
+        RebuildRelicIds();
+        var run = RunManager.Instance;
+        GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(merged), run != null ? run.CompletedNodeCount : 0);
+        if (next.specialRule == ArtifactSpecialRule.Hammer)
+            merged.State.SetCounter(-140, run != null ? run.CompletedNodeCount : 0);
+        run?.RefreshCurrentMapEffects();
+        OnBuildChanged?.Invoke();
+        return true;
+    }
+
+    void RebuildRelicIds()
+    {
+        relics.Clear();
+        foreach (var artifact in ownedArtifacts)
+            if (artifact != null) relics.Add(artifact.id);
     }
 
     public void ResetArtifactEncounterEffectState()
     {
+        EnsureArtifactInstances();
         _consumableUsedThisEncounter = false;
-        foreach (var artifact in ownedArtifacts)
-            GetArtifactInstance(artifact)?.ResetEncounterState();
+        foreach (var artifact in _orderedArtifactInstances)
+            artifact?.ResetEncounterState();
         foreach (var card in ownedCards)
             card?.EffectState.ClearEncounter();
     }
@@ -547,10 +710,10 @@ public class CardManager : Singleton<CardManager>
         return null;
     }
 
-    public bool ApplyEnhancement(int cardId, CardEnhancementData enhancement)
+    public bool ApplyEnhancement(int cardId, CardEnhancementData enhancement, bool replaceExisting = false)
     {
         var card = FindOwnedCard(cardId);
-        if (card == null || !card.TryApplyEnhancement(enhancement)) return false;
+        if (card == null || !card.TryApplyEnhancement(enhancement, replaceExisting)) return false;
         RefreshTrackedView(card);
         OnDeckChanged?.Invoke();
         OnBuildChanged?.Invoke();
@@ -574,13 +737,14 @@ public class CardManager : Singleton<CardManager>
         OnBuildChanged?.Invoke();
     }
 
-    public bool BuyEnhancement(int cardId, CardEnhancementData enhancement, int price)
+    public bool BuyEnhancement(int cardId, CardEnhancementData enhancement, int price, bool replaceExisting = false)
     {
         var card = FindOwnedCard(cardId);
-        if (card == null || card.Enhancement != null || enhancement == null || price < 0 || !CanAfford(price))
+        if (card == null || (card.Enhancement != null && !replaceExisting) ||
+            ReferenceEquals(card.Enhancement, enhancement) || enhancement == null || price < 0 || !CanAfford(price))
             return false;
         if (!SpendGold(price)) return false;
-        if (card.TryApplyEnhancement(enhancement))
+        if (card.TryApplyEnhancement(enhancement, replaceExisting))
         {
             RefreshTrackedView(card);
             OnDeckChanged?.Invoke();
@@ -711,10 +875,15 @@ public class CardManager : Singleton<CardManager>
         return TryDiscardCards(views);
     }
 
-    public bool TryDiscardCards(IReadOnlyList<CardView> cards)
+    public bool TryDiscardCards(IReadOnlyList<CardView> cards) => TryCommitHandCards(cards, false);
+
+    public bool TryRecycleDefenseCards(IReadOnlyList<CardView> cards) => TryCommitHandCards(cards, true);
+
+    bool TryCommitHandCards(IReadOnlyList<CardView> cards, bool recycleToDeck)
     {
         if (cards == null || cards.Count == 0) return false;
 
+        var committedViews = new List<CardView>(cards.Count);
         var uniqueViews = new HashSet<CardView>();
         var instances = new List<CardInstance>(cards.Count);
         for (int i = 0; i < cards.Count; i++)
@@ -724,13 +893,15 @@ public class CardManager : Singleton<CardManager>
                 !uniqueViews.Add(view) || !_cards.ContainsInHand(view.data))
                 return false;
             instances.Add(view.data);
+            committedViews.Add(view);
         }
 
-        if (!_cards.TryDiscard(instances)) return false;
+        if (!(recycleToDeck ? _cards.TryRecycleHandToDeck(instances) : _cards.TryDiscard(instances))) return false;
 
-        for (int i = 0; i < cards.Count; i++)
+        // Selection may be the input list; removing selected views must not shorten our iteration.
+        for (int i = 0; i < committedViews.Count; i++)
         {
-            var view = cards[i];
+            var view = committedViews[i];
             _selectedCards.Remove(view);
             view.SetSelectionOrder(0);
             DetachAndDestroyView(view);
@@ -742,6 +913,36 @@ public class CardManager : Singleton<CardManager>
     }
 
     public void NotifyDeckChanged() => OnDeckChanged?.Invoke();
+
+    public void BeginHandEnhancementTargeting(Action<CardView> onTarget)
+    {
+        _handEnhancementTargetHandler = onTarget;
+        ClearSelection();
+    }
+
+    public void EndHandEnhancementTargeting()
+    {
+        _handEnhancementTargetHandler = null;
+        ClearSelection();
+    }
+
+    public bool CanRouteHandEnhancementTargetClick => IsHandEnhancementTargeting &&
+        (!GameplayInputGate.IsBlocked || RunManager.Instance != null && RunManager.Instance.IsPendingHammerReward &&
+            GameplayInputGate.Reasons == GameplayInputBlockReason.ArtifactChoice);
+
+    public void HandleCardClick(CardView card)
+    {
+        if (IsHandEnhancementTargeting)
+        {
+            if (CanRouteHandEnhancementTargetClick && IsTrackedHandView(card))
+                _handEnhancementTargetHandler?.Invoke(card);
+            return;
+        }
+        ToggleCardSelection(card);
+    }
+
+    bool IsTrackedHandView(CardView card) => card != null && card.data != null &&
+        _trackedViews.Contains(card) && _cards.ContainsInHand(card.data);
 
     public void CancelCardInteractions()
     {
@@ -759,6 +960,12 @@ public class CardManager : Singleton<CardManager>
 
     public void ToggleCardSelection(CardView card)
     {
+        if (IsHandEnhancementTargeting)
+        {
+            if (CanRouteHandEnhancementTargetClick && IsTrackedHandView(card))
+                _handEnhancementTargetHandler?.Invoke(card);
+            return;
+        }
         if (!CanSelect(card)) return;
 
         if (_selectedCards.Remove(card))
@@ -857,7 +1064,7 @@ public class CardManager : Singleton<CardManager>
         gold = 0;
         relics.Clear();
         ownedArtifacts.Clear();
-        _artifactInstances.Clear();
+        _orderedArtifactInstances.Clear();
         _backpack.Clear();
         _consumableUsedThisEncounter = false;
 
@@ -889,6 +1096,7 @@ public class CardManager : Singleton<CardManager>
         if (_activeDragCard != null)
             _activeDragCard.CancelActiveDrag();
         _activeDragCard = null;
+        _handEnhancementTargetHandler = null;
         ClearSelection(false);
 
         if (_trackedViews.Count > 0)
@@ -906,7 +1114,7 @@ public class CardManager : Singleton<CardManager>
 
     bool CanSelect(CardView card)
     {
-        return !GameplayInputGate.IsBlocked && card != null && card.data != null &&
+        return !IsHandEnhancementTargeting && !GameplayInputGate.IsBlocked && card != null && card.data != null &&
             _trackedViews.Contains(card) && _cards.ContainsInHand(card.data);
     }
 

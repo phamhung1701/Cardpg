@@ -132,22 +132,33 @@ public sealed class CardCollection
         return TryDiscard(new[] { card });
     }
 
-    public bool TryDiscard(IReadOnlyList<CardInstance> cards)
+    public bool TryDiscard(IReadOnlyList<CardInstance> cards) => TryMoveHandCards(cards, _discardPile);
+
+    /// <summary>Commits Block cards directly to the draw deck, then shuffles once using the run's card stream.</summary>
+    public bool TryRecycleHandToDeck(IReadOnlyList<CardInstance> cards)
+    {
+        if (!TryMoveHandCards(cards, _deck)) return false;
+        ShuffleDeck();
+        return true;
+    }
+
+    bool TryMoveHandCards(IReadOnlyList<CardInstance> cards, List<CardInstance> destination)
     {
         if (cards == null || cards.Count == 0) return false;
-
+        var snapshot = new List<CardInstance>(cards.Count);
         var uniqueCards = new HashSet<CardInstance>();
         for (int i = 0; i < cards.Count; i++)
         {
             var card = cards[i];
             if (card == null || !uniqueCards.Add(card) || !_hand.Contains(card))
                 return false;
+            snapshot.Add(card);
         }
-
-        for (int i = 0; i < cards.Count; i++)
+        // The caller may supply Hand itself. Snapshot before removing anything.
+        foreach (var card in snapshot)
         {
-            _hand.Remove(cards[i]);
-            _discardPile.Add(cards[i]);
+            _hand.Remove(card);
+            destination.Add(card);
         }
         return true;
     }

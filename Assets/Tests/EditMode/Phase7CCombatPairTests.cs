@@ -68,6 +68,88 @@ public sealed class Phase7CCombatPairTests
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
     }
 
+    [TestCase(0f, false)]
+    [TestCase(100f, true)]
+    public void PairHitFeedback_ReportsOneResolvedHitWithAuthoritativeCriticalAndHpLoss(float chance, bool critical)
+    {
+        var definition = EnemyTypeData.Create("Feedback Target", 3, 0, 0);
+        _created.Add(definition);
+        var target = new EnemyRuntime(definition);
+        _combat.StartEnemy(target);
+        _cards.RefillHand();
+        var views = HandViews();
+        var pair = new[] { views.First(view => view.data.Rank == CardData.Rank.Ace),
+            views.First(view => view.data.Rank != CardData.Rank.Ace) };
+        _combat.CriticalChancePercent = chance;
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+
+        Assert.That(_combat.TryPlayCards(pair, target), Is.True);
+
+        Assert.That(results.Count, Is.EqualTo(1), "Two animated cards must not report the same hit twice.");
+        Assert.That(results[0].Request.IsCritical, Is.EqualTo(critical));
+        Assert.That(results[0].ActualHpLost, Is.EqualTo(3));
+        Assert.That(AttackCardPresentationUI.FormatHitNumber(results[0]), Is.EqualTo(critical ? "Crit 3" : "3"));
+    }
+
+    [Test]
+    public void ShieldHitFeedback_ReportsBlockedRatherThanRequestedDamage()
+    {
+        var definition = EnemyTypeData.Create("Shield Feedback", 100, 0, 0);
+        _created.Add(definition);
+        var target = new EnemyRuntime(definition);
+        _combat.StartEnemy(target);
+        target.GainShield(1);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+        Assert.That(_combat.TryPlayCards(new[] { HandViews()[0] }, target), Is.True);
+        Assert.That(results.Count, Is.EqualTo(1));
+        Assert.That(results[0].ActualHpLost, Is.Zero);
+        Assert.That(AttackCardPresentationUI.FormatHitNumber(results[0]), Is.EqualTo("Blocked"));
+    }
+
+    [Test]
+    public void MultiHitFeedback_ReportsEachResolvedHitOnce()
+    {
+        var definition = EnemyTypeData.Create("Multi-hit Feedback", 1000, 0, 0);
+        _created.Add(definition);
+        var target = new EnemyRuntime(definition);
+        _combat.StartEnemy(target);
+        var card = HandViews().First(view => view.data.Rank != CardData.Rank.Ace);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+        Assert.That(_combat.TryPlayCards(new[] { card }, target, 2), Is.True);
+        Assert.That(results.Count, Is.EqualTo(2));
+        Assert.That(results.Select(result => result.Request.HitIndex), Is.EqualTo(new[] { 0, 1 }));
+        Assert.That(results.All(result => !result.Request.IsCritical), Is.True);
+        Assert.That(results.Sum(result => result.ActualHpLost), Is.EqualTo(1000 - target.currentHp));
+    }
+
+    [Test]
+    public void CriticalExplosiveFeedback_InheritsCriticalForSecondaryResolvedHit()
+    {
+        var definition = EnemyTypeData.Create("Explosive Feedback", 1000, 0, 0);
+        _created.Add(definition);
+        var target = new EnemyRuntime(definition);
+        var secondary = new EnemyRuntime(definition);
+        _combat.StartEncounter(new[] { target, secondary });
+        _cards.RefillHand();
+        var views = HandViews();
+        var pair = new[] { views.First(view => view.data.Rank == CardData.Rank.Ace),
+            views.First(view => view.data.Rank != CardData.Rank.Ace) };
+        var explosive = UnityEditor.AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Explosive.asset");
+        Assert.That(explosive, Is.Not.Null);
+        Assert.That(_cards.ApplyEnhancement(pair[1].data.Id, explosive), Is.True);
+        _combat.CriticalChancePercent = 100f;
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+        Assert.That(_combat.TryPlayCards(pair, target), Is.True);
+        Assert.That(results.Count, Is.EqualTo(2));
+        Assert.That(results.All(result => result.Request.IsCritical), Is.True);
+        Assert.That(results[1].Request.Target, Is.SameAs(secondary));
+        Assert.That(AttackCardPresentationUI.FormatHitNumber(results[1]), Does.StartWith("Crit "));
+    }
+
     [Test]
     public void NonAcePair_IsRejectedWithoutConsumingCards()
     {

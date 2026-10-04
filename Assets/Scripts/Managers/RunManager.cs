@@ -46,6 +46,7 @@ public class RunManager : Singleton<RunManager>
     public event Action OnMapRevealChanged;
     public event Action<CardInstance> OnBossRewardGranted;
     public event Action OnShopOffersChanged;
+    public event Action<string> OnInvestmentResult;
     public event Action OnConsumableRewardChanged;
     public event Action<string, string, IReadOnlyList<CardInstance>, Action<int>> OnShowArtifactDiscardChoice;
 
@@ -76,7 +77,7 @@ public class RunManager : Singleton<RunManager>
     CombatManager _subscribedCombatManager;
     RunRandomContext _randomContext;
     int _completedNodeCount;
-    int _pendingInvestments;
+    readonly List<int> _pendingInvestmentStakes = new();
     int _paidItemPurchaseCount;
     int _combatWinCount;
     int _merchantGiftRewardCount;
@@ -96,7 +97,7 @@ public class RunManager : Singleton<RunManager>
     public string RunSeed => runSeed;
     public int CurrentMapIndex => bossIndex;
     public int CompletedNodeCount => _completedNodeCount;
-    public int PendingInvestmentCount => _pendingInvestments;
+    public int PendingInvestmentCount => _pendingInvestmentStakes.Count;
     public int PaidItemPurchaseCount => _paidItemPurchaseCount;
     public int CombatWinCount => _combatWinCount;
     public RunContractState ActiveContract => _activeContract;
@@ -790,6 +791,35 @@ public class RunManager : Singleton<RunManager>
         QueueConsumableReward($"alchemist:{mapIndex}", "Alchemist’s Kit", choices);
     }
 
+    public bool SellArtifact(long artifactInstanceId, int expectedAuthoredPrice)
+    {
+        if (!IsActiveShopForSale() || GameplayInputGate.IsBlocked) return false;
+        var cards = CardManager.Instance;
+        var instance = cards != null ? cards.GetArtifactInstanceById(artifactInstanceId) : null;
+        if (instance == null || instance.Definition == null || instance.Definition.price < 0 ||
+            instance.Definition.price != expectedAuthoredPrice) return false;
+        int payout = expectedAuthoredPrice / 2;
+        if (!cards.RemoveArtifactInstance(artifactInstanceId)) return false;
+        if (payout > 0) cards.AddGold(payout);
+        return true;
+    }
+
+    public bool SellConsumable(int slotIndex, ConsumableInstance expectedInstance, int expectedAuthoredPrice)
+    {
+        if (!IsActiveShopForSale() || GameplayInputGate.IsBlocked || expectedInstance == null) return false;
+        var cards = CardManager.Instance;
+        var definition = expectedInstance.Definition;
+        if (cards == null || definition == null || definition.price < 0 ||
+            definition.price != expectedAuthoredPrice) return false;
+        int payout = expectedAuthoredPrice / 2;
+        if (!cards.RemoveConsumableInstanceAtSlot(slotIndex, expectedInstance)) return false;
+        if (payout > 0) cards.AddGold(payout);
+        return true;
+    }
+
+    bool IsActiveShopForSale() => _activeNode != null && !_activeNode.completed &&
+        _activeNode.kind == MapNodeType.Shop && CardManager.Instance != null;
+
     public bool CanPurchaseShopOffer(string stableId) =>
         string.IsNullOrEmpty(GetShopOfferUnavailableReason(stableId));
 
@@ -818,8 +848,7 @@ public class RunManager : Singleton<RunManager>
         else if (offer.kind == ShopOfferKind.Enhancement)
         {
             if (offer.enhancement == null) return "Enhancement unavailable";
-            if (!cards.ownedCards.Any(card => card != null && card.Enhancement == null))
-                return "No eligible cards";
+            if (cards.hand.Count == 0) return "No cards in hand to target";
         }
         else if (offer.kind == ShopOfferKind.Consumable)
         {
@@ -831,14 +860,17 @@ public class RunManager : Singleton<RunManager>
         else if (offer.kind == ShopOfferKind.Investment || offer.kind == ShopOfferKind.Guidance)
         {
             if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased this Shop visit";
+            if (offer.kind == ShopOfferKind.Investment && (offer.investmentStake <= 0 || offer.investmentStake > cards.gold))
+                return "Investment stake must be between 1g and your current Gold";
             if (offer.kind == ShopOfferKind.Guidance && !CanRevealEligibleHiddenNode())
                 return "No eligible hidden node to reveal";
         }
         else return "Offer unavailable";
 
-        return cards.CanAfford(offer.price)
+        int requiredGold = offer.kind == ShopOfferKind.Investment ? offer.investmentStake : offer.price;
+        return cards.CanAfford(requiredGold)
             ? string.Empty
-            : $"Need {offer.price}g (have {cards.gold}g)";
+            : $"Need {requiredGold}g (have {cards.gold}g)";
     }
 
     public string GetEnhancementTargetUnavailableReason(int cardId)
@@ -846,6 +878,16 @@ public class RunManager : Singleton<RunManager>
         var card = CardManager.Instance != null ? CardManager.Instance.FindOwnedCard(cardId) : null;
         if (card == null) return "Target card unavailable";
         return card.Enhancement != null ? "Target already enhanced" : string.Empty;
+    }
+
+    // Shop, Upgrade, and direct Event acquisitions deliberately target the current hand only.
+    public string GetEnhancementAcquisitionTargetUnavailableReason(int cardId, CardEnhancementData enhancement = null)
+    {
+        var cards = CardManager.Instance;
+        var card = cards != null ? cards.FindOwnedCard(cardId) : null;
+        if (card == null || !cards.hand.Contains(card)) return "Target must be a card in your hand";
+        return enhancement != null && ReferenceEquals(card.Enhancement, enhancement)
+            ? "Card already has this Enhancement" : string.Empty;
     }
 
     // Artifact purchases need no target. Enhancement purchases require an explicit card ID.
@@ -871,10 +913,10 @@ public class RunManager : Singleton<RunManager>
         }
         else if (offer.kind == ShopOfferKind.Investment)
         {
-            success = cards.SpendGold(offer.price);
+            success = cards.SpendGold(offer.investmentStake);
             if (success)
             {
-                _pendingInvestments = IncrementToMaximum(_pendingInvestments);
+                _pendingInvestmentStakes.Add(offer.investmentStake);
                 _usedSpecialShopOffers.Add(offer.kind);
             }
         }
@@ -899,17 +941,17 @@ public class RunManager : Singleton<RunManager>
         return true;
     }
 
-    public bool PurchaseShopEnhancement(string stableId, int cardId)
+    public bool PurchaseShopEnhancement(string stableId, int cardId, bool replaceExisting = false)
     {
-        if (GameplayInputGate.IsBlocked || !CanPurchaseShopOffer(stableId) ||
-            !string.IsNullOrEmpty(GetEnhancementTargetUnavailableReason(cardId))) return false;
+        if (GameplayInputGate.IsBlocked || !CanPurchaseShopOffer(stableId)) return false;
         var offer = _activeShopOffers.First(candidate => candidate.StableId == stableId);
-        if (offer.kind != ShopOfferKind.Enhancement) return false;
+        if (offer.kind != ShopOfferKind.Enhancement ||
+            !string.IsNullOrEmpty(GetEnhancementAcquisitionTargetUnavailableReason(cardId, offer.enhancement))) return false;
         var cards = CardManager.Instance;
         bool cashbackOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.CashbackToken);
         bool giftOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.MerchantsGift);
         int goldBefore = cards.gold;
-        if (!cards.BuyEnhancement(cardId, offer.enhancement, offer.price)) return false;
+        if (!cards.BuyEnhancement(cardId, offer.enhancement, offer.price, replaceExisting)) return false;
         CompletePaidItemPurchase(goldBefore - cards.gold, cashbackOwned, giftOwned);
         if (offer.price > 0)
             _madeSuccessfulPurchaseInCurrentShop = true;
@@ -973,17 +1015,15 @@ public class RunManager : Singleton<RunManager>
     // No implicit target may commit an Upgrade reward.
     public bool ChooseUpgradeOffer(int offerIndex) => false;
 
-    public bool ChooseUpgradeOffer(int offerIndex, int cardId)
+    public bool ChooseUpgradeOffer(int offerIndex, int cardId, bool replaceExisting = false)
     {
-        if (GameplayInputGate.IsBlocked) return false;
-        if (_activeNode == null || _activeNode.completed || _activeNode.kind != MapNodeType.Upgrade ||
-            offerIndex < 0 || offerIndex >= _activeUpgradeOffers.Count ||
-            !string.IsNullOrEmpty(GetEnhancementTargetUnavailableReason(cardId)))
+        if (GameplayInputGate.IsBlocked || _activeNode == null || _activeNode.completed ||
+            _activeNode.kind != MapNodeType.Upgrade || offerIndex < 0 || offerIndex >= _activeUpgradeOffers.Count)
             return false;
-
         var offer = _activeUpgradeOffers[offerIndex];
-        if (offer.kind != ShopOfferKind.Enhancement || offer.enhancement == null ||
-            !CardManager.Instance.ApplyEnhancement(cardId, offer.enhancement))
+        if (offer == null || !string.IsNullOrEmpty(GetEnhancementAcquisitionTargetUnavailableReason(cardId, offer.enhancement)) ||
+            offer.kind != ShopOfferKind.Enhancement || offer.enhancement == null ||
+            !CardManager.Instance.ApplyEnhancement(cardId, offer.enhancement, replaceExisting))
             return false;
 
         OnHideUpgrade?.Invoke();
@@ -993,18 +1033,37 @@ public class RunManager : Singleton<RunManager>
         return true;
     }
 
+    public bool SetInvestmentStake(string stableId, int stake)
+    {
+        var offer = _activeShopOffers.FirstOrDefault(candidate => candidate != null && candidate.StableId == stableId);
+        var cards = CardManager.Instance;
+        if (offer == null || offer.kind != ShopOfferKind.Investment || cards == null || stake <= 0 || stake > cards.gold)
+            return false;
+        offer.investmentStake = stake;
+        return true;
+    }
+
     void ResolvePendingInvestments(PathNode shopNode)
     {
-        if (_pendingInvestments <= 0 || shopNode == null || CardManager.Instance == null) return;
+        if (_pendingInvestmentStakes.Count == 0 || shopNode == null || CardManager.Instance == null) return;
         if (_randomContext == null) _randomContext = new RunRandomContext(runSeed);
         int context = unchecked(shopNode.mapIndex * 7919 ^ shopNode.id);
-        var random = _randomContext.CreateStream("shop-investment", context);
-        int successfulReturns = 0;
-        for (int i = 0; i < _pendingInvestments; i++)
-            if (random.NextInt(0, 2) == 0) successfulReturns++;
-        _pendingInvestments = 0;
-        if (successfulReturns > 0)
-            CardManager.Instance.AddGold((int)Math.Min(int.MaxValue, (long)successfulReturns * 15L));
+        var random = _randomContext.CreateStream("shop-investment-payout", context);
+        long payout = 0;
+        long totalStake = 0;
+        int wins = 0;
+        foreach (int stake in _pendingInvestmentStakes)
+        {
+            totalStake += stake;
+            if (random.NextInt(0, 2) != 0) continue;
+            wins++;
+            payout = Math.Min(int.MaxValue, payout + (long)stake * 3L);
+        }
+        int losses = _pendingInvestmentStakes.Count - wins;
+        _pendingInvestmentStakes.Clear();
+        if (payout > 0) CardManager.Instance.AddGold((int)payout);
+        OnInvestmentResult?.Invoke(
+            $"Investment results: {wins} success(es), {losses} loss(es); payout {payout}g, stakes at risk {totalStake}g.");
     }
 
     void PrepareShopOffers(int maximumOffers = 4)
@@ -1027,7 +1086,7 @@ public class RunManager : Singleton<RunManager>
 
         int context = unchecked(_activeNode.mapIndex * 397 ^ _activeNode.id);
         var artifacts = cards.relicCatalog
-            .Where(artifact => artifact != null && !cards.HasArtifact(artifact) &&
+            .Where(artifact => artifact != null &&
                 string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(artifact)))
             .OrderBy(artifact => artifact.id, StringComparer.Ordinal)
             .ToList();
@@ -1073,7 +1132,7 @@ public class RunManager : Singleton<RunManager>
             });
         }
         AddConsumableOffers(cards, context);
-        AddSpecialShopOffers();
+        AddSpecialShopOffers(context);
     }
 
     void AddConsumableOffers(CardManager cards, int context)
@@ -1094,10 +1153,14 @@ public class RunManager : Singleton<RunManager>
         });
     }
 
-    void AddSpecialShopOffers()
+    void AddSpecialShopOffers(int context)
     {
-        _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Investment, basePrice = 5, price = 5 });
-        _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Guidance, basePrice = 5, price = 5 });
+        var investmentAvailability = _randomContext.CreateStream("shop-investment-availability", context);
+        var guidanceAvailability = _randomContext.CreateStream("shop-guidance-availability", context);
+        if (investmentAvailability.NextInt(0, 2) == 0)
+            _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Investment, basePrice = 5, price = 5 });
+        if (guidanceAvailability.NextInt(0, 2) == 0)
+            _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Guidance, basePrice = 5, price = 5 });
         if (_activeContract == null)
             _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Contract, basePrice = 20, price = 20 });
     }
@@ -1106,7 +1169,7 @@ public class RunManager : Singleton<RunManager>
     void PrepareAllDevShopOffers(CardManager cards)
     {
         foreach (var artifact in cards.relicCatalog
-            .Where(value => value != null && !cards.HasArtifact(value) &&
+            .Where(value => value != null &&
                 string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(value)))
             .OrderBy(value => value.id, StringComparer.Ordinal))
         {
@@ -1548,20 +1611,22 @@ public class RunManager : Singleton<RunManager>
         if (IsHammerEvent())
             return choice.interaction is RunEventChoiceInteraction.HammerRetry or RunEventChoiceInteraction.HammerDecline
                 ? string.Empty : choice.interaction == RunEventChoiceInteraction.ChooseEnhancementTarget
-                    ? _pendingHammerEnhancements.Count == 3 && CardManager.Instance != null &&
-                        CardManager.Instance.ownedCards.Any(card => card != null && card.Enhancement == null)
-                        ? string.Empty : "No eligible card to enhance"
+                    ? _pendingHammerEnhancements.Count == 3 && CardManager.Instance != null && CardManager.Instance.hand.Count > 0
+                        ? string.Empty : "No cards in hand to target"
                     : "Choice unavailable";
-        if (choice.interaction == RunEventChoiceInteraction.ChooseEnhancementTarget ||
-            choice.interaction == RunEventChoiceInteraction.DiscardTwoForRandomEnhancement)
+        if (choice.interaction == RunEventChoiceInteraction.ChooseEnhancementTarget)
+        {
+            var cards = CardManager.Instance;
+            if (cards == null || cards.hand.Count == 0) return "No cards in hand to target";
+            return GetEventEnhancements().Any() ? string.Empty : "No enhancements available";
+        }
+        if (choice.interaction == RunEventChoiceInteraction.DiscardTwoForRandomEnhancement)
         {
             var cards = CardManager.Instance;
             if (cards == null || !cards.ownedCards.Any(card => card != null && card.Enhancement == null))
                 return "No eligible cards to enhance";
             if (!GetEventEnhancements().Any()) return "No enhancements available";
-            if (choice.interaction == RunEventChoiceInteraction.DiscardTwoForRandomEnhancement &&
-                cards.hand.Count < 2)
-                return "Need at least 2 cards in hand";
+            if (cards.hand.Count < 2) return "Need at least 2 cards in hand";
             return string.Empty;
         }
 
@@ -1585,16 +1650,18 @@ public class RunManager : Singleton<RunManager>
                 ? GetEventEnhancements()
                 : Array.Empty<CardEnhancementData>();
 
-    public bool ChooseEventEnhancementTarget(int choiceIndex, int cardId, CardEnhancementData enhancement)
+    public bool ChooseEventEnhancementTarget(int choiceIndex, int cardId, CardEnhancementData enhancement,
+        bool replaceExisting = false)
     {
         IReadOnlyList<CardEnhancementData> allowedEnhancements = IsHammerEvent()
             ? _pendingHammerEnhancements : GetEventEnhancements();
-        if (GameplayInputGate.IsBlocked && !IsHammerEvent() ||
+        if (GameplayInputGate.IsBlocked &&
+                !(IsHammerEvent() && GameplayInputGate.Reasons == GameplayInputBlockReason.ArtifactChoice) ||
             !IsActiveEventChoice(choiceIndex, RunEventChoiceInteraction.ChooseEnhancementTarget) || enhancement == null ||
             !allowedEnhancements.Contains(enhancement) ||
-            !string.IsNullOrEmpty(GetEnhancementTargetUnavailableReason(cardId))) return false;
+            !string.IsNullOrEmpty(GetEnhancementAcquisitionTargetUnavailableReason(cardId, enhancement))) return false;
 
-        if (!CardManager.Instance.ApplyEnhancement(cardId, enhancement)) return false;
+        if (!CardManager.Instance.ApplyEnhancement(cardId, enhancement, replaceExisting)) return false;
         if (IsHammerEvent()) CompleteHammerReward();
         else CompleteEventChoice();
         return true;
@@ -1740,10 +1807,11 @@ public class RunManager : Singleton<RunManager>
     void TryOpenHammerReward()
     {
         var cards = CardManager.Instance;
-        var hammer = cards?.ownedArtifacts.FirstOrDefault(value => value != null &&
-            value.specialRule == ArtifactSpecialRule.Hammer);
+        int hammerIndex = cards != null ? cards.ownedArtifacts.FindIndex(value => value != null &&
+            value.specialRule == ArtifactSpecialRule.Hammer) : -1;
+        var hammer = hammerIndex >= 0 ? cards.ownedArtifacts[hammerIndex] : null;
         if (cards == null || hammer == null) return;
-        var instance = cards.GetArtifactInstance(hammer);
+        var instance = cards.GetArtifactInstanceAt(hammerIndex);
         if (!_pendingHammerReward)
         {
             int last = instance.State.GetCounter(-140);
@@ -1767,7 +1835,7 @@ public class RunManager : Singleton<RunManager>
         }
         else if (!_hammerRetryPending) return;
 
-        bool hasTarget = cards.ownedCards.Any(card => card != null && card.Enhancement == null);
+        bool hasTarget = cards.hand.Count > 0;
         if (_hammerRetryPending && !hasTarget) return;
         _hammerRetryPending = false;
         _pendingHammerEvent = ScriptableObject.CreateInstance<RunEventDefinition>();
@@ -1775,12 +1843,12 @@ public class RunManager : Singleton<RunManager>
         _pendingHammerEvent.title = "HAMMER";
         _pendingHammerEvent.category = MapNodeType.Upgrade;
         _pendingHammerEvent.description = hasTarget
-            ? "Choose one of three cached Common Enhancements, then choose an eligible card."
-            : "No eligible card is available. Retry after another node, or decline this reward.";
+            ? "Choose one of three cached Common Enhancements, then target a card in your hand."
+            : "No card is in hand to target. Retry after another node, or decline this reward.";
         _pendingHammerEvent.choices = hasTarget
             ? new[]
             {
-                new RunEventChoice { label = "Choose Enhancement", description = "Select one of the three cached Common Enhancements, then a card.", interaction = RunEventChoiceInteraction.ChooseEnhancementTarget }
+                new RunEventChoice { label = "Choose Enhancement", description = "Select one of the three cached Common Enhancements, then click a card in your hand.", interaction = RunEventChoiceInteraction.ChooseEnhancementTarget }
             }
             : new[]
             {
@@ -1898,10 +1966,11 @@ public class RunManager : Singleton<RunManager>
             (CombatManager.Instance?.EliteKillCount ?? 0) > 0;
         if (wasElite)
         {
-            foreach (var artifact in cards.ownedArtifacts)
+            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
             {
+                var artifact = cards.ownedArtifacts[artifactIndex];
                 if (artifact == null) continue;
-                var state = cards.GetArtifactInstance(artifact).State;
+                var state = cards.GetArtifactInstanceAt(artifactIndex).State;
                 if (artifact.specialRule == ArtifactSpecialRule.HuntersLedger)
                     state.SetCounter(-119, state.GetCounter(-119) + 1);
                 if (artifact.specialRule == ArtifactSpecialRule.TrophyRack)
@@ -1910,8 +1979,9 @@ public class RunManager : Singleton<RunManager>
         }
         if (wasBoss)
         {
-            foreach (var artifact in cards.ownedArtifacts)
+            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
             {
+                var artifact = cards.ownedArtifacts[artifactIndex];
                 if (artifact == null || artifact.specialRule != ArtifactSpecialRule.CrownOfEndurance) continue;
                 int growth = 3 + ((CombatManager.Instance?.EncounterActualHpLost ?? 0) == 0 ? 3 : 0);
                 CombatManager.Instance?.IncreasePlayerMaxHealth(growth, healIncrease: false);
@@ -1963,10 +2033,11 @@ public class RunManager : Singleton<RunManager>
         _visitedNodeTypesCurrentMap.Add(node.kind);
         bool isCombatWin = node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss;
         var combat = CombatManager.Instance;
-        foreach (var artifact in cards.ownedArtifacts)
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
+            var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null) continue;
-            var state = cards.GetArtifactInstance(artifact).State;
+            var state = cards.GetArtifactInstanceAt(artifactIndex).State;
             if (artifact.specialRule == ArtifactSpecialRule.WanderersBoots &&
                 _visitedNodeTypesCurrentMap.Count >= 3 && state.GetCounter(-133) != node.mapIndex + 1)
             {
@@ -2122,7 +2193,7 @@ public class RunManager : Singleton<RunManager>
         bossDeck.Clear();
         bossIndex = 0;
         _completedNodeCount = 0;
-        _pendingInvestments = 0;
+        _pendingInvestmentStakes.Clear();
         _paidItemPurchaseCount = 0;
         _combatWinCount = 0;
         _merchantGiftRewardCount = 0;

@@ -12,10 +12,25 @@ public class DeckViewerUI : MonoBehaviour
     public Button toggleButton;
     public Button closeButton;
 
+    [Header("Runtime card presentation")]
+    public CardView cardPrefab;
+    [Min(1)] public int cardsPerRow = 5;
+    [Min(0f)] public float horizontalSpacing = 12f;
+    [Min(0f)] public float verticalSpacing = 16f;
+    [Range(0.1f, 1f)] public float cardScale = 0.62f;
+
+    readonly List<GameObject> _cardSnapshots = new();
+    RectTransform _content;
+    VerticalLayoutGroup _verticalLayout;
+    ContentSizeFitter _contentFitter;
+    ScrollRect _scrollRect;
+    float _lastLayoutWidth = -1f;
+
     bool _isOpen;
 
     void OnEnable()
     {
+        ResolveVisualReferences();
         if (toggleButton) toggleButton.onClick.AddListener(Toggle);
         if (closeButton) closeButton.onClick.AddListener(Close);
         if (CardManager.Instance != null)
@@ -39,8 +54,9 @@ public class DeckViewerUI : MonoBehaviour
     {
         if (toggleButton) toggleButton.onClick.RemoveListener(Toggle);
         if (closeButton) closeButton.onClick.RemoveListener(Close);
-        if (CardManager.Instance != null)
-            CardManager.Instance.OnDeckChanged -= Refresh;
+        if (CardManager.TryGetInstance(out var cards))
+            cards.OnDeckChanged -= Refresh;
+        ClearSnapshots();
         if (RunManager.Instance != null)
         {
             RunManager.Instance.OnRunStarted -= CloseForRunStart;
@@ -55,6 +71,13 @@ public class DeckViewerUI : MonoBehaviour
             CombatManager.Instance.OnEncounterResult -= CloseForEncounterResult;
     }
 
+    void OnRectTransformDimensionsChange()
+    {
+        if (!_isOpen || _content == null || Mathf.Abs(_content.rect.width - _lastLayoutWidth) < 0.5f) return;
+        var cards = CardManager.Instance;
+        if (cards != null) RebuildSnapshots(cards.deck);
+    }
+
     void Toggle()
     {
         _isOpen = !_isOpen;
@@ -62,7 +85,7 @@ public class DeckViewerUI : MonoBehaviour
         if (_isOpen)
         {
             Refresh();
-            panel.transform.SetAsLastSibling();
+            if (panel) panel.transform.SetAsLastSibling();
         }
     }
 
@@ -70,86 +93,121 @@ public class DeckViewerUI : MonoBehaviour
     {
         _isOpen = false;
         if (panel) panel.SetActive(false);
+        ClearSnapshots();
     }
 
     void Refresh()
     {
         var cards = CardManager.Instance;
         if (cards == null) return;
-
-        if (deckText) deckText.text = FormatPile(cards.deck, "REMAINING DRAW DECK");
+        ResolveVisualReferences();
+        if (deckText)
+        {
+            deckText.text = cards.deck.Count == 0
+                ? $"REMAINING DRAW DECK  •  0\nNo cards remaining in the draw deck"
+                : $"REMAINING DRAW DECK  •  {cards.deck.Count}";
+            deckText.gameObject.SetActive(true);
+            PositionCountHeader();
+        }
         if (discardText) discardText.gameObject.SetActive(false);
+        if (_isOpen) RebuildSnapshots(cards.deck);
+    }
+
+    void ResolveVisualReferences()
+    {
+        if (deckText != null && _content == null)
+        {
+            _content = deckText.transform.parent as RectTransform;
+            if (_content != null)
+            {
+                _verticalLayout = _content.GetComponent<VerticalLayoutGroup>();
+                _contentFitter = _content.GetComponent<ContentSizeFitter>();
+                _scrollRect = _content.parent != null ? _content.parent.GetComponent<ScrollRect>() : null;
+            }
+        }
+        if (cardPrefab == null && CardManager.Instance != null)
+            cardPrefab = CardManager.Instance.cardPrefab;
+    }
+
+    void PositionCountHeader()
+    {
+        if (deckText == null || _content == null) return;
+        var header = deckText.rectTransform;
+        header.anchorMin = new Vector2(0f, 1f);
+        header.anchorMax = new Vector2(1f, 1f);
+        header.pivot = new Vector2(0.5f, 1f);
+        header.anchoredPosition = Vector2.zero;
+        header.sizeDelta = new Vector2(0f, 34f);
+        deckText.alignment = TextAlignmentOptions.Center;
+    }
+
+    void RebuildSnapshots(IReadOnlyList<CardInstance> cards)
+    {
+        ClearSnapshots();
+        if (_content == null || cardPrefab == null) return;
+        if (_verticalLayout) _verticalLayout.enabled = false;
+        if (_contentFitter) _contentFitter.enabled = false;
+
+        float width = _content.rect.width;
+        if (width <= 0f && _scrollRect != null) width = _scrollRect.viewport.rect.width;
+        _lastLayoutWidth = width;
+        float effectiveScale = width > 0f ? Mathf.Min(cardScale, width / 136f) : cardScale;
+        float cardWidth = 136f * effectiveScale;
+        float cardHeight = 194f * effectiveScale;
+        int columns = Mathf.Clamp(Mathf.FloorToInt((width + horizontalSpacing) / (cardWidth + horizontalSpacing)), 1, Mathf.Max(1, cardsPerRow));
+        float rowHeight = cardHeight + verticalSpacing;
+        int rows = (cards.Count + columns - 1) / columns;
+        float groupWidth = columns * cardWidth + (columns - 1) * horizontalSpacing;
+        float startX = -groupWidth * 0.5f + cardWidth * 0.5f;
+        _content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.Max(_scrollRect != null ? _scrollRect.viewport.rect.height : 0, rows * rowHeight + 42f));
+
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var snapshot = Instantiate(cardPrefab, _content, false);
+            snapshot.name = $"DeckCardSnapshot_{i}";
+            snapshot.enabled = false;
+            snapshot.homeField = null;
+            snapshot.data = cards[i];
+            snapshot.RefreshContent();
+            var rect = (RectTransform)snapshot.transform;
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.sizeDelta = new Vector2(136f, 194f);
+            rect.localScale = Vector3.one * effectiveScale;
+            int row = i / columns;
+            int column = i % columns;
+            float centeredColumn = column - (Mathf.Min(columns, cards.Count - row * columns) - 1) * 0.5f;
+            rect.anchoredPosition = new Vector2(startX + column * (cardWidth + horizontalSpacing), -42f - row * rowHeight);
+            rect.localRotation = Quaternion.Euler(0f, 0f, centeredColumn * -2f);
+            foreach (var canvas in snapshot.GetComponentsInChildren<Canvas>(true))
+                canvas.enabled = false;
+            foreach (var graphic in snapshot.GetComponentsInChildren<Graphic>(true))
+                graphic.raycastTarget = false;
+            var raycaster = snapshot.GetComponentInChildren<GraphicRaycaster>(true);
+            if (raycaster) raycaster.enabled = false;
+            var canvasGroup = snapshot.canvasGroup;
+            if (canvasGroup) { canvasGroup.interactable = false; canvasGroup.blocksRaycasts = false; }
+            _cardSnapshots.Add(snapshot.gameObject);
+        }
+        if (_scrollRect) _scrollRect.verticalNormalizedPosition = 1f;
+    }
+
+    void ClearSnapshots()
+    {
+        for (int i = 0; i < _cardSnapshots.Count; i++)
+        {
+            var snapshot = _cardSnapshots[i];
+            if (!snapshot) continue;
+            snapshot.SetActive(false);
+            if (Application.isPlaying) Destroy(snapshot);
+            else DestroyImmediate(snapshot);
+        }
+        _cardSnapshots.Clear();
     }
 
     void CloseForRunStart(string _) => Close();
     void CloseForEvent(RunEventDefinition _) => Close();
     void CloseForEncounterResult(EncounterResult _) => Close();
 
-    static string FormatBuild(CardManager cards)
-    {
-        var lines = new List<string> { $"<b>ARTIFACTS  •  {cards.ownedArtifacts.Count}</b>" };
-        if (cards.ownedArtifacts.Count == 0)
-        {
-            lines.Add("None");
-        }
-        else
-        {
-            int shown = Mathf.Min(6, cards.ownedArtifacts.Count);
-            for (int i = 0; i < shown; i++)
-            {
-                var artifact = cards.ownedArtifacts[i];
-                if (artifact != null) lines.Add($"{artifact.icon} {artifact.displayName}");
-            }
-            if (cards.ownedArtifacts.Count > shown)
-                lines.Add($"+{cards.ownedArtifacts.Count - shown} more");
-        }
-
-        var enhancedCards = new List<CardInstance>();
-        foreach (var card in cards.ownedCards)
-            if (card.Enhancement != null)
-                enhancedCards.Add(card);
-
-        lines.Add(string.Empty);
-        lines.Add($"<b>ENHANCED CARDS  •  {enhancedCards.Count}</b>");
-        if (enhancedCards.Count == 0)
-        {
-            lines.Add("None");
-        }
-        else
-        {
-            int shown = Mathf.Min(6, enhancedCards.Count);
-            for (int i = 0; i < shown; i++)
-                lines.Add(enhancedCards[i].DisplayName);
-            if (enhancedCards.Count > shown)
-                lines.Add($"+{enhancedCards.Count - shown} more");
-        }
-
-        return string.Join("\n", lines);
-    }
-
-    static string FormatPile(IReadOnlyList<CardInstance> pile, string label)
-    {
-        var lines = new List<string> { $"<b>{label}  •  {pile.Count}</b>" };
-        if (pile.Count == 0)
-        {
-            lines.Add("No cards remaining in the draw deck");
-        }
-        else
-        {
-            // Four compact columns keep a full draw deck scannable without changing its order.
-            for (int i = 0; i < pile.Count; i += 4)
-            {
-                var row = new List<string>(4);
-                for (int j = i; j < Mathf.Min(i + 4, pile.Count); j++)
-                {
-                    var card = pile[j];
-                    row.Add(card.Enhancement == null
-                        ? card.DisplayName
-                        : $"{card.DisplayName} ({card.Enhancement.displayName})");
-                }
-                lines.Add(string.Join("     ", row));
-            }
-        }
-        return string.Join("\n", lines);
-    }
 }

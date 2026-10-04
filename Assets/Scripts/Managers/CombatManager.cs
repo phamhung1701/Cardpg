@@ -31,6 +31,16 @@ public class CombatManager : Singleton<CombatManager>
     bool _isBonusPlayerAction;
     public int PendingAttackCount => _pendingAttacks.Count;
     public int BlockedAttackCount => _attackCountAtStart - _pendingAttacks.Count;
+
+    public int GetPendingAttackDamage(EnemyRuntime enemy)
+    {
+        if (enemy == null) return 0;
+        long total = 0;
+        for (int i = 0; i < _pendingAttacks.Count; i++)
+            if (ReferenceEquals(_pendingAttackSources[i], enemy))
+                total = Math.Min(int.MaxValue, total + _pendingAttacks[i]);
+        return (int)total;
+    }
     readonly HashSet<EnemyRuntime> _processedEnemyDeaths = new();
     readonly CombatResolver _resolver = new();
     readonly CombatReactionQueue _reactions = new();
@@ -184,10 +194,13 @@ public class CombatManager : Singleton<CombatManager>
         if (cards != null && cards.HasArtifactSpecialRule(ArtifactSpecialRule.PreparationManual))
             player.GainEncounterBlock(cards.DistinctConsumableTypeCount * 2);
         if (cards != null)
-            foreach (var artifact in cards.ownedArtifacts)
+            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+            {
+                var artifact = cards.ownedArtifacts[artifactIndex];
                 if (artifact != null && artifact.specialRule == ArtifactSpecialRule.WarpathBanner)
                     player.GainEncounterBlock(Math.Min(6,
-                        cards.GetArtifactInstance(artifact).State.GetCounter(-1340) * 2));
+                        cards.GetArtifactInstanceAt(artifactIndex).State.GetCounter(-1340) * 2));
+            }
         if (_isEliteOrBossEncounter && cards?.ownedArtifacts.Any(a => a != null &&
             a.specialRule == ArtifactSpecialRule.ChallengerCrest) == true)
             player.GainShield(1);
@@ -250,15 +263,18 @@ public class CombatManager : Singleton<CombatManager>
     public bool CanAutoPlayOverflow => _overflowRootActive && currentState == GameState.PlayerTurn &&
         !player.IsDefeated && !_encounterResolved && !_reactionFaulted;
 
-    public bool CanUseConsumableDamage(int amount) =>
-        !GameplayInputGate.IsBlocked && amount > 0 && !_reactionFaulted && !_isResolvingAction &&
-        currentState == GameState.PlayerTurn && !_encounterResolved && currentEnemy != null &&
-        !currentEnemy.IsDefeated && _enemies.Contains(currentEnemy);
+    public bool CanUseConsumableDamage(int amount) => CanUseConsumableDamage(amount, currentEnemy);
 
-    public bool TryUseConsumableDamage(int amount)
+    public bool CanUseConsumableDamage(int amount, EnemyRuntime target) =>
+        !GameplayInputGate.IsBlocked && amount > 0 && !_reactionFaulted && !_isResolvingAction &&
+        currentState is (GameState.PlayerTurn or GameState.EnemyAttacking) && !_encounterResolved &&
+        target != null && !target.IsDefeated && _enemies.Contains(target);
+
+    public bool TryUseConsumableDamage(int amount) => TryUseConsumableDamage(amount, currentEnemy);
+
+    public bool TryUseConsumableDamage(int amount, EnemyRuntime target)
     {
-        if (!CanUseConsumableDamage(amount)) return false;
-        var target = currentEnemy;
+        if (!CanUseConsumableDamage(amount, target)) return false;
         _isResolvingAction = true;
         _reactions.Clear();
         _activeAction = CreateAction(CombatActionOrigin.Consumable, sourcePlayer: player,
@@ -279,7 +295,7 @@ public class CombatManager : Singleton<CombatManager>
             Log($"Consumable dealt {result.ActualHpLost} damage to {target.DisplayName}.");
             if (player.IsDefeated)
                 ResolveEncounter(EncounterResult.Defeat);
-            else if (_enemies.Count == 0)
+            else if (_enemies.Count == 0 && currentState == GameState.PlayerTurn)
                 ResolveEncounter(EncounterResult.Victory);
             return true;
         }
@@ -431,6 +447,10 @@ public class CombatManager : Singleton<CombatManager>
     public bool TryPlayCards(IReadOnlyList<CardView> cards, EnemyRuntime target, int hitCount)
     {
         if (hitCount <= 0 || !CanPlayCards(cards, target)) return false;
+        var cardInstances = new CardInstance[cards.Count];
+        for (int i = 0; i < cards.Count; i++) cardInstances[i] = cards[i].data;
+        // Derive the enhancement's extra hit from the committed gameplay data, not from UI input.
+        if (GameplayEffectResolver.HasDoubleStrikeEffect(cardInstances)) hitCount = 2;
         _openingPlayerAttackInProgress = _playerAttackActionCount == 0;
         _activeKingslayerBonus = 0;
         _activeDwarfBonus = 0;
@@ -439,12 +459,10 @@ public class CombatManager : Singleton<CombatManager>
         _activeHeartBonus = 0;
         _activeDwarfSourceCard = null;
 
-        var cardInstances = new CardInstance[cards.Count];
         long rawCardDamageTotal = 0;
         var names = new List<string>(cards.Count);
         for (int i = 0; i < cards.Count; i++)
         {
-            cardInstances[i] = cards[i].data;
             rawCardDamageTotal += CalculateCardAttackDamage(cardInstances[i], cardInstances, i == 0);
             names.Add(cardInstances[i].DisplayName);
         }
@@ -547,7 +565,7 @@ public class CombatManager : Singleton<CombatManager>
                     if (requestedDamage <= 0) continue;
 
                     var request = new DamageRequest(_activeAction, cardIndex, CombatDamageOrigin.Card,
-                        player, target, requestedDamage, hitCard: cardInstances[cardIndex]);
+                        player, target, requestedDamage, hitCard: cardInstances[cardIndex], isCritical: critical);
                     var result = ResolveDamage(request);
                     totalHpLost += result.ActualHpLost;
                     resolvedHits++;
@@ -602,7 +620,8 @@ public class CombatManager : Singleton<CombatManager>
                         player,
                         target,
                         requestedDamage,
-                        hitCard: cardInstances[Math.Min(hitIndex, cardInstances.Length - 1)]);
+                        hitCard: cardInstances[Math.Min(hitIndex, cardInstances.Length - 1)],
+                        isCritical: critical);
                     var result = ResolveDamage(request);
                     totalHpLost += result.ActualHpLost;
                     resolvedHits++;
@@ -628,7 +647,7 @@ public class CombatManager : Singleton<CombatManager>
                 TryReturnCriticalAce(cardInstances, cm);
 
             if (!reactionFailed && isExplosive && !isRoyalFamily)
-                ResolveExplosiveDamage(cardInstances, target, damagePerHit);
+                ResolveExplosiveDamage(cardInstances, target, damagePerHit, critical);
 
             if (hitCount == 1)
                 Log($"Played {string.Join(" + ", names)} on {target.DisplayName}{(critical ? " (CRITICAL)" : string.Empty)} for {totalHpLost} damage! (HP: {target.currentHp}/{target.maxHp})");
@@ -813,7 +832,7 @@ public class CombatManager : Singleton<CombatManager>
         try
         {
             var cardManager = CardManager.Instance;
-            if (cardManager == null || !cardManager.TryDiscardCards(cards)) return false;
+            if (cardManager == null || !cardManager.TryRecycleDefenseCards(cards)) return false;
 
             assignments.Sort((left, right) => left.AttackIndex.CompareTo(right.AttackIndex));
             int blockedDamage = 0;
@@ -1020,10 +1039,11 @@ public class CombatManager : Singleton<CombatManager>
     {
         if (committedCards == null || CardManager.Instance == null) return;
         var cards = CardManager.Instance;
-        foreach (var artifact in cards.ownedArtifacts)
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
+            var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null || artifact.specialRule != ArtifactSpecialRule.DwarfEpic) continue;
-            var instance = cards.GetArtifactInstance(artifact);
+            var instance = cards.GetArtifactInstanceAt(artifactIndex);
             var source = instance.PendingDwarfSourceCard;
             if (source == null || cards.FindOwnedCard(source.Id) != source ||
                 !committedCards.Any(card => card != null && card.Rank > source.Rank)) continue;
@@ -1042,7 +1062,7 @@ public class CombatManager : Singleton<CombatManager>
         }
     }
 
-    void ResolveExplosiveDamage(IReadOnlyList<CardInstance> committedCards, EnemyRuntime primaryTarget, int damage)
+    void ResolveExplosiveDamage(IReadOnlyList<CardInstance> committedCards, EnemyRuntime primaryTarget, int damage, bool critical)
     {
         if (damage <= 0) return;
         var targets = new List<EnemyRuntime>(_enemies);
@@ -1052,7 +1072,7 @@ public class CombatManager : Singleton<CombatManager>
             if (target == null || ReferenceEquals(target, primaryTarget) || target.IsDefeated || !_enemies.Contains(target))
                 continue;
             var request = new DamageRequest(_activeAction, _nextReactiveHitIndex++,
-                CombatDamageOrigin.Card, player, target, damage);
+                CombatDamageOrigin.Card, player, target, damage, isCritical: critical);
             var result = ResolveDamage(request);
             if (target.IsDefeated)
             {
@@ -1484,11 +1504,12 @@ public class CombatManager : Singleton<CombatManager>
     void TryReturnCriticalAce(IReadOnlyList<CardInstance> committedCards, CardManager cards)
     {
         if (committedCards == null || cards == null) return;
-        foreach (var artifact in cards.ownedArtifacts)
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
+            var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null || artifact.specialRule is not (ArtifactSpecialRule.AceRare or ArtifactSpecialRule.AceEpic))
                 continue;
-            var state = cards.GetArtifactInstance(artifact).State;
+            var state = cards.GetArtifactInstanceAt(artifactIndex).State;
             if (state.GetEncounterCounter(-114) != 0) continue;
             var ace = committedCards.FirstOrDefault(card => card != null && card.Rank == CardData.Rank.Ace);
             if (ace == null || !cards.TryReturnDiscardCardToHand(ace)) continue;
@@ -1502,10 +1523,11 @@ public class CombatManager : Singleton<CombatManager>
     {
         var cards = CardManager.Instance;
         if (cards == null || playedCards == null) return;
-        foreach (var artifact in cards.ownedArtifacts)
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
+            var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null) continue;
-            var instance = cards.GetArtifactInstance(artifact);
+            var instance = cards.GetArtifactInstanceAt(artifactIndex);
             if (instance == null) continue;
             var state = instance.State;
             if (_isBossEncounter && artifact.specialRule == ArtifactSpecialRule.KingslayersMark &&
@@ -1545,10 +1567,11 @@ public class CombatManager : Singleton<CombatManager>
     {
         var cards = CardManager.Instance;
         if (cards == null || playedCards == null) return;
-        foreach (var artifact in cards.ownedArtifacts)
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
+            var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null) continue;
-            var instance = cards.GetArtifactInstance(artifact);
+            var instance = cards.GetArtifactInstanceAt(artifactIndex);
             var state = instance.State;
             if (_activeDwarfSourceCard != null && instance.PreparedDwarfSourceCard == _activeDwarfSourceCard)
             {
@@ -1566,10 +1589,11 @@ public class CombatManager : Singleton<CombatManager>
         }
         if (autoPlay) return;
 
-        foreach (var artifact in cards.ownedArtifacts)
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
         {
+            var artifact = cards.ownedArtifacts[artifactIndex];
             if (artifact == null) continue;
-            var instance = cards.GetArtifactInstance(artifact);
+            var instance = cards.GetArtifactInstanceAt(artifactIndex);
             var state = instance.State;
             foreach (var card in playedCards)
             {
@@ -1623,8 +1647,11 @@ public class CombatManager : Singleton<CombatManager>
     {
         var cards = CardManager.Instance;
         if (cards == null) return;
-        foreach (var artifact in cards.ownedArtifacts)
-            if (artifact != null) cards.GetArtifactInstance(artifact).PendingDwarfSourceCard = null;
+        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        {
+            var artifact = cards.ownedArtifacts[artifactIndex];
+            if (artifact != null) cards.GetArtifactInstanceAt(artifactIndex).PendingDwarfSourceCard = null;
+        }
     }
 
     public int CalculateCardAttackDamage(CardInstance card, IReadOnlyList<CardInstance> playedCards = null,
@@ -1639,10 +1666,11 @@ public class CombatManager : Singleton<CombatManager>
             gilded += _activeKingslayerBonus + _activeDwarfBonus + _activeBalancerBonus + _activeSpadeBonus + _activeHeartBonus;
         if (includeOpeningAttackBonus && IsOpeningPlayerAttack && cards != null)
         {
-            foreach (var artifact in cards.ownedArtifacts)
+            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
             {
+                var artifact = cards.ownedArtifacts[artifactIndex];
                 if (artifact == null) continue;
-                var state = cards.GetArtifactInstance(artifact).State;
+                var state = cards.GetArtifactInstanceAt(artifactIndex).State;
                 if (artifact.specialRule == ArtifactSpecialRule.HuntersLedger)
                     gilded += state.GetCounter(-119);
                 else if (artifact.specialRule == ArtifactSpecialRule.TrophyRack && _isBossEncounter)

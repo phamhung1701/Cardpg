@@ -71,7 +71,7 @@ public sealed class LowerEffortEventTests
         Assert.That(_blacksmith.id, Is.EqualTo("evt_005"));
         Assert.That(_run.contentCatalog.events, Does.Contain(_blacksmith));
         OpenEvent(_blacksmith);
-        int cardId = _cards.ownedCards.First(card => card.Enhancement == null).Id;
+        int cardId = _cards.hand.First(card => card.Enhancement == null).Id;
         var enhancement = _run.GetEventEnhancementsForChoice(0).First();
         Assert.That(enhancement, Is.Not.Null);
 

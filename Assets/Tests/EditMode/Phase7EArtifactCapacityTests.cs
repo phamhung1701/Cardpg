@@ -113,7 +113,7 @@ public sealed class Phase7EArtifactCapacityTests
         Assert.That(offer.StableId, Is.EqualTo(id));
         Assert.That(offer.price, Is.EqualTo(price));
 
-        int cardId = _cards.ownedCards.First(card => card.Enhancement == null).Id;
+        int cardId = _cards.hand.First(card => card.Enhancement == null).Id;
         Assert.That(_run.GetShopOfferUnavailableReason(shopEnhancement.StableId), Is.Empty);
         Assert.That(_run.PurchaseShopEnhancement(shopEnhancement.StableId, cardId), Is.True);
         Assert.That(_cards.gold, Is.EqualTo(gold - shopEnhancement.price));

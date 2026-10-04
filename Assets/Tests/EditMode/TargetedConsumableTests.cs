@@ -10,7 +10,7 @@ public sealed class TargetedConsumableTests
     CardManager _cards;
     CombatManager _combat;
     RunManager _run;
-    ConsumableData _knife, _whetstone, _bomb;
+    ConsumableData _knife, _whetstone, _bomb, _heartRune;
     CardEnhancementData _sharpened;
     RunEventDefinition _blacksmith;
 
@@ -21,13 +21,14 @@ public sealed class TargetedConsumableTests
         _knife = AssetDatabase.LoadAssetAtPath<ConsumableData>("Assets/Data/Consumables/ThrowingKnife.asset");
         _whetstone = AssetDatabase.LoadAssetAtPath<ConsumableData>("Assets/Data/Consumables/Whetstone.asset");
         _bomb = AssetDatabase.LoadAssetAtPath<ConsumableData>("Assets/Data/Consumables/Bomb.asset");
+        _heartRune = AssetDatabase.LoadAssetAtPath<ConsumableData>("Assets/Data/Consumables/HeartRune.asset");
         _sharpened = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Sharpened.asset");
         _blacksmith = AssetDatabase.LoadAssetAtPath<RunEventDefinition>("Assets/Data/Run/Events/Blacksmith.asset");
-        Assert.That(new UnityEngine.Object[] { _knife, _whetstone, _bomb, _sharpened, _blacksmith }, Has.All.Not.Null);
+        Assert.That(new UnityEngine.Object[] { _knife, _whetstone, _bomb, _heartRune, _sharpened, _blacksmith }, Has.All.Not.Null);
 
         _cards = Make<CardManager>("Targeted Consumable Cards");
         _cards.Configure(null, null, null, System.Array.Empty<RelicData>(),
-            System.Array.Empty<CardEnhancementData>(), new[] { _knife, _whetstone, _bomb });
+            System.Array.Empty<CardEnhancementData>(), new[] { _knife, _whetstone, _bomb, _heartRune });
         _cards.ConfigureRandom(new DeterministicRandom(3207));
         _cards.BuildDeck();
         _combat = Make<CombatManager>("Targeted Consumable Combat");
@@ -42,6 +43,100 @@ public sealed class TargetedConsumableTests
         for (int i = _created.Count - 1; i >= 0; i--)
             if (_created[i] != null) Object.DestroyImmediate(_created[i]);
         _created.Clear();
+    }
+
+    [Test]
+    public void ConsumableDrag_BeginsOnlyAfterPointerDragAndSuppressesSlotClickOnce()
+    {
+        Assert.That(_cards.AddConsumable(_knife), Is.True);
+        var owner = Make<ActionButtonsUI>("Consumable Drag Owner");
+        var slotObject = new GameObject("Consumable Drag Slot");
+        _created.Add(slotObject);
+        var drag = slotObject.AddComponent<ConsumableSlotDragUI>();
+        drag.Configure(owner, 0);
+        var eventData = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+        {
+            button = UnityEngine.EventSystems.PointerEventData.InputButton.Left
+        };
+
+        drag.OnBeginDrag(eventData);
+
+        Assert.That(drag.ConsumeClickSuppression(), Is.True);
+        Assert.That(drag.ConsumeClickSuppression(), Is.False);
+    }
+
+    [Test]
+    public void SuitRune_ChangesUpToThreeDistinctHandCardsWithOneCharge()
+    {
+        Assert.That(_heartRune.uses, Is.EqualTo(1));
+        Assert.That(_cards.AddConsumable(_heartRune), Is.True);
+        _combat.StartEnemy(new EnemyRuntime(Enemy("Rune target encounter", 30, 0, 0)));
+        _cards.DealHand();
+        foreach (var card in _cards.hand)
+            if (card.Suit == CardData.Suit.Hearts) card.TryChangeSuit(CardData.Suit.Clubs);
+        var targets = _cards.hand.Take(4).ToArray();
+        Assert.That(targets, Has.Length.EqualTo(4));
+        var fourIds = targets.Select(card => card.Id).ToArray();
+        Assert.That(_cards.UseDeckMutationConsumableAtSlot(0, fourIds), Is.False);
+        Assert.That(targets.All(card => card.Suit != CardData.Suit.Hearts), Is.True);
+        Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(1));
+
+        Assert.That(_cards.UseDeckMutationConsumableAtSlot(0, fourIds.Take(3).ToArray()), Is.True);
+
+        Assert.That(targets.Take(3).All(card => card.Suit == CardData.Suit.Hearts), Is.True);
+        Assert.That(targets[3].Suit, Is.Not.EqualTo(CardData.Suit.Hearts));
+        Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
+    }
+
+    [Test]
+    public void SuitRune_RejectsWholeSelectionIfAnyTargetIsInvalidWithoutCharging()
+    {
+        Assert.That(_cards.AddConsumable(_heartRune), Is.True);
+        _combat.StartEnemy(new EnemyRuntime(Enemy("Rune validation encounter", 30, 0, 0)));
+        _cards.DealHand();
+        var valid = _cards.hand.First(card => card.Suit != CardData.Suit.Hearts);
+        var invalid = _cards.hand.First(card => card.Id != valid.Id);
+        Assert.That(invalid.TryChangeSuit(CardData.Suit.Hearts), Is.True);
+
+        Assert.That(_cards.UseDeckMutationConsumableAtSlot(0, new[] { valid.Id, invalid.Id }), Is.False);
+
+        Assert.That(valid.Suit, Is.Not.EqualTo(CardData.Suit.Hearts));
+        Assert.That(invalid.Suit, Is.EqualTo(CardData.Suit.Hearts));
+        Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ThrowingKnife_CanTargetSpecificEnemyDuringBlockingWithoutAdvancingDefense()
+    {
+        var first = Enemy("First Blocking Target", 30, 0, 0);
+        var selected = Enemy("Second Blocking Target", 30, 0, 0);
+        _combat.StartEncounter(new[] { new EnemyRuntime(first), new EnemyRuntime(selected) });
+        Assert.That(_cards.AddConsumable(_knife), Is.True);
+        _combat.currentState = GameState.EnemyAttacking;
+        _combat.pendingDamage = 7;
+        int attacksBefore = _combat.PendingAttackCount;
+
+        Assert.That(_cards.CanUseConsumableAtSlot(0, _combat), Is.True);
+        Assert.That(_cards.UseConsumableAtSlot(0, _combat, _combat.Enemies[1]), Is.True);
+
+        Assert.That(_combat.Enemies[0].currentHp, Is.EqualTo(30));
+        Assert.That(_combat.Enemies[1].currentHp, Is.EqualTo(25));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        Assert.That(_combat.pendingDamage, Is.EqualTo(7));
+        Assert.That(_combat.PendingAttackCount, Is.EqualTo(attacksBefore));
+    }
+
+    [Test]
+    public void ConsumableSlots_CanBeReorderedWithoutChangingTheirContents()
+    {
+        Assert.That(_cards.AddConsumable(_knife), Is.True);
+        Assert.That(_cards.AddConsumable(_bomb), Is.True);
+
+        Assert.That(_cards.MoveConsumableSlot(0, 1), Is.True);
+
+        Assert.That(_cards.GetConsumableAtSlot(0), Is.SameAs(_bomb));
+        Assert.That(_cards.GetConsumableAtSlot(1), Is.SameAs(_knife));
+        Assert.That(_cards.MoveConsumableSlot(1, 2), Is.False);
     }
 
     [Test]
@@ -63,7 +158,7 @@ public sealed class TargetedConsumableTests
     }
 
     [Test]
-    public void ThrowingKnife_IsUnavailableOutsideCombatOrOutsidePlayerTurn()
+    public void ThrowingKnife_IsUnavailableOutsideCombat()
     {
         Assert.That(_cards.AddConsumable(_knife), Is.True);
         Assert.That(_cards.CanUseConsumableAtSlot(0, _combat), Is.False);
@@ -87,6 +182,24 @@ public sealed class TargetedConsumableTests
 
         Assert.That(card.Enhancement, Is.SameAs(_sharpened));
         Assert.That(_combat.CalculateCardAttackDamage(card), Is.EqualTo(baseDamage + 3));
+        Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
+    }
+
+    [Test]
+    public void Whetstone_CanBeUsedDuringBlockingAndDoesNotResolveDefense()
+    {
+        Assert.That(_cards.AddConsumable(_whetstone), Is.True);
+        var enemy = Enemy("Blocking Whetstone Target", 30, 0, 0);
+        _combat.StartEncounter(new[] { new EnemyRuntime(enemy) });
+        _combat.currentState = GameState.EnemyAttacking;
+        _cards.DealHand();
+        var target = _cards.hand.First(value => value.Enhancement == null);
+
+        Assert.That(_cards.CanUseConsumableAtSlot(0, _combat), Is.True);
+        Assert.That(_cards.UseEnhancementConsumableAtSlot(0, target.Id), Is.True);
+
+        Assert.That(target.Enhancement, Is.SameAs(_sharpened));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
         Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
     }
 
