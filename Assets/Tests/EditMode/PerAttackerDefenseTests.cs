@@ -81,10 +81,31 @@ public sealed class PerAttackerDefenseTests
     }
 
     [Test]
-    public void BossDefense_RejectsInsufficientCardAndDoesNotConsumeIt()
+    public void BossWithoutAbility_AcePartiallyBlocksAndRemainsInDefense()
     {
         var bossType = EnemyTypeData.Create("Test Boss", 100, 8, 0);
         _created.Add(bossType);
+        var ace = FindViewInHand(card => card.Rank == CardData.Rank.Ace);
+        var boss = new EnemyRuntime(bossType);
+        _combat.StartEncounter(new[] { boss }, MapNodeType.Boss);
+        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, boss), Is.True);
+
+        Assert.That(_combat.CanDefendWithCards(new[] { ace }, boss), Is.True);
+        Assert.That(_combat.TryDefendWithCards(new[] { ace }, boss), Is.True);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(7));
+        Assert.That(_combat.GetPendingAttackDamage(boss), Is.EqualTo(7));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+    }
+
+    [Test]
+    public void UnyieldingDefense_RejectsPartialCardButAcceptsOneSufficientCard()
+    {
+        var bossType = EnemyTypeData.Create("Unyielding Boss", 100, 8, 0);
+        var ability = ScriptableObject.CreateInstance<EnemyAbility>();
+        ability.effect = EnemyAbilityEffect.FullCoverageBlock;
+        bossType.abilities = new[] { ability };
+        _created.Add(bossType);
+        _created.Add(ability);
         var ace = FindViewInHand(card => card.Rank == CardData.Rank.Ace);
         var boss = new EnemyRuntime(bossType);
         _combat.StartEncounter(new[] { boss }, MapNodeType.Boss);
@@ -95,6 +116,10 @@ public sealed class PerAttackerDefenseTests
         Assert.That(_combat.TryDefendWithCards(new[] { ace }, boss), Is.False);
         Assert.That(_cards.HandCount, Is.EqualTo(handCount));
         Assert.That(_combat.pendingDamage, Is.EqualTo(8));
+
+        var sufficient = FindViewInHand(card => _combat.CalculateCardDefense(card) >= 8);
+        Assert.That(_combat.TryDefendWithCards(new[] { sufficient }, boss), Is.True);
+        Assert.That(_combat.pendingDamage, Is.Zero);
     }
 
     [Test]
@@ -143,28 +168,18 @@ public sealed class PerAttackerDefenseTests
     }
 
     [Test]
-    public void InsufficientAndUnmatchedSets_AreRejectedAtomically_AndCannotBeSelected()
+    public void OrdinaryAttack_AllowsMultipleCardsToCombinePartialBlock()
     {
-        StartDefenseWindow(3, 3);
-        var cards = HandViews().OrderBy(card => _combat.CalculateCardDefense(card.data)).ToArray();
-        int tooSmallDefense = _combat.CalculateCardDefense(cards[0].data);
-        // Use attacks strictly above every hand card's defense in a separate window when needed.
-        if (tooSmallDefense >= 3)
-        {
-            _combat.Reset();
-            StartDefenseWindow(20, 20);
-            cards = HandViews().ToArray();
-        }
-        var insufficient = cards.First(card => _combat.CalculateCardDefense(card.data) < _combat.pendingDamage / 2);
-        int hand = _cards.HandCount;
-        int discarded = _cards.discardPile.Count;
-        int pending = _combat.pendingDamage;
-        Assert.That(_combat.CanDefendWithCards(new[] { insufficient }), Is.False);
-        _cards.ToggleCardSelection(insufficient);
-        Assert.That(_cards.SelectedCards, Is.Empty);
-        Assert.That(_combat.TryDefendWithCards(new[] { insufficient }), Is.False);
-        Assert.That(_combat.TryDefendWithCards(cards), Is.False, "More cards than attacks cannot be submitted.");
-        Assert.That((_cards.HandCount, _cards.discardPile.Count, _combat.pendingDamage), Is.EqualTo((hand, discarded, pending)));
+        StartDefenseWindow(20);
+        var cards = HandViews().OrderBy(card => _combat.CalculateCardDefense(card.data)).Take(2).ToArray();
+        int blocked = cards.Sum(card => _combat.CalculateCardDefense(card.data));
+        Assert.That(blocked, Is.LessThan(20));
+        int deckBefore = _cards.deck.Count;
+
+        Assert.That(_combat.TryDefendWithCards(cards), Is.True);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(20 - blocked));
+        Assert.That(_combat.PendingAttackCount, Is.EqualTo(1));
+        Assert.That(_cards.deck.Count, Is.EqualTo(deckBefore + 2));
     }
 
     [Test]

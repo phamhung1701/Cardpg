@@ -20,7 +20,8 @@ public enum EnemyAbilityEffect
     DoubleStrike,
     SuitCall,
     WarDrum,
-    MasterThief
+    MasterThief,
+    FullCoverageBlock
 }
 
 [CreateAssetMenu(fileName = "EnemyAbility", menuName = "Game/Enemy Ability")]

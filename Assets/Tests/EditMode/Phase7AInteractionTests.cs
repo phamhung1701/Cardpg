@@ -129,20 +129,23 @@ public sealed class Phase7AInteractionTests
     }
 
     [Test]
-    public void MultiCardDefense_RejectsUnmatchedBatchWithoutConsumingCards()
+    public void MultiCardDefense_CombinesPartialBlockAgainstOneOrdinaryAttack()
     {
         var enemy = CreateEnemyRuntime("Defense Target", 50, 20);
         _combat.StartEnemy(enemy);
         Assert.That(_combat.TryPlayCards(new[] { HandViews()[0] }, enemy), Is.True);
         var remaining = HandViews();
         var firstSet = new[] { remaining[0], remaining[1] };
+        int expectedBlocked = firstSet.Sum(card => _combat.CalculateCardDefense(card.data));
         int handBefore = _cards.HandCount;
         int discardedBefore = _cards.discardPile.Count;
+        int deckBefore = _cards.deck.Count;
 
-        Assert.That(_combat.TryDefendWithCards(firstSet), Is.False);
-        Assert.That(_combat.pendingDamage, Is.EqualTo(20));
-        Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
+        Assert.That(_combat.TryDefendWithCards(firstSet), Is.True);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(Mathf.Max(0, 20 - expectedBlocked)));
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore - 2));
         Assert.That(_cards.discardPile.Count, Is.EqualTo(discardedBefore));
+        Assert.That(_cards.deck.Count, Is.EqualTo(deckBefore + 2));
     }
 
     [Test]

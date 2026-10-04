@@ -44,16 +44,19 @@ public sealed class Phase3BossAbilityTests
                     Assert.That(hardCounters, Is.LessThanOrEqualTo(1));
                     if (hardCounters == 0)
                     {
-                        Assert.That(boss.abilities.Count(a => a.effect is EnemyAbilityEffect.Guarded or EnemyAbilityEffect.Regeneration), Is.EqualTo(1));
+                        Assert.That(boss.abilities.Count(a => a.effect is EnemyAbilityEffect.Guarded or EnemyAbilityEffect.Regeneration or
+                            EnemyAbilityEffect.FullCoverageBlock), Is.EqualTo(1));
                         Assert.That(boss.abilities.Count(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or EnemyAbilityEffect.Desperation), Is.EqualTo(1));
                     }
                     else
                         Assert.That(boss.abilities.Count(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or
-                            EnemyAbilityEffect.Desperation or EnemyAbilityEffect.Regeneration or EnemyAbilityEffect.Guarded), Is.EqualTo(1));
+                            EnemyAbilityEffect.Desperation or EnemyAbilityEffect.Regeneration or EnemyAbilityEffect.Guarded or
+                            EnemyAbilityEffect.FullCoverageBlock), Is.EqualTo(1));
                 }
                 else Assert.That(boss.abilities.All(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or
                     EnemyAbilityEffect.Desperation or EnemyAbilityEffect.Regeneration or EnemyAbilityEffect.Guarded or
-                    EnemyAbilityEffect.Silence or EnemyAbilityEffect.Withering or EnemyAbilityEffect.Oppression), Is.True);
+                    EnemyAbilityEffect.Silence or EnemyAbilityEffect.Withering or EnemyAbilityEffect.Oppression or
+                    EnemyAbilityEffect.FullCoverageBlock), Is.True);
             }
         }
         DestroyGeneratedRun(first);
@@ -94,6 +97,23 @@ public sealed class Phase3BossAbilityTests
     {
         _created.Remove(run.gameObject);
         Object.DestroyImmediate(run.gameObject);
+    }
+
+    [Test]
+    public void GeneratedBossPool_CanRollUnyieldingDefenseWithoutMakingItUniversal()
+    {
+        int abilityCount = 0;
+        int bossCount = 0;
+        for (int i = 0; i < 40; i++)
+        {
+            var run = CreateGeneratedRun($"full-coverage-{i}");
+            bossCount += run.bossDeck.Count;
+            abilityCount += run.bossDeck.Count(boss => boss.abilities.Any(ability =>
+                ability.effect == EnemyAbilityEffect.FullCoverageBlock));
+            DestroyGeneratedRun(run);
+        }
+        Assert.That(abilityCount, Is.GreaterThan(0));
+        Assert.That(abilityCount, Is.LessThan(bossCount));
     }
 
     [Test]

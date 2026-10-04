@@ -111,12 +111,17 @@ public class CombatManager : Singleton<CombatManager>
         public CardInstance BlockingCard { get; }
         public int CardOrder { get; }
         public int AttackIndex { get; }
+        public int AttackDamageBeforeBlock { get; }
+        public int BlockedDamage { get; }
 
-        public DefenseAssignment(CardInstance blockingCard, int cardOrder, int attackIndex)
+        public DefenseAssignment(CardInstance blockingCard, int cardOrder, int attackIndex,
+            int attackDamageBeforeBlock, int blockedDamage)
         {
             BlockingCard = blockingCard;
             CardOrder = cardOrder;
             AttackIndex = attackIndex;
+            AttackDamageBeforeBlock = attackDamageBeforeBlock;
+            BlockedDamage = blockedDamage;
         }
     }
 
@@ -364,9 +369,14 @@ public class CombatManager : Singleton<CombatManager>
         if (cards == null || cards.Count == 0 || !AreValidHandViews(cards)) return false;
         var matched = MatchDefenseAssignments(cards);
         if (matched == null) return false;
-        blockedCount = matched.Count;
+        var reductions = new int[_pendingAttacks.Count];
         for (int i = 0; i < matched.Count; i++)
-            remainingDamage -= _pendingAttacks[matched[i].AttackIndex];
+        {
+            reductions[matched[i].AttackIndex] += matched[i].BlockedDamage;
+            remainingDamage -= matched[i].BlockedDamage;
+        }
+        for (int i = 0; i < reductions.Length; i++)
+            if (reductions[i] >= _pendingAttacks[i]) blockedCount++;
         return true;
     }
 
@@ -379,11 +389,10 @@ public class CombatManager : Singleton<CombatManager>
         return AreValidHandViews(proposed) && MatchDefenseAssignments(proposed) != null;
     }
 
-    // Strongest cards are assigned to the strongest remaining attack they can fully cover.
-    // Equal values keep their original hand/encounter order for deterministic ties.
+    // Full-coverage attacks require one sufficient card. Ordinary attacks accept partial
+    // Block and can receive multiple cards. Stronger cards/attacks win deterministic ties.
     List<DefenseAssignment> MatchDefenseAssignments(IReadOnlyList<CardView> cards)
     {
-        if (cards.Count > _pendingAttacks.Count) return null;
         var cardOrder = new List<int>(cards.Count);
         for (int i = 0; i < cards.Count; i++) cardOrder.Add(i);
         cardOrder.Sort((a, b) =>
@@ -391,24 +400,38 @@ public class CombatManager : Singleton<CombatManager>
             int comparison = CalculateCardDefense(cards[b].data).CompareTo(CalculateCardDefense(cards[a].data));
             return comparison != 0 ? comparison : a.CompareTo(b);
         });
-        var attackOrder = new List<int>(_pendingAttacks.Count);
-        for (int i = 0; i < _pendingAttacks.Count; i++) attackOrder.Add(i);
-        attackOrder.Sort((a, b) =>
-        {
-            int comparison = _pendingAttacks[b].CompareTo(_pendingAttacks[a]);
-            return comparison != 0 ? comparison : a.CompareTo(b);
-        });
-
+        var remaining = _pendingAttacks.ToArray();
         var matched = new List<DefenseAssignment>(cards.Count);
         foreach (int cardIndex in cardOrder)
         {
             int defense = CalculateCardDefense(cards[cardIndex].data);
-            int attackIndex = attackOrder.FindIndex(index => _pendingAttacks[index] <= defense);
+            if (defense <= 0) return null;
+            int attackIndex = FindDefenseTarget(remaining, defense, true, true);
+            if (attackIndex < 0) attackIndex = FindDefenseTarget(remaining, defense, false, true);
+            if (attackIndex < 0) attackIndex = FindDefenseTarget(remaining, defense, false, false);
             if (attackIndex < 0) return null;
-            matched.Add(new DefenseAssignment(cards[cardIndex].data, cardIndex, attackOrder[attackIndex]));
-            attackOrder.RemoveAt(attackIndex);
+            int before = remaining[attackIndex];
+            int blocked = Mathf.Min(defense, before);
+            remaining[attackIndex] -= blocked;
+            matched.Add(new DefenseAssignment(cards[cardIndex].data, cardIndex, attackIndex, before, blocked));
         }
         return matched;
+    }
+
+    int FindDefenseTarget(IReadOnlyList<int> remaining, int defense,
+        bool requiresFullCoverage, bool mustFullyCover)
+    {
+        int best = -1;
+        for (int i = 0; i < remaining.Count; i++)
+        {
+            int damage = remaining[i];
+            if (damage <= 0 || i >= _pendingAttackSources.Count) continue;
+            bool restricted = _pendingAttackSources[i] != null &&
+                _pendingAttackSources[i].RequiresFullCoverageBlock;
+            if (restricted != requiresFullCoverage || mustFullyCover && defense < damage) continue;
+            if (best < 0 || damage > remaining[best]) best = i;
+        }
+        return best;
     }
 
     public void PlayCard(CardView card)
@@ -834,28 +857,40 @@ public class CombatManager : Singleton<CombatManager>
             var cardManager = CardManager.Instance;
             if (cardManager == null || !cardManager.TryRecycleDefenseCards(cards)) return false;
 
-            assignments.Sort((left, right) => left.AttackIndex.CompareTo(right.AttackIndex));
+            assignments.Sort((left, right) =>
+            {
+                int comparison = left.AttackIndex.CompareTo(right.AttackIndex);
+                return comparison != 0 ? comparison : left.CardOrder.CompareTo(right.CardOrder);
+            });
             int blockedDamage = 0;
+            var reductions = new int[_pendingAttacks.Count];
             for (int blockOrder = 0; blockOrder < assignments.Count; blockOrder++)
             {
                 var assignment = assignments[blockOrder];
                 int attackIndex = assignment.AttackIndex;
-                int attackDamage = _pendingAttacks[attackIndex];
                 var attacker = _pendingAttackSources[attackIndex];
-                blockedDamage += attackDamage;
+                blockedDamage += assignment.BlockedDamage;
+                reductions[attackIndex] += assignment.BlockedDamage;
                 GameplayEffectResolver.EnqueueAttackBlocked(
                     new AttackBlockedEffectContext(_activeAction, assignment.BlockingCard, attacker,
-                        attackDamage, blockOrder, this, cardManager), _reactions);
+                        assignment.AttackDamageBeforeBlock, blockOrder, this, cardManager), _reactions);
             }
 
-            for (int i = assignments.Count - 1; i >= 0; i--)
+            int blockedAttacks = 0;
+            for (int i = _pendingAttacks.Count - 1; i >= 0; i--)
             {
-                int attackIndex = assignments[i].AttackIndex;
-                _pendingAttacks.RemoveAt(attackIndex);
-                _pendingAttackSources.RemoveAt(attackIndex);
+                if (reductions[i] <= 0) continue;
+                int remaining = Mathf.Max(0, _pendingAttacks[i] - reductions[i]);
+                if (remaining == 0)
+                {
+                    blockedAttacks++;
+                    _pendingAttacks.RemoveAt(i);
+                    _pendingAttackSources.RemoveAt(i);
+                }
+                else _pendingAttacks[i] = remaining;
             }
             SetPendingDamage(pendingDamage - blockedDamage);
-            Log($"Defended with {string.Join(", ", names)}: blocked {assignments.Count} attack(s) ({blockedDamage} damage). Remaining: {pendingDamage}");
+            Log($"Defended with {string.Join(", ", names)}: blocked {blockedDamage} damage and fully covered {blockedAttacks} attack(s). Remaining: {pendingDamage}");
 
             bool reactionsCompleted = ProcessReactions(CombatReactionPhase.AttackBlocked);
             if (reactionsCompleted)

@@ -234,7 +234,8 @@ public class RunManager : Singleton<RunManager>
                 EnemyAbilityEffect.DoubleStrike, EnemyAbilityEffect.HeavySwing,
                 EnemyAbilityEffect.Desperation, EnemyAbilityEffect.Regeneration,
                 EnemyAbilityEffect.Guarded, EnemyAbilityEffect.Silence,
-                EnemyAbilityEffect.Withering, EnemyAbilityEffect.Oppression)) };
+                EnemyAbilityEffect.Withering, EnemyAbilityEffect.Oppression,
+                EnemyAbilityEffect.FullCoverageBlock)) };
         }
         else
         {
@@ -245,13 +246,15 @@ public class RunManager : Singleton<RunManager>
                 var chosenHardCounter = Choose(random, hardCounters);
                 var secondary = Choose(random, new[] { EnemyAbilityEffect.DoubleStrike,
                     EnemyAbilityEffect.HeavySwing, EnemyAbilityEffect.Desperation,
-                    EnemyAbilityEffect.Regeneration, EnemyAbilityEffect.Guarded });
+                    EnemyAbilityEffect.Regeneration, EnemyAbilityEffect.Guarded,
+                    EnemyAbilityEffect.FullCoverageBlock });
                 abilities = new[] { CreateAbility(chosenHardCounter), CreateAbility(secondary) };
             }
             else
             {
                 abilities = new[] {
-                    CreateAbility(Choose(random, EnemyAbilityEffect.Regeneration, EnemyAbilityEffect.Guarded)),
+                    CreateAbility(Choose(random, EnemyAbilityEffect.Regeneration, EnemyAbilityEffect.Guarded,
+                        EnemyAbilityEffect.FullCoverageBlock)),
                     CreateAbility(Choose(random, EnemyAbilityEffect.DoubleStrike,
                         EnemyAbilityEffect.HeavySwing, EnemyAbilityEffect.Desperation)) };
             }
@@ -278,6 +281,7 @@ public class RunManager : Singleton<RunManager>
             EnemyAbilityEffect.Silence => "Silence",
             EnemyAbilityEffect.Withering => "Withering",
             EnemyAbilityEffect.Oppression => "Oppression",
+            EnemyAbilityEffect.FullCoverageBlock => "Unyielding Defense",
             _ => effect.ToString()
         };
         ability.description = effect switch
@@ -290,6 +294,7 @@ public class RunManager : Singleton<RunManager>
             EnemyAbilityEffect.Silence => "While above 50% HP, disables held-card effects.",
             EnemyAbilityEffect.Withering => "While above 50% HP, prevents player healing.",
             EnemyAbilityEffect.Oppression => "+2 response damage per held card beyond 3.",
+            EnemyAbilityEffect.FullCoverageBlock => "Each attack must be fully covered by one Block card; partial or combined blocks are rejected.",
             _ => effect.ToString()
         };
         _generatedEnemyAbilities.Add(ability);

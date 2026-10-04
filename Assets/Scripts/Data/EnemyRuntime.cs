@@ -35,6 +35,7 @@ public class EnemyRuntime : ICombatDamageTarget
     public bool HasSuitCall => HasAbility(EnemyAbilityEffect.SuitCall);
     public bool HasWarDrum => HasAbility(EnemyAbilityEffect.WarDrum);
     public bool HasMasterThief => HasAbility(EnemyAbilityEffect.MasterThief);
+    public bool RequiresFullCoverageBlock => HasAbility(EnemyAbilityEffect.FullCoverageBlock);
     public int StolenGold => _stolenGold;
     public CardData.Suit AnnouncedSuit => _announcedSuit;
     public bool DuelistCallConsumed => _duelistCallConsumed;

@@ -61,19 +61,22 @@ public sealed class Phase7B5CombatCharacterizationTests
     }
 
     [Test]
-    public void Defense_InadequateCardIsRejectedWithoutConsumingIt()
+    public void Defense_InadequateCardPartiallyBlocksWithoutEndingDefense()
     {
         var enemy = new EnemyRuntime(CreateEnemyType("Defense", 50, 20, 0));
         _combat.StartEnemy(enemy);
         Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.True);
         var inadequate = HandViews()[0];
+        int defense = _combat.CalculateCardDefense(inadequate.data);
         int handBefore = _cards.HandCount;
         int discardBefore = _cards.discardPile.Count;
+        int deckBefore = _cards.deck.Count;
 
-        Assert.That(_combat.TryDefendWithCards(new[] { inadequate }), Is.False);
-        Assert.That(_combat.pendingDamage, Is.EqualTo(20));
-        Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
+        Assert.That(_combat.TryDefendWithCards(new[] { inadequate }), Is.True);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(20 - defense));
+        Assert.That(_cards.HandCount, Is.EqualTo(handBefore - 1));
         Assert.That(_cards.discardPile.Count, Is.EqualTo(discardBefore));
+        Assert.That(_cards.deck.Count, Is.EqualTo(deckBefore + 1));
         Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
     }
 
