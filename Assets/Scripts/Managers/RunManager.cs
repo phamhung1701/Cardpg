@@ -18,6 +18,7 @@ public class PathNode
 
 public class RunManager : Singleton<RunManager>
 {
+    public const int FirstMapBossHp = 20;
     [Header("Enemy Type Assets")]
     public EnemyTypeData thiefType;
     public EnemyTypeData goblinType;
@@ -311,7 +312,8 @@ public class RunManager : Singleton<RunManager>
                 string.Join(" • ", boss.abilities.Where(ability => ability != null).Select(ability =>
                     string.IsNullOrEmpty(ability.description) ? ability.displayName : $"{ability.displayName}: {ability.description}"));
 
-            var stats = ScaleEncounterStats(boss.maxHp, boss.baseAttack, CurrentMapIndex);
+            int bossHp = CurrentMapIndex == 0 ? FirstMapBossHp : boss.maxHp;
+            var stats = ScaleEncounterStats(bossHp, boss.baseAttack, CurrentMapIndex);
             return string.IsNullOrEmpty(abilities)
                 ? $"{boss.enemyName} • {stats.hp} HP / {stats.attack} ATK"
                 : $"{boss.enemyName} • {stats.hp} HP / {stats.attack} ATK • {abilities}";
@@ -527,12 +529,7 @@ public class RunManager : Singleton<RunManager>
 
         bool isCaptain = node.kind == MapNodeType.Elite && IsCaptainType(enemyType);
         var allies = new List<EnemyTypeData>();
-        if (node.kind == MapNodeType.Combat && enemyType.enemyName == "Duelist")
-        {
-            var brute = FindNormalEnemyExact("Brute");
-            if (brute != null) allies.Add(brute);
-        }
-        else if (node.kind == MapNodeType.Combat && enemyType.enemyName == "War Drummer")
+        if (node.kind == MapNodeType.Combat && enemyType.enemyName == "War Drummer")
         {
             var goblin = FindNormalEnemyExact("Goblin");
             if (goblin != null) { allies.Add(goblin); allies.Add(goblin); }
@@ -575,7 +572,9 @@ public class RunManager : Singleton<RunManager>
         var authoredElite = node.kind == MapNodeType.Elite ? FindAuthoredElite(node.contentId) : null;
         var source = authoredElite ?? (node.kind == MapNodeType.Boss ? CurrentBoss : FindEnemy(node.contentId));
         if (source == null) return (0, 0);
-        var stats = ScaleEncounterStats(source.maxHp, source.baseAttack, node.mapIndex);
+        int baseHp = node.kind == MapNodeType.Boss && node.mapIndex == 0
+            ? FirstMapBossHp : source.maxHp;
+        var stats = ScaleEncounterStats(baseHp, source.baseAttack, node.mapIndex);
         return node.kind == MapNodeType.Elite && authoredElite == null
             ? (Mathf.CeilToInt(stats.hp * 1.5f), stats.attack + 2)
             : stats;
@@ -682,7 +681,7 @@ public class RunManager : Singleton<RunManager>
     {
         var enemy = FindEnemy(node.contentId);
         if (enemy == null) return $"Normal encounter • {stats.hp} HP / {stats.attack} ATK";
-        string allyName = enemy.enemyName == "Duelist" ? "Brute" : enemy.enemyName == "War Drummer" ? "2 Goblins" : null;
+        string allyName = enemy.enemyName == "War Drummer" ? "2 Goblins" : null;
         if (allyName == null) return $"Normal encounter • primary enemy {stats.hp} HP / {stats.attack} ATK";
         var ally = FindNormalEnemyExact(allyName);
         if (ally == null) return $"Normal encounter • {enemy.enemyName} • {stats.hp} HP / {stats.attack} ATK";

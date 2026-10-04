@@ -32,6 +32,9 @@ public static class RunMapGenerator
                 // Replace after the layout shuffle so link/layout RNG consumption stays unchanged.
                 if (mapIndex == 0 && col < 2 && kind == MapNodeType.Shop)
                     kind = MapNodeType.Combat;
+                // The first two maps are the onboarding difficulty window and contain no Elites.
+                if (mapIndex < 2 && kind == MapNodeType.Elite)
+                    kind = MapNodeType.Combat;
                 bool hidden = kind == MapNodeType.Risk ||
                     (kind == MapNodeType.Event && contentRandom.NextInt(0, 2) == 0);
                 int nodeId = nextId++;

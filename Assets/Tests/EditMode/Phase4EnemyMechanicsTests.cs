@@ -163,7 +163,7 @@ public sealed class Phase4EnemyMechanicsTests
     }
 
     [Test]
-    public void AuthoredNormalCompositionsSpawnTheirIntendedAlliesAndPreviewTotals()
+    public void AuthoredNormalCompositionsKeepDuelistSoloAndSpawnWarDrummerAllies()
     {
         var brute = EnemyType("Brute", 18, 3);
         var goblin = EnemyType("Goblin", 3, 2);
@@ -180,9 +180,9 @@ public sealed class Phase4EnemyMechanicsTests
         _run.contentCatalog = catalog;
         typeof(RunManager).GetMethod("StartEncounter", BindingFlags.Instance | BindingFlags.NonPublic)
             .Invoke(_run, new object[] { new PathNode { kind = MapNodeType.Combat, contentId = "Duelist", mapIndex = 0 } });
-        Assert.That(_combat.Enemies.Select(enemy => enemy.type.enemyName), Is.EqualTo(new[] { "Duelist", "Brute" }));
+        Assert.That(_combat.Enemies.Select(enemy => enemy.type.enemyName), Is.EqualTo(new[] { "Duelist" }));
         var duelistNode = new PathNode { kind = MapNodeType.Combat, contentId = "Duelist", mapIndex = 0, accessible = true, revealed = true };
-        Assert.That(_run.GetNodeDesc(duelistNode), Does.Contain("Duelist + Brute"));
+        Assert.That(_run.GetNodeDesc(duelistNode), Does.Not.Contain("Brute"));
 
         _combat.Reset();
         typeof(RunManager).GetMethod("StartEncounter", BindingFlags.Instance | BindingFlags.NonPublic)

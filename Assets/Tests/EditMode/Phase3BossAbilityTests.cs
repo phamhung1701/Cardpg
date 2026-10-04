@@ -117,6 +117,24 @@ public sealed class Phase3BossAbilityTests
     }
 
     [Test]
+    public void FirstMapBossUsesTwentyHpWithoutChangingLaterBossDefinitions()
+    {
+        var run = CreateGeneratedRun("first-map-boss-nerf");
+        var firstBoss = run.CurrentBoss;
+        var firstNode = new PathNode { kind = MapNodeType.Boss, mapIndex = 0 };
+        Assert.That(firstBoss.maxHp, Is.EqualTo(30), "The generated definition remains reusable for later scaling.");
+        Assert.That(run.GetEncounterStats(firstNode).hp, Is.EqualTo(RunManager.FirstMapBossHp));
+        Assert.That(run.CurrentBossDescription, Does.Contain($"{RunManager.FirstMapBossHp} HP"));
+
+        run.bossIndex = 1;
+        var secondBoss = run.CurrentBoss;
+        var secondNode = new PathNode { kind = MapNodeType.Boss, mapIndex = 1 };
+        Assert.That(run.GetEncounterStats(secondNode).hp,
+            Is.EqualTo(EnemyMapScaling.Scale(secondBoss.maxHp, secondBoss.baseAttack, 1).hp));
+        DestroyGeneratedRun(run);
+    }
+
+    [Test]
     public void BossSuitImmunity_UsesActionSuitSnapshotAndPreservesGuardAndShield()
     {
         var type = CreateEnemy(EnemyAbilityEffect.Guarded);
