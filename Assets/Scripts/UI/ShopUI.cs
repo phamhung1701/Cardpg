@@ -303,11 +303,11 @@ public class ShopUI : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (DevModeRuntime.Enabled && DevModeRuntime.UnlimitedShopOffers)
         {
-            if (panel) panel.SetActive(false);
+            BoardPanelTransition.Hide(panel);
             return;
         }
 #endif
-        if (panel) panel.SetActive(true);
+        BoardPanelTransition.Show(panel);
         RefreshItems();
     }
 
@@ -317,7 +317,7 @@ public class ShopUI : MonoBehaviour
         _sellingMode = false;
         ClearSaleSelection();
         if (_sellModeLabel) _sellModeLabel.text = "Sell Items";
-        if (panel) panel.SetActive(false);
+        BoardPanelTransition.Hide(panel);
         UpdateSelectionDetails();
     }
 
@@ -326,7 +326,7 @@ public class ShopUI : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (DevModeRuntime.Enabled && DevModeRuntime.UnlimitedShopOffers)
         {
-            if (panel) panel.SetActive(false);
+            BoardPanelTransition.Hide(panel);
             return;
         }
 #endif

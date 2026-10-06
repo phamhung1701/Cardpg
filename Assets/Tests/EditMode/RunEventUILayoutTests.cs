@@ -66,6 +66,67 @@ public class RunEventUILayoutTests
     }
 
     [Test]
+    public void UpgradeChoicesExpandToTheCardAndFitThreeRowsWithoutClipping()
+    {
+        var cardObject = new GameObject("Responsive EventCard", typeof(RectTransform));
+        var card = cardObject.GetComponent<RectTransform>();
+        card.sizeDelta = new Vector2(1320f, 500f);
+
+        var descriptionObject = new GameObject("Description", typeof(RectTransform), typeof(TextMeshProUGUI));
+        descriptionObject.transform.SetParent(cardObject.transform, false);
+        var descriptionRect = descriptionObject.GetComponent<RectTransform>();
+        descriptionRect.anchorMin = new Vector2(0.1f, 0.63f);
+        descriptionRect.anchorMax = new Vector2(0.9f, 0.8f);
+        descriptionRect.sizeDelta = Vector2.zero;
+
+        var choicesObject = new GameObject("Choices", typeof(RectTransform), typeof(VerticalLayoutGroup));
+        choicesObject.transform.SetParent(cardObject.transform, false);
+        var choices = choicesObject.GetComponent<RectTransform>();
+        choices.sizeDelta = new Vector2(700f, 300f);
+        var layout = choicesObject.GetComponent<VerticalLayoutGroup>();
+        layout.spacing = 18f;
+
+        var ui = cardObject.AddComponent<RunEventUI>();
+        typeof(RunEventUI).GetField("choicesContainer", BindingFlags.Instance | BindingFlags.Public)
+            .SetValue(ui, choices);
+        typeof(RunEventUI).GetField("descriptionLabel", BindingFlags.Instance | BindingFlags.Public)
+            .SetValue(ui, descriptionObject.GetComponent<TMP_Text>());
+
+        try
+        {
+            typeof(RunEventUI).GetMethod("PrepareChoicesLayout", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(ui, null);
+            for (int i = 0; i < 3; i++)
+            {
+                var row = new GameObject($"UpgradeChoice{i}", typeof(RectTransform), typeof(LayoutElement));
+                row.transform.SetParent(choices, false);
+                var element = row.GetComponent<LayoutElement>();
+                element.minHeight = 92f;
+                element.preferredHeight = 92f;
+            }
+
+            typeof(RunEventUI).GetMethod("RefreshChoiceHeights", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(ui, null);
+            var scroll = cardObject.GetComponentInChildren<ScrollRect>();
+            float totalRows = 0f;
+            foreach (Transform row in choices)
+                totalRows += row.GetComponent<LayoutElement>().preferredHeight;
+            totalRows += layout.spacing * (choices.childCount - 1);
+
+            Assert.That(scroll.viewport.rect.width, Is.GreaterThan(choices.sizeDelta.x),
+                "The choice viewport should use responsive card width rather than the old narrow fixed width.");
+            Assert.That(scroll.viewport.rect.height, Is.GreaterThanOrEqualTo(totalRows),
+                "Three standard-height Upgrade rows plus fitted spacing must fit without clipping.");
+            Assert.That(layout.spacing, Is.LessThan(18f),
+                "Spacing should compress only as much as needed to fit the available viewport.");
+        }
+        finally
+        {
+            Object.DestroyImmediate(cardObject);
+        }
+    }
+
+    [Test]
     public void PrepareDescriptionLayout_ClipsLongDescriptionInsideScrollableViewport()
     {
         var parent = new GameObject("EventCard", typeof(RectTransform));

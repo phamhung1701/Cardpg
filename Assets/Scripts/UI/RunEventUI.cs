@@ -24,6 +24,8 @@ public class RunEventUI : MonoBehaviour
     ScrollRect _descriptionScrollRect;
     RectTransform _choicesViewport;
     float _lastChoiceViewportWidth = -1f;
+    float _lastChoiceViewportHeight = -1f;
+    float _baseChoiceSpacing;
 
 
     void OnEnable()
@@ -97,7 +99,7 @@ public class RunEventUI : MonoBehaviour
             }
         }
 
-        panel.SetActive(true);
+        BoardPanelTransition.Show(panel);
         FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
@@ -128,6 +130,7 @@ public class RunEventUI : MonoBehaviour
         var layout = content.GetComponent<VerticalLayoutGroup>();
         if (layout != null)
         {
+            _baseChoiceSpacing = layout.spacing;
             layout.childControlHeight = true;
             layout.childControlWidth = true;
             layout.childForceExpandWidth = true;
@@ -192,6 +195,7 @@ public class RunEventUI : MonoBehaviour
 
     void FinalizeChoiceList()
     {
+        ConfigureChoicesViewport();
         RefreshChoiceHeights();
         Canvas.ForceUpdateCanvases();
         if (_choicesScrollRect != null)
@@ -205,19 +209,25 @@ public class RunEventUI : MonoBehaviour
             _descriptionScrollRect.verticalNormalizedPosition = 1f;
         }
         _lastChoiceViewportWidth = _choicesViewport != null ? _choicesViewport.rect.width : -1f;
+        _lastChoiceViewportHeight = _choicesViewport != null ? _choicesViewport.rect.height : -1f;
     }
 
     void HandleCanvasWillRender()
     {
         if (!_choicesLayoutPrepared || panel == null || !panel.activeInHierarchy || _choicesViewport == null) return;
         float width = _choicesViewport.rect.width;
-        if (Mathf.Abs(width - _lastChoiceViewportWidth) <= 0.5f) return;
+        float height = _choicesViewport.rect.height;
+        if (Mathf.Abs(width - _lastChoiceViewportWidth) <= 0.5f &&
+            Mathf.Abs(height - _lastChoiceViewportHeight) <= 0.5f) return;
+        ConfigureChoicesViewport();
         RefreshChoiceHeights();
-        _lastChoiceViewportWidth = width;
+        _lastChoiceViewportWidth = _choicesViewport.rect.width;
+        _lastChoiceViewportHeight = _choicesViewport.rect.height;
     }
 
     void RefreshChoiceHeights()
     {
+        ConfigureChoicesViewport();
         float availableWidth = _choicesViewport != null ? _choicesViewport.rect.width :
             choicesContainer is RectTransform content ? content.rect.width : 0f;
         if (availableWidth <= 0f || choicesContainer == null) return;
@@ -227,6 +237,64 @@ public class RunEventUI : MonoBehaviour
             var label = child.GetComponentInChildren<TMP_Text>();
             if (label != null) ConfigureChoiceHeight(child.gameObject, label, availableWidth);
         }
+        FitChoiceSpacing(_choicesViewport != null ? _choicesViewport.rect.height : 0f);
+    }
+
+    void ConfigureChoicesViewport()
+    {
+        if (_choicesViewport == null || _choicesViewport.parent is not RectTransform card) return;
+        Rect cardRect = card.rect;
+        if (cardRect.width <= 0f || cardRect.height <= 0f) return;
+
+        RectTransform header = _descriptionScrollRect != null ? _descriptionScrollRect.viewport as RectTransform : null;
+        if (header == null && descriptionLabel != null) header = descriptionLabel.rectTransform;
+        if (header == null && titleLabel != null) header = titleLabel.rectTransform;
+
+        float horizontalInset = cardRect.width * 0.06f;
+        float bottom = cardRect.yMin + cardRect.height * 0.035f;
+        float top = cardRect.yMax - cardRect.height * 0.08f;
+        if (header != null)
+        {
+            Bounds headerBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(card, header);
+            top = Mathf.Min(top, headerBounds.min.y - cardRect.height * 0.025f);
+        }
+        if (top <= bottom) return;
+
+        _choicesViewport.anchorMin = new Vector2(
+            Mathf.InverseLerp(cardRect.xMin, cardRect.xMax, cardRect.xMin + horizontalInset),
+            Mathf.InverseLerp(cardRect.yMin, cardRect.yMax, bottom));
+        _choicesViewport.anchorMax = new Vector2(
+            Mathf.InverseLerp(cardRect.xMin, cardRect.xMax, cardRect.xMax - horizontalInset),
+            Mathf.InverseLerp(cardRect.yMin, cardRect.yMax, top));
+        _choicesViewport.pivot = new Vector2(0.5f, 0.5f);
+        _choicesViewport.offsetMin = Vector2.zero;
+        _choicesViewport.offsetMax = Vector2.zero;
+        _choicesViewport.anchoredPosition = Vector2.zero;
+        _choicesViewport.sizeDelta = Vector2.zero;
+    }
+
+    void FitChoiceSpacing(float viewportHeight)
+    {
+        if (choicesContainer == null || viewportHeight <= 0f) return;
+        var layout = choicesContainer.GetComponent<VerticalLayoutGroup>();
+        if (layout == null) return;
+
+        float requiredHeight = 0f;
+        int activeCount = 0;
+        foreach (Transform child in choicesContainer)
+        {
+            if (child == null || !child.gameObject.activeSelf) continue;
+            var element = child.GetComponent<LayoutElement>();
+            float height = element != null && element.preferredHeight > 0f
+                ? element.preferredHeight
+                : (child as RectTransform)?.rect.height ?? 0f;
+            requiredHeight += height;
+            activeCount++;
+        }
+
+        layout.spacing = activeCount > 1
+            ? Mathf.Clamp((viewportHeight - requiredHeight) / (activeCount - 1), 0f, _baseChoiceSpacing)
+            : _baseChoiceSpacing;
     }
 
     static void ConfigureChoiceHeight(GameObject buttonObject, TMP_Text label, float availableWidth)
@@ -298,7 +366,7 @@ public class RunEventUI : MonoBehaviour
         if (cancelLabel) cancelLabel.text = "Cancel (skip this draw)";
         var cancel = cancelObject.GetComponent<Button>();
         if (cancel) cancel.onClick.AddListener(() => ResolveArtifactDiscardChoice(0));
-        panel.SetActive(true);
+        BoardPanelTransition.Show(panel);
         FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
@@ -308,7 +376,7 @@ public class RunEventUI : MonoBehaviour
         var callback = _artifactDiscardChoiceResolved;
         _artifactDiscardChoiceResolved = null;
         ClearChoices();
-        if (panel) panel.SetActive(false);
+        BoardPanelTransition.Hide(panel);
         callback?.Invoke(cardId);
     }
 
@@ -363,7 +431,7 @@ public class RunEventUI : MonoBehaviour
         if (backLabel) backLabel.text = "Back";
         var back = backObject.GetComponent<Button>();
         if (back) back.onClick.AddListener(() => Show(RunManager.Instance != null ? RunManager.Instance.ActiveEvent : null));
-        panel.SetActive(true);
+        BoardPanelTransition.Show(panel);
         FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
@@ -468,7 +536,7 @@ public class RunEventUI : MonoBehaviour
                 button.onClick.AddListener(() => { if (enhancementTargetUI) enhancementTargetUI.OpenUpgrade(choiceIndex); });
         }
 
-        panel.SetActive(true);
+        BoardPanelTransition.Show(panel);
         FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
@@ -493,6 +561,6 @@ public class RunEventUI : MonoBehaviour
         _discardChoiceIndex = -1;
         _discardInteraction = RunEventChoiceInteraction.Immediate;
         _selectedDiscardCardIds.Clear();
-        if (panel) panel.SetActive(false);
+        BoardPanelTransition.Hide(panel);
     }
 }

@@ -64,9 +64,10 @@ public static class RunMapGenerator
                 var node = columns[col][row];
                 AddUnique(node.next, columns[col + 1][row].id);
 
-                int diagonal = layoutRandom.NextInt(0, 2) == 0 ? row - 1 : row + 1;
-                if (diagonal >= 0 && diagonal < RowCount)
-                    AddUnique(node.next, columns[col + 1][diagonal].id);
+                // Keep branch links monotone: outer lanes may merge inward, never cross in opposite directions.
+                int inwardLane = row == 0 ? 1 : row == RowCount - 1 ? RowCount - 2 : row;
+                if (inwardLane != row)
+                    AddUnique(node.next, columns[col + 1][inwardLane].id);
             }
         }
 
@@ -139,7 +140,8 @@ public static class RunMapGenerator
                 if (!hasEliteSuccessor || hasNonEliteSuccessor) continue;
 
                 var alternative = columns[col + 1].Where(node => node.kind != MapNodeType.Elite)
-                    .OrderBy(node => node.row).ThenBy(node => node.id).FirstOrDefault();
+                    .OrderBy(node => Mathf.Abs(node.row - predecessor.row))
+                    .ThenBy(node => node.row).ThenBy(node => node.id).FirstOrDefault();
                 if (alternative != null) AddUnique(predecessor.next, alternative.id);
             }
         }

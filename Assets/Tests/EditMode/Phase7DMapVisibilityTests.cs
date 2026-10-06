@@ -210,6 +210,32 @@ public sealed class Phase7DMapVisibilityTests
         }
     }
 
+    [Test]
+    public void GeneratedRoute_UsesAdjacentDepthLinksAndInwardOnlyDiagonals()
+    {
+        var nodes = RunMapGenerator.Generate(new RunRandomContext("layered-layout"), 0, null);
+        var byId = nodes.ToDictionary(node => node.id);
+
+        foreach (var node in nodes.Where(node => node.kind != MapNodeType.Boss))
+        {
+            foreach (int nextId in node.next)
+            {
+                var next = byId[nextId];
+                Assert.That(next.col, Is.EqualTo(node.col + 1f), "Route edges must advance exactly one depth.");
+                int fromLane = Mathf.RoundToInt(node.row);
+                int toLane = Mathf.RoundToInt(next.row);
+                Assert.That(toLane == fromLane || (fromLane == 0 && toLane == 1) || (fromLane == 2 && toLane == 1),
+                    "Optional diagonals may only merge from top/bottom toward the middle lane.");
+            }
+        }
+
+        for (int depth = 0; depth < RunMapGenerator.RouteColumnCount; depth++)
+            Assert.That(nodes.Where(node => Mathf.Approximately(node.col, depth)).Select(node => node.row).Distinct().Count(),
+                Is.EqualTo(RunMapGenerator.RowCount));
+        Assert.That(nodes.Single(node => node.kind == MapNodeType.Boss).col,
+            Is.EqualTo(RunMapGenerator.RouteColumnCount));
+    }
+
     static void SetField(object target, string name, object value)
     {
         typeof(PathScreenUI).GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -18,9 +20,11 @@ public class PathScreenUI : MonoBehaviour
     TMP_Text _mapVisibilityLabel;
 
     [Header("Map Settings")]
-    public float colSpacing = 200f;
-    public float rowSpacing = 120f;
-    public Vector2 mapOffset = new(180f, 120f);
+    [Min(0f)] public float horizontalInset = 20f;
+    [Min(0f)] public float verticalInset = 30f;
+    [Min(1f)] public float laneSpacing = 135f;
+
+    readonly Dictionary<int, Vector2> _nodePositions = new();
 
     void OnEnable()
     {
@@ -104,7 +108,7 @@ public class PathScreenUI : MonoBehaviour
     {
         _pendingMapShow = _pendingRunCompleted = false;
         _mapToggleEnabled = false;
-        if (panel) panel.SetActive(false);
+        BoardPanelTransition.Hide(panel);
         SetMapVisibilityControl(false);
     }
 
@@ -112,7 +116,7 @@ public class PathScreenUI : MonoBehaviour
     {
         _pendingMapShow = _pendingRunCompleted = false;
         _mapToggleEnabled = false;
-        if (panel) panel.SetActive(false);
+        BoardPanelTransition.Hide(panel);
         SetMapVisibilityControl(false);
     }
 
@@ -135,7 +139,7 @@ public class PathScreenUI : MonoBehaviour
             _pendingRunCompleted = true;
             _pendingMapShow = false;
             _mapToggleEnabled = false;
-            if (panel) panel.SetActive(false);
+            BoardPanelTransition.Hide(panel);
             SetMapVisibilityControl(false);
             return;
         }
@@ -146,7 +150,7 @@ public class PathScreenUI : MonoBehaviour
     {
         _mapToggleEnabled = false;
         if (headerText) headerText.text = "VICTORY!";
-        if (panel) panel.SetActive(true);
+        BoardPanelTransition.Show(panel);
         SetMapVisibilityControl(false);
     }
 
@@ -156,7 +160,7 @@ public class PathScreenUI : MonoBehaviour
         if (_presentation != null && _presentation.IsBusy)
         {
             _pendingMapShow = true;
-            if (panel) panel.SetActive(false);
+            BoardPanelTransition.Hide(panel);
             return;
         }
         ShowImmediately();
@@ -166,7 +170,7 @@ public class PathScreenUI : MonoBehaviour
     {
         _pendingMapShow = false;
         BuildMap();
-        if (panel) panel.SetActive(true);
+        BoardPanelTransition.Show(panel);
         var run = RunManager.Instance;
         // A reward modal may temporarily own the input gate while the route is shown.
         // Keep route availability separate from whether a click is allowed this frame.
@@ -178,30 +182,62 @@ public class PathScreenUI : MonoBehaviour
     {
         _pendingMapShow = _pendingRunCompleted = false;
         _mapToggleEnabled = false;
-        if (panel) panel.SetActive(false);
+        BoardPanelTransition.Hide(panel);
         SetMapVisibilityControl(false);
     }
 
     void BuildMap()
     {
-        if (mapContainer == null || nodeButtonPrefab == null) return;
+        if (mapContainer is not RectTransform bounds || nodeButtonPrefab == null) return;
 
         foreach (Transform child in mapContainer)
             Destroy(child.gameObject);
+        _nodePositions.Clear();
 
         var run = RunManager.Instance;
-        if (run == null) return;
+        if (run == null || run.currentPath == null || run.currentPath.Count == 0) return;
+
+        Vector2 nodeSize = new Vector2(Mathf.Min(145f, Mathf.Max(110f, bounds.rect.width / 8f)), 68f);
+        float halfH = nodeSize.y * 0.5f;
+        float usableWidth = Mathf.Max(0f, bounds.rect.width - nodeSize.x - 2f * horizontalInset);
+        float xStep = usableWidth / (RunMapGenerator.RouteColumnCount + 1);
+        float laneGap = Mathf.Min(laneSpacing, Mathf.Max(0f, bounds.rect.height - 2f * (verticalInset + halfH)) * 0.5f);
+        Vector2 center = bounds.rect.center;
+
+        Vector2 PositionFor(int column, int row)
+        {
+            float x = center.x - usableWidth * 0.5f + column * xStep;
+            float y = center.y + (1 - row) * laneGap;
+            return new Vector2(x, y);
+        }
+
+        Vector2 startPosition = PositionFor(0, 1);
+        Vector2 bossPosition = PositionFor(RunMapGenerator.RouteColumnCount + 1, 1);
+        foreach (var node in run.currentPath)
+            _nodePositions[node.id] = PositionFor(Mathf.Clamp(Mathf.RoundToInt(node.col), 0, RunMapGenerator.RouteColumnCount - 1) + 1,
+                Mathf.Clamp(Mathf.RoundToInt(node.row), 0, RunMapGenerator.RowCount - 1));
 
         foreach (var node in run.currentPath)
         {
             foreach (int nextId in node.next)
             {
                 var next = run.currentPath.Find(candidate => candidate.id == nextId);
-                if (next != null)
-                    CreateConnection(GridToLocal(node.col, node.row), GridToLocal(next.col, next.row));
+                if (next == null || next.kind == MapNodeType.Boss || !Mathf.Approximately(next.col, node.col + 1f)) continue;
+                CreateConnection(_nodePositions[node.id], _nodePositions[next.id], nodeSize);
             }
         }
 
+        foreach (var node in run.currentPath.Where(value => Mathf.Approximately(value.col, 0f)))
+            CreateConnection(startPosition, _nodePositions[node.id], nodeSize);
+        var bossNode = run.currentPath.FirstOrDefault(value => value.kind == MapNodeType.Boss);
+        if (bossNode != null)
+        {
+            _nodePositions[bossNode.id] = bossPosition;
+            foreach (var predecessor in run.currentPath.Where(value => value.next.Contains(bossNode.id)))
+                CreateConnection(_nodePositions[predecessor.id], bossPosition, nodeSize);
+        }
+
+        CreateEndpoint("START", startPosition, nodeSize, false);
         foreach (var node in run.currentPath)
         {
             var buttonObject = Instantiate(nodeButtonPrefab, mapContainer);
@@ -209,35 +245,61 @@ public class PathScreenUI : MonoBehaviour
             var nodeButtonUI = buttonObject.GetComponent<PathNodeButtonUI>();
             if (nodeButtonUI == null) nodeButtonUI = buttonObject.AddComponent<PathNodeButtonUI>();
             nodeButtonUI.SetNode(node, run);
-
-            buttonObject.transform.localPosition = GridToLocal(node.col, node.row);
+            PlaceNode(buttonObject.GetComponent<RectTransform>(), _nodePositions[node.id], nodeSize);
 
             var button = buttonObject.GetComponent<Button>();
             if (button)
             {
                 button.interactable = !node.completed && node.accessible;
                 var image = buttonObject.GetComponent<Image>();
-                if (image)
-                    image.color = GetNodeColor(node);
+                if (image) image.color = GetNodeColor(node);
                 int id = node.id;
                 button.onClick.AddListener(() => run.OnPathChosen(id));
             }
         }
     }
 
-    void CreateConnection(Vector3 from, Vector3 to)
+    void CreateEndpoint(string label, Vector2 position, Vector2 nodeSize, bool boss)
     {
+        var endpoint = Instantiate(nodeButtonPrefab, mapContainer);
+        endpoint.name = label == "START" ? "RouteStart" : "RouteBoss";
+        var button = endpoint.GetComponent<Button>();
+        if (button) button.interactable = false;
+        var image = endpoint.GetComponent<Image>();
+        if (image) image.color = boss ? new Color(0.64f, 0.24f, 0.28f) : new Color(0.28f, 0.34f, 0.44f);
+        var text = endpoint.GetComponentInChildren<TMP_Text>();
+        if (text) text.text = label;
+        PlaceNode(endpoint.GetComponent<RectTransform>(), position, nodeSize);
+    }
+
+    static void PlaceNode(RectTransform rect, Vector2 position, Vector2 size)
+    {
+        if (rect == null) return;
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+    }
+
+    void CreateConnection(Vector2 from, Vector2 to, Vector2 nodeSize)
+    {
+        Vector2 delta = to - from;
+        if (delta.sqrMagnitude < 0.001f) return;
+        Vector2 direction = delta.normalized;
+        float sourceExtent = Mathf.Min(nodeSize.x * 0.5f / Mathf.Max(0.001f, Mathf.Abs(direction.x)),
+            nodeSize.y * 0.5f / Mathf.Max(0.001f, Mathf.Abs(direction.y)));
+        Vector2 fromEdge = from + direction * sourceExtent;
+        Vector2 toEdge = to - direction * sourceExtent;
+        delta = toEdge - fromEdge;
+
         var connection = new GameObject("RouteConnection", typeof(RectTransform), typeof(Image));
         connection.layer = gameObject.layer;
         connection.transform.SetParent(mapContainer, false);
         connection.transform.SetAsFirstSibling();
-
         var rect = connection.GetComponent<RectTransform>();
-        Vector2 delta = (Vector2)(to - from);
-        rect.anchoredPosition = ((Vector2)from + (Vector2)to) * 0.5f;
-        rect.sizeDelta = new Vector2(delta.magnitude, 7f);
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = (fromEdge + toEdge) * 0.5f;
+        rect.sizeDelta = new Vector2(delta.magnitude, 5f);
         rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
-
         var image = connection.GetComponent<Image>();
         image.color = new Color(0.52f, 0.62f, 0.78f, 1f);
         image.raycastTarget = false;
@@ -340,8 +402,4 @@ public class PathScreenUI : MonoBehaviour
         };
     }
 
-    Vector3 GridToLocal(float col, float row)
-    {
-        return new Vector3(col * colSpacing + mapOffset.x, -row * rowSpacing + mapOffset.y, 0);
-    }
 }
