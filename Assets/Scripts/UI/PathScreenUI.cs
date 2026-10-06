@@ -237,7 +237,7 @@ public class PathScreenUI : MonoBehaviour
                 CreateConnection(_nodePositions[predecessor.id], bossPosition, nodeSize);
         }
 
-        CreateEndpoint("START", startPosition, nodeSize, false);
+        CreateStartEndpoint(startPosition, nodeSize);
         foreach (var node in run.currentPath)
         {
             var buttonObject = Instantiate(nodeButtonPrefab, mapContainer);
@@ -259,16 +259,16 @@ public class PathScreenUI : MonoBehaviour
         }
     }
 
-    void CreateEndpoint(string label, Vector2 position, Vector2 nodeSize, bool boss)
+    void CreateStartEndpoint(Vector2 position, Vector2 nodeSize)
     {
         var endpoint = Instantiate(nodeButtonPrefab, mapContainer);
-        endpoint.name = label == "START" ? "RouteStart" : "RouteBoss";
+        endpoint.name = "RouteStart";
         var button = endpoint.GetComponent<Button>();
         if (button) button.interactable = false;
         var image = endpoint.GetComponent<Image>();
-        if (image) image.color = boss ? new Color(0.64f, 0.24f, 0.28f) : new Color(0.28f, 0.34f, 0.44f);
+        if (image) image.color = new Color(0.28f, 0.34f, 0.44f);
         var text = endpoint.GetComponentInChildren<TMP_Text>();
-        if (text) text.text = label;
+        if (text) text.text = "START";
         PlaceNode(endpoint.GetComponent<RectTransform>(), position, nodeSize);
     }
 

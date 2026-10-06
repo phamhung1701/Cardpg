@@ -449,17 +449,30 @@ public class RunManager : Singleton<RunManager>
 
     public void OnPathChosen(int id)
     {
-        if (GameplayInputGate.IsBlocked) return;
-        if (_activeNode != null || IsRunCompleted) return;
+        if (GameplayInputGate.IsBlocked || _activeNode != null || IsRunCompleted) return;
 
         var node = FindNode(id);
         if (node == null || !node.accessible || node.completed) return;
 
+        var combat = CombatManager.Instance;
+        if (combat == null || combat.currentState is GameState.PlayerTurn or GameState.EnemyAttacking or GameState.GameOver)
+        {
+            Debug.LogError("RunManager: route selection rejected while the previous encounter is not resolved.", this);
+            return;
+        }
+        if ((node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss) && !combat.CanStartEncounter)
+        {
+            Debug.LogError($"RunManager: cannot start {node.kind} node {node.id} from combat state {combat.currentState}.", this);
+            return;
+        }
+
+        var columnNodes = currentPath.Where(other => Mathf.Approximately(other.col, node.col)).ToArray();
+        var accessibleBefore = columnNodes.Select(other => other.accessible).ToArray();
+        var revealedBefore = columnNodes.Select(other => other.revealed).ToArray();
         node.accessible = false;
         node.revealed = true;
-        foreach (var other in currentPath)
-            if (Mathf.Approximately(other.col, node.col) && other.id != node.id)
-                other.accessible = false;
+        foreach (var other in columnNodes)
+            if (other.id != node.id) other.accessible = false;
 
         _activeNode = node;
         OnHidePathScreen?.Invoke();
@@ -469,7 +482,11 @@ public class RunManager : Singleton<RunManager>
             case MapNodeType.Combat:
             case MapNodeType.Elite:
             case MapNodeType.Boss:
-                StartEncounter(node);
+                if (!TryStartEncounter(node))
+                {
+                    RollbackNodeStart(node, columnNodes, accessibleBefore, revealedBefore,
+                        $"RunManager: failed to start {node.kind} node {node.id}; route selection was rolled back.");
+                }
                 break;
             case MapNodeType.Shop:
                 ResolvePendingInvestments(node);
@@ -491,33 +508,49 @@ public class RunManager : Singleton<RunManager>
             case MapNodeType.Event:
             case MapNodeType.Risk:
                 _activeEvent = FindEvent(node.kind, node.contentId);
-                if (_activeEvent == null)
+                if (_activeEvent == null || _activeEvent.choices == null || _activeEvent.choices.Length == 0)
                 {
-                    Debug.LogError($"RunManager: no event content found for node {node.id} ({node.kind}).", this);
-                    CompleteActiveNode();
-                    ShowPathAfterNode();
+                    RollbackNodeStart(node, columnNodes, accessibleBefore, revealedBefore,
+                        $"RunManager: missing or empty {node.kind} content '{node.contentId}' for node {node.id}; route selection was rolled back.");
                     return;
                 }
                 OnShowEvent?.Invoke(_activeEvent);
                 break;
+            default:
+                RollbackNodeStart(node, columnNodes, accessibleBefore, revealedBefore,
+                    $"RunManager: unsupported node kind {node.kind} at node {node.id}; route selection was rolled back.");
+                break;
         }
     }
 
-    void StartEncounter(PathNode node)
+    void RollbackNodeStart(PathNode node, PathNode[] columnNodes, bool[] accessibleBefore,
+        bool[] revealedBefore, string error)
     {
+        if (_activeNode == node) _activeNode = null;
+        _activeEvent = null;
+        for (int i = 0; i < columnNodes.Length; i++)
+        {
+            columnNodes[i].accessible = accessibleBefore[i];
+            columnNodes[i].revealed = revealedBefore[i];
+        }
+        Debug.LogError(error, this);
+        OnShowPathScreen?.Invoke();
+    }
+
+    void StartEncounter(PathNode node) => TryStartEncounter(node);
+
+    bool TryStartEncounter(PathNode node)
+    {
+        var combat = CombatManager.Instance;
+        if (node == null || combat == null || !combat.CanStartEncounter) return false;
+
         var enemyType = node.kind switch
         {
             MapNodeType.Boss => CurrentBoss,
             MapNodeType.Elite => FindAuthoredElite(node.contentId) ?? CreateEliteType(FindEnemy(node.contentId)),
             _ => FindEnemy(node.contentId)
         };
-
-        if (enemyType == null)
-        {
-            Debug.LogError("RunManager: cannot start encounter without an enemy definition.", this);
-            _activeNode = null;
-            return;
-        }
+        if (enemyType == null) return false;
 
         var stats = GetEncounterStats(node);
         int encounterCount = node.kind == MapNodeType.Combat
@@ -548,7 +581,7 @@ public class RunManager : Singleton<RunManager>
             enemies.Add(new EnemyRuntime(allyType, instance, sameTypeCount, allyStats.hp, allyStats.attack));
         }
 
-        CombatManager.Instance.StartEncounter(enemies, node.kind);
+        return combat.TryStartEncounter(enemies, node.kind);
     }
 
     bool ShouldAddGoblinAlly(PathNode node, EnemyTypeData enemyType)
@@ -612,7 +645,7 @@ public class RunManager : Singleton<RunManager>
             if (enemy.name == contentId || enemy.enemyName == contentId)
                 return enemy;
         }
-        return GetNormalEnemies().FirstOrDefault(enemy => enemy != null);
+        return null;
     }
 
     EnemyTypeData[] GetNormalEnemies()
@@ -628,9 +661,7 @@ public class RunManager : Singleton<RunManager>
     RunEventDefinition FindEvent(MapNodeType category, string contentId)
     {
         var definitions = contentCatalog != null ? contentCatalog.GetEvents(category) : null;
-        if (definitions == null) return null;
-        return definitions.FirstOrDefault(definition => definition != null && definition.id == contentId)
-            ?? definitions.FirstOrDefault(definition => definition != null);
+        return definitions?.FirstOrDefault(definition => definition != null && definition.id == contentId);
     }
 
     PathNode FindNode(int id) => currentPath.FirstOrDefault(node => node.id == id);
@@ -839,6 +870,10 @@ public class RunManager : Singleton<RunManager>
 
         if (offer.kind == ShopOfferKind.Artifact)
         {
+            if (offer.artifact != null && (cards.HasArtifact(offer.artifact) ||
+                cards.ownedArtifacts.Any(owned => owned != null &&
+                    string.Equals(owned.id, offer.artifact.id, StringComparison.Ordinal))))
+                return "Already owned";
             string reason = cards.GetArtifactAcquisitionUnavailableReason(offer.artifact);
             if (!string.IsNullOrEmpty(reason)) return reason;
         }

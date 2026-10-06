@@ -576,7 +576,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         if (success)
         {
             _restoreOriginOnClose = shopAcquisition;
-            Hide();
+            if (panel && panel.activeSelf) Hide();
             return;
         }
         string reason = isAcquisition

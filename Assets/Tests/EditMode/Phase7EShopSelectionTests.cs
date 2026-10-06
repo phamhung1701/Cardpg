@@ -38,10 +38,14 @@ public sealed class Phase7EShopSelectionTests
         _objects.Add(uiObject);
         uiObject.SetActive(false);
         _ui = uiObject.AddComponent<ShopUI>();
-        _ui.panel = new GameObject("Panel");
+        _ui.panel = new GameObject("Panel", typeof(RectTransform));
         _objects.Add(_ui.panel);
-        _ui.itemsContainer = new GameObject("Offers").transform;
-        _objects.Add(_ui.itemsContainer.gameObject);
+        _ui.panel.GetComponent<RectTransform>().sizeDelta = new Vector2(1000f, 800f);
+        var offersObject = new GameObject("Offers", typeof(RectTransform));
+        offersObject.transform.SetParent(_ui.panel.transform, false);
+        offersObject.GetComponent<RectTransform>().sizeDelta = new Vector2(700f, 500f);
+        _ui.itemsContainer = offersObject.transform;
+        _objects.Add(offersObject);
         var template = new GameObject("Offer template", typeof(RectTransform), typeof(Image), typeof(Button));
         _objects.Add(template);
         var templateLabel = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
@@ -223,6 +227,29 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(_cards.gold, Is.EqualTo(goldBefore + artifact.price / 2));
         Assert.That(_cards.GetArtifactInstanceById(instanceId), Is.Null);
         Assert.That(_ui.SellingMode, Is.True);
+    }
+
+    [Test]
+    public void ContinueRejectedByInputGate_LeavesShopAndNodeOpen()
+    {
+        GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, true);
+        try
+        {
+            var activeShop = _run.ActiveNode;
+            Assert.That(activeShop, Is.Not.Null);
+            Assert.That(activeShop.kind, Is.EqualTo(MapNodeType.Shop));
+
+            _ui.continueButton.onClick.Invoke();
+
+            Assert.That(_ui.panel.activeSelf, Is.True,
+                "The UI should close only after RunManager accepts Shop completion and raises OnHideShop.");
+            Assert.That(_run.ActiveNode, Is.SameAs(activeShop));
+            Assert.That(activeShop.completed, Is.False);
+        }
+        finally
+        {
+            GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, false);
+        }
     }
 
     [Test]

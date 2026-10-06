@@ -4,6 +4,8 @@ using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
+
 
 public sealed class RunProgressionTests
 {
@@ -140,6 +142,146 @@ public sealed class RunProgressionTests
         Assert.That(_runManager.Timing.CurrentMapIndex, Is.EqualTo(1));
         Assert.That(_runManager.Timing.CurrentMapElapsedSeconds, Is.Zero);
         Assert.That(_runManager.Timing.IsActive, Is.True);
+    }
+
+    [Test]
+    public void MissingEncounterContentRollsBackSelectionWithoutCompletingOrUnlockingNode()
+    {
+        _runManager.StartRunWithSeed("WORKFLOW-MISSING-ENEMY");
+        var selectedNode = _runManager.currentPath.First(node => node.accessible);
+        var columnNodes = _runManager.currentPath.Where(node => Mathf.Approximately(node.col, selectedNode.col)).ToArray();
+        var accessibleBefore = columnNodes.Select(node => node.accessible).ToArray();
+        var revealedBefore = columnNodes.Select(node => node.revealed).ToArray();
+        selectedNode.contentId = "missing-normal-enemy";
+        int hideCount = 0;
+        int showCount = 0;
+        _runManager.OnHidePathScreen += () => hideCount++;
+        _runManager.OnShowPathScreen += () => showCount++;
+        LogAssert.Expect(LogType.Error,
+            $"RunManager: failed to start {selectedNode.kind} node {selectedNode.id}; route selection was rolled back.");
+
+        _runManager.OnPathChosen(selectedNode.id);
+
+        Assert.That(_runManager.ActiveNode, Is.Null);
+        Assert.That(selectedNode.completed, Is.False);
+        Assert.That(_combatManager.currentEnemy, Is.Null);
+        Assert.That(hideCount, Is.EqualTo(1));
+        Assert.That(showCount, Is.EqualTo(1));
+        CollectionAssert.AreEqual(accessibleBefore, columnNodes.Select(node => node.accessible));
+        CollectionAssert.AreEqual(revealedBefore, columnNodes.Select(node => node.revealed));
+        Assert.That(selectedNode.next.Select(id => _runManager.currentPath.Single(node => node.id == id))
+            .All(node => !node.accessible && !node.completed), Is.True);
+    }
+
+    [Test]
+    public void MissingEventContentRollsBackInsteadOfAutoCompletingNode()
+    {
+        _runManager.StartRunWithSeed("WORKFLOW-MISSING-EVENT");
+        var selectedNode = _runManager.currentPath.First(node => node.kind == MapNodeType.Event);
+        selectedNode.accessible = true;
+        selectedNode.contentId = "missing-event-definition";
+        bool wasRevealed = selectedNode.revealed;
+        int showCount = 0;
+        _runManager.OnShowPathScreen += () => showCount++;
+        LogAssert.Expect(LogType.Error,
+            $"RunManager: missing or empty Event content '{selectedNode.contentId}' for node {selectedNode.id}; route selection was rolled back.");
+
+        _runManager.OnPathChosen(selectedNode.id);
+
+        Assert.That(_runManager.ActiveNode, Is.Null);
+        Assert.That(_runManager.ActiveEvent, Is.Null);
+        Assert.That(selectedNode.accessible, Is.True);
+        Assert.That(selectedNode.revealed, Is.EqualTo(wasRevealed));
+        Assert.That(selectedNode.completed, Is.False);
+        Assert.That(showCount, Is.EqualTo(1));
+        Assert.That(selectedNode.next.Select(id => _runManager.currentPath.Single(node => node.id == id))
+            .All(node => !node.accessible && !node.completed), Is.True);
+    }
+
+    [Test]
+    public void RouteSelectionWhileEncounterIsActiveDoesNotCommitNode()
+    {
+        _runManager.StartRunWithSeed("WORKFLOW-ACTIVE-COMBAT");
+        var selectedNode = _runManager.currentPath.First(node => node.accessible);
+        var encounterEnemy = new EnemyRuntime(_runManager.goblinType);
+        _combatManager.StartEnemy(encounterEnemy);
+        int hideCount = 0;
+        _runManager.OnHidePathScreen += () => hideCount++;
+        LogAssert.Expect(LogType.Error,
+            "RunManager: route selection rejected while the previous encounter is not resolved.");
+
+        _runManager.OnPathChosen(selectedNode.id);
+
+        Assert.That(_combatManager.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(ReferenceEquals(_combatManager.currentEnemy, encounterEnemy), Is.True);
+        Assert.That(_runManager.ActiveNode, Is.Null);
+        Assert.That(selectedNode.accessible, Is.True);
+        Assert.That(selectedNode.completed, Is.False);
+        Assert.That(hideCount, Is.Zero);
+    }
+
+    [Test]
+    public void EncounterStartupReactionFaultReportsOneDefeatWithoutCompletingNode()
+    {
+        var runaway = ScriptableObject.CreateInstance<EnemyAbility>();
+        _testOwnedAssets.Add(runaway);
+        var runawayAbilities = Enumerable.Repeat(runaway, CombatReactionQueue.DefaultOperationLimit + 1).ToArray();
+        _runManager.thiefType.abilities = runawayAbilities;
+        _runManager.goblinType.abilities = runawayAbilities;
+        _runManager.knightType.abilities = runawayAbilities;
+        _runManager.StartRunWithSeed("WORKFLOW-STARTUP-FAULT");
+        var selectedNode = _runManager.currentPath.First(node => node.accessible);
+        int resultCount = 0;
+        EncounterResult result = EncounterResult.Victory;
+        _combatManager.OnEncounterResult += value => { resultCount++; result = value; };
+        LogAssert.Expect(LogType.Error,
+            $"Combat reaction limit ({CombatReactionQueue.DefaultOperationLimit}) exceeded. Remaining reactions were discarded.");
+
+        _runManager.OnPathChosen(selectedNode.id);
+
+        Assert.That(_combatManager.currentState, Is.EqualTo(GameState.GameOver));
+        Assert.That(result, Is.EqualTo(EncounterResult.Defeat));
+        Assert.That(resultCount, Is.EqualTo(1));
+        Assert.That(_runManager.ActiveNode, Is.Null);
+        Assert.That(selectedNode.completed, Is.False);
+        Assert.That(_runManager.Timing.IsActive, Is.False);
+        Assert.That(_cardManager.gold, Is.Zero);
+        Assert.That(_combatManager.ForceDefeatForDevelopment(), Is.False);
+        Assert.That(resultCount, Is.EqualTo(1), "A faulted encounter must report a single terminal result.");
+    }
+
+    [Test]
+    public void RunStartClearsActionButtonsConsumableTargetSelection()
+    {
+        var uiObject = new GameObject("Workflow ActionButtonsUI");
+        uiObject.SetActive(false);
+        var ui = uiObject.AddComponent<ActionButtonsUI>();
+        var slot = typeof(ActionButtonsUI).GetField("_directConsumableTargetSlot",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var targetIds = (List<int>)typeof(ActionButtonsUI).GetField("_directRuneTargetIds",
+            BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+        slot.SetValue(ui, 2);
+        targetIds.Add(17);
+        _cardManager.BeginHandEnhancementTargeting(_ => { });
+        uiObject.SetActive(true);
+        typeof(ActionButtonsUI).GetMethod("OnEnable", BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(ui, null);
+        Assert.That(_cardManager.IsHandEnhancementTargeting, Is.True);
+
+        try
+        {
+            _runManager.StartRunWithSeed("WORKFLOW-CLEAR-TARGET");
+
+            Assert.That(slot.GetValue(ui), Is.EqualTo(-1));
+            Assert.That(targetIds, Is.Empty);
+            Assert.That(_cardManager.IsHandEnhancementTargeting, Is.False);
+        }
+        finally
+        {
+            typeof(ActionButtonsUI).GetMethod("OnDisable", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(ui, null);
+            UnityEngine.Object.DestroyImmediate(uiObject);
+        }
     }
 
     [Test]

@@ -552,7 +552,6 @@ public class ShopUI : MonoBehaviour
 
     void OnContinue()
     {
-        Close();
         RunManager.Instance.OnShopDone();
     }
 }

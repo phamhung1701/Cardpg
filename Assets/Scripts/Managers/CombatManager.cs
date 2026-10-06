@@ -153,12 +153,19 @@ public class CombatManager : Singleton<CombatManager>
     }
 
     public bool IsResolvingOverflowAttack => _executingOverflowAutoPlay;
+    public bool CanStartEncounter => !_reactionFaulted &&
+        currentState is GameState.Idle or GameState.GameWon;
 
     public void StartEncounter(IReadOnlyList<EnemyRuntime> enemies, MapNodeType encounterKind = MapNodeType.Combat)
     {
+        TryStartEncounter(enemies, encounterKind);
+    }
+
+    public bool TryStartEncounter(IReadOnlyList<EnemyRuntime> enemies, MapNodeType encounterKind = MapNodeType.Combat)
+    {
         if (enemies == null || enemies.Count == 0)
             throw new ArgumentException("An encounter requires at least one enemy.", nameof(enemies));
-        if (_reactionFaulted || (currentState != GameState.Idle && currentState != GameState.GameWon)) return;
+        if (!CanStartEncounter) return false;
 
         UnsubscribeFromEnemies();
         CardManager.Instance?.CancelCardInteractions();
@@ -221,25 +228,25 @@ public class CombatManager : Singleton<CombatManager>
             enemy.OnAttackChanged += HandleEnemyHpChanged;
             EnqueueEncounterStartedAbilities(encounterAction, enemy, i);
         }
-        ProcessReactions(CombatReactionPhase.EncounterStarted);
-        if (_reactionFaulted) return;
+        if (!ProcessReactions(CombatReactionPhase.EncounterStarted)) return true;
 
         int drawn = CardManager.Instance.DrawToHand(1);
         GameplayEffectResolver.EnqueueEncounterStart(
             new EncounterStartEffectContext(encounterAction, player, this, CardManager.Instance,
                 _enemies, drawn), _reactions);
         ProcessReactions(CombatReactionPhase.EncounterReady);
-        if (_reactionFaulted) return;
+        if (_reactionFaulted) return true;
 
         OnEnemiesChanged?.Invoke();
         OnEnemyChanged?.Invoke();
         BeginPlayerTurn();
-        if (_reactionFaulted) return;
+        if (_reactionFaulted) return true;
         Log(_enemies.Count == 1
             ? $"Enemy appears: {_enemies[0].DisplayName} (HP: {_enemies[0].maxHp}, ATK: {_enemies[0].EffectiveAttack})"
             : $"Enemy group appears: {string.Join(", ", _enemies.ConvertAll(enemy => $"{enemy.DisplayName} {enemy.currentHp} HP/{enemy.EffectiveAttack} ATK"))}");
         if (drawn > 0)
             Log($"Drew {drawn} card for the encounter.");
+        return true;
     }
 
     public bool SelectEnemyTarget(EnemyRuntime enemy)
@@ -1399,12 +1406,11 @@ public class CombatManager : Singleton<CombatManager>
 
     void HandleReactionFault(CombatReactionPhase phase)
     {
-        if (_reactionFaulted) return;
+        if (_reactionFaulted || _encounterResolved) return;
         _reactionFaulted = true;
         _queuedPlayerTurnGrants.Clear();
-        CardManager.Instance?.CancelCardInteractions();
-        SetState(GameState.GameOver);
         Log($"Encounter halted after reaction processing failed during {phase}. No victory or rewards will be granted.");
+        ResolveEncounter(EncounterResult.Defeat);
     }
 
     CombatActionContext CreateAction(
@@ -1441,7 +1447,7 @@ public class CombatManager : Singleton<CombatManager>
 
     void ResolveEncounter(EncounterResult result)
     {
-        if (_encounterResolved || _reactionFaulted) return;
+        if (_encounterResolved || _reactionFaulted && result != EncounterResult.Defeat) return;
 
         _encounterResolved = true;
         _pendingDiamondDrawChoices = 0;

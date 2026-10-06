@@ -47,6 +47,7 @@ public class ActionButtonsUI : MonoBehaviour
             CardManager.Instance.OnDeckChanged += HandleDeckChanged;
             CardManager.Instance.OnConsumablesChanged += HandleDeckChanged;
         }
+        if (RunManager.Instance != null) RunManager.Instance.OnRunStarted += HandleRunStarted;
 
         _primaryActionLabel = playButton != null ? playButton.GetComponentInChildren<TMP_Text>(true) : null;
         _enhancementTargetUI = GetComponent<EnhancementTargetUI>();
@@ -71,6 +72,8 @@ public class ActionButtonsUI : MonoBehaviour
             CombatManager.Instance.OnPlayerHealthChanged -= HandlePlayerHealthChanged;
             CombatManager.Instance.OnCombatLog -= HandleCombatLog;
         }
+        var run = RunManager.Instance;
+        if (run != null) run.OnRunStarted -= HandleRunStarted;
         var cards = CardManager.Instance;
         if (cards != null)
         {
@@ -79,12 +82,11 @@ public class ActionButtonsUI : MonoBehaviour
             cards.OnConsumablesChanged -= HandleDeckChanged;
         }
 
-        if (cards != null && cards.IsHandEnhancementTargeting && _directConsumableTargetSlot >= 0)
-        {
-            ClearDirectRuneSelection();
+        bool hadDirectTarget = _directConsumableTargetSlot >= 0;
+        ClearDirectRuneSelection();
+        _directConsumableTargetSlot = -1;
+        if (cards != null && hadDirectTarget && cards.IsHandEnhancementTargeting)
             cards.EndHandEnhancementTargeting();
-            _directConsumableTargetSlot = -1;
-        }
         if (playButton) playButton.onClick.RemoveListener(OnPlayClicked);
         if (blockButton) blockButton.onClick.RemoveListener(OnBlockClicked);
         if (rankSortButton) rankSortButton.onClick.RemoveListener(OnRankSortClicked);
@@ -98,6 +100,17 @@ public class ActionButtonsUI : MonoBehaviour
     {
         if (_directConsumableTargetSlot >= 0 && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             CancelDirectConsumableTargeting();
+    }
+
+    void HandleRunStarted(string _)
+    {
+        bool hadDirectTarget = _directConsumableTargetSlot >= 0;
+        ClearDirectRuneSelection();
+        _directConsumableTargetSlot = -1;
+        var cards = CardManager.Instance;
+        if (cards != null && hadDirectTarget && cards.IsHandEnhancementTargeting)
+            cards.EndHandEnhancementTargeting();
+        RefreshAll();
     }
 
     void HandleStateChanged(GameState _) => RefreshAll();

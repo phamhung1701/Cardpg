@@ -468,9 +468,10 @@ public sealed class Phase7B5CombatFoundationTests
 
         Assert.That(enemy.IsDefeated, Is.True);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
-        Assert.That(results, Is.Zero);
+        Assert.That(results, Is.EqualTo(1));
         Assert.That(_cards.gold, Is.Zero);
         Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.False);
+        Assert.That(results, Is.EqualTo(1), "A terminal reaction fault must not publish a second result.");
     }
 
     [Test]
@@ -509,9 +510,10 @@ public sealed class Phase7B5CombatFoundationTests
 
         Assert.That(enemy.IsDefeated, Is.True);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
-        Assert.That(results, Is.Zero);
+        Assert.That(results, Is.EqualTo(1));
         Assert.That(_cards.gold, Is.Zero);
         Assert.That(_combat.TryDefendWithCards(new[] { LowestAttackView() }, enemy), Is.False);
+        Assert.That(results, Is.EqualTo(1), "A terminal reaction fault must not publish a second result.");
     }
 
     [Test]
@@ -532,8 +534,9 @@ public sealed class Phase7B5CombatFoundationTests
 
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
         Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
-        Assert.That(results, Is.Zero);
+        Assert.That(results, Is.EqualTo(1));
         Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.False);
+        Assert.That(results, Is.EqualTo(1), "A startup reaction fault must publish exactly one result.");
     }
 
     [Test]
