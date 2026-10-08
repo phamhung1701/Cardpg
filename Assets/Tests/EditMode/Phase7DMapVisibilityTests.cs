@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
@@ -211,29 +212,58 @@ public sealed class Phase7DMapVisibilityTests
     }
 
     [Test]
-    public void GeneratedRoute_UsesAdjacentDepthLinksAndInwardOnlyDiagonals()
+    public void GeneratedRoute_PreservesSeededMiddleToOuterBranchesAndNodeReachability()
     {
-        var nodes = RunMapGenerator.Generate(new RunRandomContext("layered-layout"), 0, null);
-        var byId = nodes.ToDictionary(node => node.id);
+        bool middleCanReachTop = false;
+        bool middleCanReachBottom = false;
 
-        foreach (var node in nodes.Where(node => node.kind != MapNodeType.Boss))
+        for (int seed = 0; seed < 32; seed++)
         {
-            foreach (int nextId in node.next)
+            string seedText = $"legacy-lane-{seed}";
+            var nodes = RunMapGenerator.Generate(new RunRandomContext(seedText), 0, null);
+            var replay = RunMapGenerator.Generate(new RunRandomContext(seedText), 0, null);
+            var byId = nodes.ToDictionary(node => node.id);
+            CollectionAssert.AreEqual(
+                nodes.Select(node => $"{node.id}:{string.Join(",", node.next)}"),
+                replay.Select(node => $"{node.id}:{string.Join(",", node.next)}"),
+                "Restoring the prior link rule must remain deterministic for a fixed seed.");
+
+            foreach (var node in nodes.Where(node => node.kind != MapNodeType.Boss))
+                foreach (int nextId in node.next)
+                    Assert.That(byId[nextId].col, Is.EqualTo(node.col + 1f),
+                        "Route links must continue to advance by one depth.");
+
+            for (int depth = 0; depth < RunMapGenerator.RouteColumnCount - 1; depth++)
             {
-                var next = byId[nextId];
-                Assert.That(next.col, Is.EqualTo(node.col + 1f), "Route edges must advance exactly one depth.");
-                int fromLane = Mathf.RoundToInt(node.row);
-                int toLane = Mathf.RoundToInt(next.row);
-                Assert.That(toLane == fromLane || (fromLane == 0 && toLane == 1) || (fromLane == 2 && toLane == 1),
-                    "Optional diagonals may only merge from top/bottom toward the middle lane.");
+                var middle = nodes.Single(node => Mathf.Approximately(node.col, depth) &&
+                    Mathf.Approximately(node.row, 1f));
+                var nextLanes = middle.next.Select(id => byId[id])
+                    .Where(next => Mathf.Approximately(next.col, depth + 1f))
+                    .Select(next => Mathf.RoundToInt(next.row)).ToArray();
+                Assert.That(nextLanes, Does.Contain(1), "The straight-ahead middle-lane link must remain.");
+                Assert.That(nextLanes.Count(lane => lane != 1), Is.EqualTo(1),
+                    "The seeded middle-lane diagonal must again reach exactly one outer lane.");
+                middleCanReachTop |= nextLanes.Contains(0);
+                middleCanReachBottom |= nextLanes.Contains(2);
             }
+
+            var reachable = new HashSet<int>(nodes.Where(node => node.accessible).Select(node => node.id));
+            var pending = new Queue<int>(reachable);
+            while (pending.Count > 0)
+                foreach (int nextId in byId[pending.Dequeue()].next)
+                    if (reachable.Add(nextId)) pending.Enqueue(nextId);
+            Assert.That(reachable.Count, Is.EqualTo(nodes.Count),
+                "Straight-ahead links must keep every generated node reachable from the start depth.");
+
+            for (int depth = 0; depth < RunMapGenerator.RouteColumnCount; depth++)
+                Assert.That(nodes.Where(node => Mathf.Approximately(node.col, depth))
+                    .Select(node => node.row).Distinct().Count(), Is.EqualTo(RunMapGenerator.RowCount));
+            Assert.That(nodes.Single(node => node.kind == MapNodeType.Boss).col,
+                Is.EqualTo(RunMapGenerator.RouteColumnCount));
         }
 
-        for (int depth = 0; depth < RunMapGenerator.RouteColumnCount; depth++)
-            Assert.That(nodes.Where(node => Mathf.Approximately(node.col, depth)).Select(node => node.row).Distinct().Count(),
-                Is.EqualTo(RunMapGenerator.RowCount));
-        Assert.That(nodes.Single(node => node.kind == MapNodeType.Boss).col,
-            Is.EqualTo(RunMapGenerator.RouteColumnCount));
+        Assert.That(middleCanReachTop, Is.True);
+        Assert.That(middleCanReachBottom, Is.True);
     }
 
     static void SetField(object target, string name, object value)

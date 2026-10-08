@@ -26,6 +26,27 @@ public class PathScreenUI : MonoBehaviour
 
     readonly Dictionary<int, Vector2> _nodePositions = new();
 
+    readonly struct RouteEdge
+    {
+        public readonly Vector2 from;
+        public readonly Vector2 to;
+        public readonly int fromNodeId;
+        public readonly int toNodeId;
+        public readonly int fromLane;
+        public readonly int toLane;
+        public bool IsDiagonal => fromLane != toLane;
+
+        public RouteEdge(Vector2 from, Vector2 to, int fromNodeId, int toNodeId, int fromLane, int toLane)
+        {
+            this.from = from;
+            this.to = to;
+            this.fromNodeId = fromNodeId;
+            this.toNodeId = toNodeId;
+            this.fromLane = fromLane;
+            this.toLane = toLane;
+        }
+    }
+
     void OnEnable()
     {
         EnsurePresentationSubscription();
@@ -217,25 +238,34 @@ public class PathScreenUI : MonoBehaviour
             _nodePositions[node.id] = PositionFor(Mathf.Clamp(Mathf.RoundToInt(node.col), 0, RunMapGenerator.RouteColumnCount - 1) + 1,
                 Mathf.Clamp(Mathf.RoundToInt(node.row), 0, RunMapGenerator.RowCount - 1));
 
+        var routeEdges = new List<RouteEdge>();
         foreach (var node in run.currentPath)
         {
             foreach (int nextId in node.next)
             {
                 var next = run.currentPath.Find(candidate => candidate.id == nextId);
                 if (next == null || next.kind == MapNodeType.Boss || !Mathf.Approximately(next.col, node.col + 1f)) continue;
-                CreateConnection(_nodePositions[node.id], _nodePositions[next.id], nodeSize);
+                routeEdges.Add(ClipConnection(_nodePositions[node.id], _nodePositions[next.id], nodeSize,
+                    node.id, next.id, Mathf.RoundToInt(node.row), Mathf.RoundToInt(next.row)));
             }
         }
 
         foreach (var node in run.currentPath.Where(value => Mathf.Approximately(value.col, 0f)))
-            CreateConnection(startPosition, _nodePositions[node.id], nodeSize);
+            routeEdges.Add(ClipConnection(startPosition, _nodePositions[node.id], nodeSize,
+                int.MinValue, node.id, 1, Mathf.RoundToInt(node.row)));
         var bossNode = run.currentPath.FirstOrDefault(value => value.kind == MapNodeType.Boss);
         if (bossNode != null)
         {
             _nodePositions[bossNode.id] = bossPosition;
             foreach (var predecessor in run.currentPath.Where(value => value.next.Contains(bossNode.id)))
-                CreateConnection(_nodePositions[predecessor.id], bossPosition, nodeSize);
+                routeEdges.Add(ClipConnection(_nodePositions[predecessor.id], bossPosition, nodeSize,
+                    predecessor.id, bossNode.id, Mathf.RoundToInt(predecessor.row), 1));
         }
+
+        // Keep same-lane trunks behind branches, then make genuine crossings read as overpasses.
+        foreach (var edge in routeEdges.OrderBy(value => value.IsDiagonal ? 1 : 0))
+            CreateConnection(edge, nodeSize);
+        DrawCrossingBridges(routeEdges, bounds, nodeSize);
 
         CreateStartEndpoint(startPosition, nodeSize);
         foreach (var node in run.currentPath)
@@ -280,30 +310,135 @@ public class PathScreenUI : MonoBehaviour
         rect.sizeDelta = size;
     }
 
-    void CreateConnection(Vector2 from, Vector2 to, Vector2 nodeSize)
+    static RouteEdge ClipConnection(Vector2 from, Vector2 to, Vector2 nodeSize,
+        int fromNodeId, int toNodeId, int fromLane, int toLane)
     {
         Vector2 delta = to - from;
-        if (delta.sqrMagnitude < 0.001f) return;
+        if (delta.sqrMagnitude < 0.001f)
+            return new RouteEdge(from, to, fromNodeId, toNodeId, fromLane, toLane);
         Vector2 direction = delta.normalized;
         float sourceExtent = Mathf.Min(nodeSize.x * 0.5f / Mathf.Max(0.001f, Mathf.Abs(direction.x)),
             nodeSize.y * 0.5f / Mathf.Max(0.001f, Mathf.Abs(direction.y)));
-        Vector2 fromEdge = from + direction * sourceExtent;
-        Vector2 toEdge = to - direction * sourceExtent;
-        delta = toEdge - fromEdge;
+        return new RouteEdge(from + direction * sourceExtent, to - direction * sourceExtent,
+            fromNodeId, toNodeId, fromLane, toLane);
+    }
 
-        var connection = new GameObject("RouteConnection", typeof(RectTransform), typeof(Image));
+    void CreateConnection(RouteEdge edge, Vector2 nodeSize)
+    {
+        CreateLineSegment(edge.from, edge.to, nodeSize.y * 0.0735f,
+            new Color(0.52f, 0.62f, 0.78f, 1f), "RouteConnection");
+    }
+
+    void DrawCrossingBridges(IReadOnlyList<RouteEdge> edges, RectTransform bounds, Vector2 nodeSize)
+    {
+        var cardImage = bounds.parent != null ? bounds.parent.GetComponent<Image>() : null;
+        if (cardImage == null) return;
+
+        var crossings = new List<Vector2>();
+        for (int i = 0; i < edges.Count; i++)
+        {
+            for (int j = i + 1; j < edges.Count; j++)
+            {
+                var first = edges[i];
+                var second = edges[j];
+                if (first.fromNodeId == second.fromNodeId || first.fromNodeId == second.toNodeId ||
+                    first.toNodeId == second.fromNodeId || first.toNodeId == second.toNodeId ||
+                    !TryGetInteriorIntersection(first.from, first.to, second.from, second.to, out var crossing) ||
+                    crossings.Any(existing => Vector2.SqrMagnitude(existing - crossing) < 1f))
+                    continue;
+
+                crossings.Add(crossing);
+                RouteEdge overpass = SelectOverpass(first, second);
+                var gapObject = new GameObject("RouteCrossingGap", typeof(RectTransform), typeof(Image));
+                gapObject.layer = gameObject.layer;
+                gapObject.transform.SetParent(mapContainer, false);
+                var gapRect = gapObject.GetComponent<RectTransform>();
+                gapRect.anchorMin = gapRect.anchorMax = new Vector2(0.5f, 0.5f);
+                gapRect.anchoredPosition = crossing;
+                float gapSize = nodeSize.x * 0.20f;
+                gapRect.sizeDelta = new Vector2(gapSize, gapSize);
+                var gapImage = gapObject.GetComponent<Image>();
+                gapImage.sprite = cardImage.sprite;
+                gapImage.type = cardImage.type;
+                gapImage.pixelsPerUnitMultiplier = cardImage.pixelsPerUnitMultiplier;
+                gapImage.color = cardImage.color;
+                gapImage.raycastTarget = false;
+
+                DrawBridgeArc(crossing, overpass, nodeSize);
+            }
+        }
+    }
+
+    static RouteEdge SelectOverpass(RouteEdge first, RouteEdge second)
+    {
+        int laneOrder = first.fromLane.CompareTo(second.fromLane);
+        if (laneOrder != 0) return laneOrder < 0 ? first : second;
+        int targetOrder = first.toLane.CompareTo(second.toLane);
+        if (targetOrder != 0) return targetOrder < 0 ? first : second;
+        return first.fromNodeId <= second.fromNodeId ? first : second;
+    }
+
+    void DrawBridgeArc(Vector2 crossing, RouteEdge edge, Vector2 nodeSize)
+    {
+        Vector2 direction = (edge.to - edge.from).normalized;
+        Vector2 normal = new Vector2(-direction.y, direction.x);
+        float halfSpan = nodeSize.x * 0.14f;
+        Vector2 start = crossing - direction * halfSpan;
+        Vector2 end = crossing + direction * halfSpan;
+        Vector2 control = crossing + normal * (nodeSize.y * 0.28f);
+        Vector2 previous = start;
+        Color lineColor = new Color(0.52f, 0.62f, 0.78f, 1f);
+        for (int i = 1; i <= 4; i++)
+        {
+            float t = i / 4f;
+            float inverse = 1f - t;
+            Vector2 point = inverse * inverse * start + 2f * inverse * t * control + t * t * end;
+            CreateLineSegment(previous, point, nodeSize.y * 0.10f, lineColor, "RouteCrossingBridge");
+            previous = point;
+        }
+    }
+
+    void CreateLineSegment(Vector2 from, Vector2 to, float width, Color color, string objectName)
+    {
+        var connection = new GameObject(objectName, typeof(RectTransform), typeof(Image));
         connection.layer = gameObject.layer;
         connection.transform.SetParent(mapContainer, false);
-        connection.transform.SetAsFirstSibling();
         var rect = connection.GetComponent<RectTransform>();
+        Vector2 delta = to - from;
         rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = (fromEdge + toEdge) * 0.5f;
-        rect.sizeDelta = new Vector2(delta.magnitude, 5f);
+        rect.anchoredPosition = (from + to) * 0.5f;
+        rect.sizeDelta = new Vector2(delta.magnitude, width);
         rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
         var image = connection.GetComponent<Image>();
-        image.color = new Color(0.52f, 0.62f, 0.78f, 1f);
+        image.color = color;
         image.raycastTarget = false;
     }
+
+    static bool TryGetInteriorIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out Vector2 intersection)
+    {
+        Vector2 ab = b - a;
+        Vector2 cd = d - c;
+        float denominator = Cross(ab, cd);
+        if (Mathf.Abs(denominator) <= 0.001f)
+        {
+            intersection = default;
+            return false;
+        }
+
+        Vector2 offset = c - a;
+        float alongFirst = Cross(offset, cd) / denominator;
+        float alongSecond = Cross(offset, ab) / denominator;
+        if (alongFirst <= 0.08f || alongFirst >= 0.92f || alongSecond <= 0.08f || alongSecond >= 0.92f)
+        {
+            intersection = default;
+            return false;
+        }
+
+        intersection = a + ab * alongFirst;
+        return true;
+    }
+
+    static float Cross(Vector2 first, Vector2 second) => first.x * second.y - first.y * second.x;
 
     void EnsureMapVisibilityControl()
     {
