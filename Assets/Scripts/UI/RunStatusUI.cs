@@ -74,7 +74,7 @@ public class RunStatusUI : MonoBehaviour
         var run = RunManager.Instance;
 
         if (goldLabel)
-            goldLabel.text = cards == null ? "Gold  —" : cards.HasInfiniteMoney ? "Gold  ∞" : $"Gold  {cards.gold}";
+            goldLabel.text = cards == null ? "GOLD —" : cards.HasInfiniteMoney ? "GOLD ∞" : $"GOLD {cards.gold}";
 
         RefreshArtifacts(cards);
         RefreshBackpack(cards);
@@ -91,7 +91,7 @@ public class RunStatusUI : MonoBehaviour
                 foreach (var card in cards.ownedCards)
                     if (card.Enhancement != null) enhancedCount++;
                 pileSummaryLabel.text =
-                    $"Hand  {cards.HandCount}/{cards.HandCapacity}    Draw  {cards.deck.Count}    Enhanced  {enhancedCount}";
+                    $"HAND {cards.HandCount}/{cards.HandCapacity}  ·  DRAW {cards.deck.Count}  ·  ENH {enhancedCount}";
             }
         }
 
@@ -154,14 +154,19 @@ public class RunStatusUI : MonoBehaviour
             if (!label) continue;
             bool visible = cards != null && i < Mathf.Max(cards.BackpackCapacity, cards.BackpackSlotsUsed);
             label.transform.parent.gameObject.SetActive(visible);
-            if (!visible) continue;
+            if (!visible)
+            {
+                label.gameObject.SetActive(false);
+                continue;
+            }
             var slot = cards.GetConsumableInstanceAtSlot(i);
             int stackCount = cards.GetConsumableStackCountAtSlot(i);
-            label.text = slot == null ? $"EMPTY SLOT {i + 1}" :
+            label.text = slot == null ? string.Empty :
                 $"{slot.Definition.icon} {slot.Definition.displayName}" +
                 (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
                 (slot.Definition.uses > 1
                     ? $" ({slot.RemainingCharges}/{slot.Definition.uses} first)" : string.Empty);
+            label.gameObject.SetActive(slot != null);
         }
     }
 
@@ -195,7 +200,7 @@ public class RunStatusUI : MonoBehaviour
         if (!timingLabel) return;
         var timing = RunManager.Instance?.Timing;
         timingLabel.text = timing == null
-            ? "Run Time  —\nMap Time  —"
-            : $"Run Time  {RunDurationFormatter.Format(timing.TotalElapsedSeconds)}\nMap Time  {RunDurationFormatter.Format(timing.CurrentMapElapsedSeconds)}";
+            ? "RUN —"
+            : $"RUN {RunDurationFormatter.Format(timing.TotalElapsedSeconds)}  ·  MAP {RunDurationFormatter.Format(timing.CurrentMapElapsedSeconds)}";
     }
 }

@@ -88,13 +88,44 @@ public sealed class DeckViewerUITests
             Assert.That(snapshot.homeField, Is.Null);
             Assert.That(snapshot.canvasGroup == null || !snapshot.canvasGroup.interactable, Is.True);
             Assert.That(snapshot.canvasGroup == null || !snapshot.canvasGroup.blocksRaycasts, Is.True);
-            Assert.That(snapshot.GetComponentsInChildren<Canvas>(true).All(canvas => !canvas.enabled), Is.True,
-                "Snapshot cards must render in the clipped viewer canvas, not an overriding child canvas.");
+            Assert.That(snapshot.GetComponentsInChildren<Canvas>(true).All(canvas => canvas.enabled), Is.True,
+                "Visual snapshot canvases remain enabled so card artwork is rendered.");
             Assert.That(snapshot.GetComponentsInChildren<Graphic>(true).All(graphic => !graphic.raycastTarget), Is.True);
             Assert.That(snapshot.GetComponentsInChildren<GraphicRaycaster>(true).All(raycaster => !raycaster.enabled), Is.True,
                 "Snapshot cards must not have an active nested pointer raycaster.");
         }
         Assert.That(_cards.SelectedCards, Is.Empty);
+    }
+
+    [Test]
+    public void Snapshot_LeavesNestedArtworkCanvasEnabledButNonInteractive()
+    {
+        var visual = new GameObject("VisualRoot", typeof(RectTransform), typeof(Canvas),
+            typeof(Image), typeof(GraphicRaycaster));
+        _created.Add(visual);
+        visual.transform.SetParent(_viewer.cardPrefab.transform, false);
+        var nestedCanvas = visual.GetComponent<Canvas>();
+        nestedCanvas.overrideSorting = true;
+        _viewer.cardPrefab.visualRoot = visual.transform as RectTransform;
+        var definition = CardData.Create(CardData.Suit.Hearts, CardData.Rank.Ace);
+        _created.Add(definition);
+        var card = new CardInstance(definition, 999);
+
+        typeof(DeckViewerUI).GetField("_content", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .SetValue(_viewer, _content);
+        var rebuild = typeof(DeckViewerUI).GetMethod("RebuildSnapshots",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        rebuild.Invoke(_viewer, new object[] { new[] { card } });
+        Assert.That(_content.GetComponentsInChildren<CardView>(true).Any(view => view.name.StartsWith("DeckCardSnapshot_")),
+            Is.True, "The viewer should create a snapshot for the supplied runtime card.");
+        var snapshot = Snapshots().Single();
+        var snapshotCanvas = snapshot.visualRoot.GetComponent<Canvas>();
+
+        Assert.That(snapshotCanvas, Is.Not.Null);
+        Assert.That(snapshotCanvas.overrideSorting, Is.False,
+            "Snapshot canvases must inherit the modal canvas sorting order.");
+        Assert.That(snapshot.visualRoot.GetComponent<GraphicRaycaster>().enabled, Is.False);
+        Assert.That(snapshot.GetComponentsInChildren<Graphic>().All(graphic => !graphic.raycastTarget), Is.True);
     }
 
     [Test]

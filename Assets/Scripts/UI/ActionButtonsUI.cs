@@ -98,8 +98,21 @@ public class ActionButtonsUI : MonoBehaviour
 
     void Update()
     {
+        RefreshBoardGuidance();
         if (_directConsumableTargetSlot >= 0 && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             CancelDirectConsumableTargeting();
+    }
+
+    // These labels support encounters, not the Shop/Event objects occupying the same surface.
+    void RefreshBoardGuidance()
+    {
+        var node = RunManager.Instance?.ActiveNode;
+        bool encounter = node != null && (node.kind == MapNodeType.Combat ||
+            node.kind == MapNodeType.Elite || node.kind == MapNodeType.Boss);
+        if (turnStateLabel && turnStateLabel.enabled != encounter) turnStateLabel.enabled = encounter;
+        if (combatLogLabel && combatLogLabel.enabled != encounter) combatLogLabel.enabled = encounter;
+        bool showSelection = node == null || encounter;
+        if (selectionLabel && selectionLabel.enabled != showSelection) selectionLabel.enabled = showSelection;
     }
 
     void HandleRunStarted(string _)
@@ -143,6 +156,13 @@ public class ActionButtonsUI : MonoBehaviour
         if (blockButton) blockButton.interactable = isDefense && canDefend;
         if (rankSortButton) rankSortButton.interactable = cards.HandCount > 1;
         if (suitSortButton) suitSortButton.interactable = cards.HandCount > 1;
+        // Emphasis follows the combat state; command availability remains authoritative above.
+        if (playButton && playButton.targetGraphic)
+            playButton.targetGraphic.color = combat.currentState == GameState.PlayerTurn
+                ? new Color(0.26f, 0.48f, 0.38f, 1f) : new Color(0.14f, 0.22f, 0.23f, 0.3f);
+        if (blockButton && blockButton.targetGraphic)
+            blockButton.targetGraphic.color = isDefense
+                ? new Color(0.32f, 0.48f, 0.64f, 1f) : new Color(0.14f, 0.22f, 0.23f, 0.3f);
         if (_primaryActionLabel)
         {
             _primaryActionLabel.text = combat.currentState switch
@@ -150,9 +170,9 @@ public class ActionButtonsUI : MonoBehaviour
                 GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilySelection(cards.SelectedCards.Select(view => view.data).ToArray(), cards) => "PLAY ROYAL FAMILY",
                 GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) => "PLAY ACE PAIR",
                 GameState.PlayerTurn when selectedCount >= 2 && GameplayEffectResolver.IsSameRankMultiCardAction(cards.SelectedCards, cards) => $"PLAY SAME-RANK {selectedCount}",
-                GameState.PlayerTurn => "PLAY CARD",
+                GameState.PlayerTurn => "PLAY",
                 GameState.EnemyAttacking => "PLAY",
-                _ => "CARD ACTION"
+                _ => "ACTION"
             };
         }
         if (takeDamageButton) takeDamageButton.interactable = canTakeDamage;
@@ -165,8 +185,8 @@ public class ActionButtonsUI : MonoBehaviour
             string block = combat.player.EncounterBlock > 0 ? $"  •  BLOCK {combat.player.EncounterBlock}" : string.Empty;
             string shield = combat.player.ShieldCharges > 0 ? $"  •  SHIELD {combat.player.ShieldCharges}" : string.Empty;
             playerHealthLabel.text = combat.HasInfiniteHealthForDev
-                ? $"PLAYER HP  ∞{block}{shield}"
-                : $"PLAYER HP  {combat.player.currentHealth}/{combat.player.maxHealth}{block}{shield}";
+                ? $"HP  ∞{block}{shield}"
+                : $"HP  {combat.player.currentHealth}/{combat.player.maxHealth}{block}{shield}";
         }
 
         if (turnStateLabel)
@@ -187,7 +207,7 @@ public class ActionButtonsUI : MonoBehaviour
             pendingDamageLabel.gameObject.SetActive(showDamage);
             pendingDamageLabel.text = showDamage
                 ? combat.pendingDamage > 0
-                    ? $"BLOCKING  •  {combat.BlockedAttackCount} BLOCKED  •  {combat.PendingAttackCount} ATTACKS LEFT  •  {combat.pendingDamage} DAMAGE"
+                    ? $"INCOMING {combat.pendingDamage}  ·  {combat.PendingAttackCount} LEFT  ·  {combat.BlockedAttackCount} BLOCKED"
                     : "ALL ATTACKS BLOCKED"
                 : string.Empty;
         }
@@ -483,19 +503,26 @@ public class ActionButtonsUI : MonoBehaviour
             if (!button) continue;
             bool visible = i < Mathf.Max(cards.BackpackCapacity, cards.BackpackSlotsUsed);
             button.gameObject.SetActive(visible);
-            if (!visible) continue;
-            var consumable = cards.GetConsumableAtSlot(i);
             var label = button.GetComponentInChildren<TMP_Text>(true);
+            if (!visible)
+            {
+                if (label) label.gameObject.SetActive(false);
+                continue;
+            }
+            var consumable = cards.GetConsumableAtSlot(i);
+            if (button.targetGraphic) button.targetGraphic.color = consumable == null
+                ? new Color(0.14f, 0.22f, 0.23f, 0.3f) : new Color(0.25f, 0.34f, 0.30f, 0.85f);
             if (label)
             {
                 int stackCount = cards.GetConsumableStackCountAtSlot(i);
                 var activeItem = cards.GetConsumableInstanceAtSlot(i);
                 label.text = consumable == null
-                    ? $"EMPTY SLOT {i + 1}"
+                    ? string.Empty
                     : $"{consumable.icon} {consumable.displayName}" +
                         (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
                         (consumable.uses > 1 && activeItem != null
                             ? $" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
+                label.gameObject.SetActive(consumable != null);
             }
             // Keep slots raycastable for drag/reorder even when use is currently unavailable;
             // CardManager revalidates every click/drop against current combat state.

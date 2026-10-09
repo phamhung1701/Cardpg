@@ -85,6 +85,8 @@ public class EnemyDisplayUI : MonoBehaviour
         }
     }
 
+    public bool IsDefeatCuePlaying => _defeatCue != null;
+
     public void PlayDefeatCue()
     {
         if (!isActiveAndEnabled) return;

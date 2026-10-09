@@ -288,7 +288,13 @@ public sealed class Phase7DMapVisibilityTests
         var unknown = new PathNode { kind = MapNodeType.Combat, revealed = false, accessible = false };
 
         Assert.That(elite.accessible, Is.False);
-        Assert.That((Color)method.Invoke(null, new object[] { elite }), Is.EqualTo(new Color(0.64f, 0.3f, 0.26f)));
-        Assert.That((Color)method.Invoke(null, new object[] { unknown }), Is.EqualTo(new Color(0.18f, 0.21f, 0.27f)));
+        var eliteColor = (Color)method.Invoke(null, new object[] { elite });
+        var unknownColor = (Color)method.Invoke(null, new object[] { unknown });
+        Assert.That(eliteColor, Is.Not.EqualTo(unknownColor), "Known elites retain their identity.");
+        Assert.That(eliteColor.r, Is.GreaterThan(eliteColor.b));
+        elite.accessible = true;
+        var availableColor = (Color)method.Invoke(null, new object[] { elite });
+        Assert.That(eliteColor.a, Is.LessThan(availableColor.a), "Unavailable tokens remain secondary.");
+        Assert.That(eliteColor.maxColorComponent, Is.LessThan(availableColor.maxColorComponent));
     }
 }

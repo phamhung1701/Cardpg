@@ -44,13 +44,13 @@ public sealed class HandFanTests
         var a = Add(CardData.Suit.Spades, CardData.Rank.King);
         var b = Add(CardData.Suit.Hearts, CardData.Rank.Ace);
         var c = Add(CardData.Suit.Diamonds, CardData.Rank.Three);
-        Assert.That(_holder.GetComponent<HorizontalLayoutGroup>().spacing, Is.EqualTo(-18f).Within(0.01f));
-        Assert.That((a.transform.localPosition.x + c.transform.localPosition.x) * 0.5f,
+        Assert.That(_holder.GetComponent<HorizontalLayoutGroup>().enabled, Is.False);
+        Assert.That((a.LayoutTargetPosition.x + c.LayoutTargetPosition.x) * 0.5f,
             Is.EqualTo(0f).Within(0.1f));
         for (int i = 0; i < 4; i++) Add(CardData.Suit.Clubs, CardData.Rank.Four);
-        Assert.That(_holder.GetComponent<HorizontalLayoutGroup>().spacing, Is.LessThan(0f));
+        Assert.That(_holder.GetComponent<HorizontalLayoutGroup>().enabled, Is.False);
         Assert.That(_field.CardCount, Is.EqualTo(7));
-        Assert.That(b.transform.localPosition.x, Is.LessThan(c.transform.localPosition.x));
+        Assert.That(b.LayoutTargetPosition.x, Is.LessThan(c.LayoutTargetPosition.x));
     }
 
     [Test]
@@ -106,8 +106,8 @@ public sealed class HandFanTests
         dragCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
         middle.transform.SetParent(dragCanvas.transform, true);
         _field.RefreshLayout();
-        float center = RectTransformUtility.WorldToScreenPoint(null, right.transform.position).x;
-        float y = RectTransformUtility.WorldToScreenPoint(null, right.transform.position).y;
+        float center = RectTransformUtility.WorldToScreenPoint(null, _holder.TransformPoint(right.LayoutTargetPosition)).x;
+        float y = RectTransformUtility.WorldToScreenPoint(null, _holder.TransformPoint(right.LayoutTargetPosition)).y;
         _field.UpdateVisualDrag(middle, new Vector2(center + _field.reorderThreshold - 1f, y), null);
         Assert.That(slot.transform.GetSiblingIndex(), Is.EqualTo(1));
         _field.UpdateVisualDrag(middle, new Vector2(center + _field.reorderThreshold + 1f, y), null);

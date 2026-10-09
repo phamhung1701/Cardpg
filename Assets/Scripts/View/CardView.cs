@@ -66,6 +66,22 @@ public class CardView : MonoBehaviour,
     float _visualRotation;
     float _rotationVelocity;
     Canvas _visualCanvas;
+    Vector3 _layoutTargetPosition;
+    Vector3 _rootVelocity;
+    float _layoutTargetScale = 1f;
+    float _rootScaleVelocity;
+    bool _hasLayoutTarget;
+    bool _hasGrabPoint;
+    bool _suppressClick;
+    Vector2 _grabLocalPoint;
+    Vector2 _dragPointer;
+    RectTransform _dragRect;
+    Camera _dragCamera;
+
+    public Vector3 LayoutTargetPosition => _layoutTargetPosition;
+    public float LayoutTargetScale => _layoutTargetScale;
+    public bool IsDragging => _isDragging;
+    public bool IsHovered => _isPointerOver;
 
     public State CurrentState => _state;
     public bool IsSelected => _isSelected;
@@ -81,6 +97,9 @@ public class CardView : MonoBehaviour,
 
     void OnDisable()
     {
+        CancelActiveDrag();
+        _isPointerOver = false;
+        RefreshState();
         if (CardManager.TryGetInstance(out var manager))
             manager.OnBuildChanged -= RefreshContent;
     }
@@ -186,24 +205,12 @@ public class CardView : MonoBehaviour,
             _visualCanvas.sortingOrder = state switch
             {
                 State.Drag => 21,
-                State.Click => 3,
+                State.Click => _isPointerOver ? 4 : 3,
                 State.Hover => 2,
                 _ => 1
             };
-        _targetRaise = state switch
-        {
-            State.Hover => hoverRaise,
-            State.Click => selectedRaise,
-            State.Drag => 0f, // Keep the dragged card centered on the pointer.
-            _ => 0f
-        };
-        _targetScale = state switch
-        {
-            State.Hover => 1.035f,
-            State.Click => 1.055f,
-            State.Drag => 1.065f,
-            _ => 1f
-        };
+        _targetRaise = _isDragging ? 0f : (_isSelected ? selectedRaise : 0f) + (_isPointerOver ? hoverRaise : 0f);
+        _targetScale = _isDragging ? 1.065f : 1f + (_isSelected ? 0.045f : 0f) + (_isPointerOver ? 0.035f : 0f);
 
         if (face) face.color = state == State.Idle ? new Color(0.97f, 0.97f, 0.97f, 1f) : Color.white;
         if (selectionOutline)
@@ -221,15 +228,34 @@ public class CardView : MonoBehaviour,
         _visualCanvas = visualRoot.GetComponent<Canvas>();
         if (_visualCanvas == null) _visualCanvas = visualRoot.gameObject.AddComponent<Canvas>();
         _visualCanvas.overrideSorting = true;
+        // Keep the base footprint for stable edge hover; raised/rotated artwork must also be clickable.
+        var artworkHit = face != null && face.transform.IsChildOf(visualRoot)
+            ? (Graphic)face : visualRoot.GetComponent<Graphic>();
+        if (artworkHit != null) artworkHit.raycastTarget = true;
         // A nested sorting canvas needs its own raycaster for card art and text to stay clickable.
         if (!visualRoot.TryGetComponent<GraphicRaycaster>(out _))
             visualRoot.gameObject.AddComponent<GraphicRaycaster>();
     }
 
-    void LateUpdate()
+    void LateUpdate() => TickPresentation(Time.unscaledDeltaTime);
+
+    // One owner follows the base root target and layers artwork state on top.
+    public void TickPresentation(float deltaTime)
     {
-        if (visualRoot == null) return;
-        float deltaTime = Time.unscaledDeltaTime;
+        if (deltaTime <= 0f) return;
+        if (_hasLayoutTarget && !_isDragging && homeField != null && transform.parent == homeField.cardsHolder)
+        {
+            transform.localPosition = Vector3.SmoothDamp(transform.localPosition,
+                _layoutTargetPosition, ref _rootVelocity, layoutSmoothTime, Mathf.Infinity, deltaTime);
+            float scale = Mathf.SmoothDamp(transform.localScale.x, _layoutTargetScale,
+                ref _rootScaleVelocity, layoutSmoothTime, Mathf.Infinity, deltaTime);
+            transform.localScale = Vector3.one * scale;
+        }
+        if (visualRoot == null)
+        {
+            if (_isDragging) AlignGrabPoint();
+            return;
+        }
         _layoutOffset = Vector2.SmoothDamp(
             _layoutOffset, Vector2.zero, ref _layoutVelocity,
             layoutSmoothTime, Mathf.Infinity, deltaTime);
@@ -240,7 +266,7 @@ public class CardView : MonoBehaviour,
             _visualScale, _targetScale, ref _scaleVelocity,
             scaleSmoothTime, Mathf.Infinity, deltaTime);
         _visualRotation = Mathf.SmoothDampAngle(_visualRotation,
-            _isDragging ? 0f : _fanRotation, ref _rotationVelocity,
+            _isDragging ? 0f : _fanRotation * (_isPointerOver ? 0.35f : _isSelected ? 0.65f : 1f), ref _rotationVelocity,
             layoutSmoothTime, Mathf.Infinity, deltaTime);
         _presentFanOffset = Vector2.SmoothDamp(_presentFanOffset,
             _isDragging ? Vector2.zero : _fanOffset, ref _fanVelocity,
@@ -248,6 +274,24 @@ public class CardView : MonoBehaviour,
         visualRoot.anchoredPosition = _layoutOffset + _stateOffset + _presentFanOffset;
         visualRoot.localRotation = Quaternion.Euler(0f, 0f, _visualRotation);
         visualRoot.localScale = Vector3.one * _visualScale;
+        // Keep the grabbed artwork point locked even while rotation/lift/scale settle.
+        if (_isDragging) AlignGrabPoint();
+    }
+
+    public void SetLayoutTarget(Vector3 position, Vector2 fanOffset, float rotation, float scale)
+    {
+        _layoutTargetPosition = position;
+        _layoutTargetScale = scale;
+        _hasLayoutTarget = true;
+        SetFanPose(fanOffset, rotation);
+    }
+
+    public void BeginHandEntry(Vector3 localPosition)
+    {
+        transform.localPosition = localPosition;
+        transform.localScale = Vector3.one * _layoutTargetScale * 0.94f;
+        _rootVelocity = Vector3.zero;
+        _rootScaleVelocity = 0f;
     }
 
     public void SetFanPose(Vector2 offset, float rotation)
@@ -264,6 +308,8 @@ public class CardView : MonoBehaviour,
 
     public void OnPointerEnter(PointerEventData eventData)
     {
+        if (_isDragging || GameplayInputGate.IsBlocked ||
+            (CardManager.TryGetInstance(out var manager) && manager.ActiveDragCard != null)) return;
         _isPointerOver = true;
         RefreshState();
     }
@@ -276,12 +322,14 @@ public class CardView : MonoBehaviour,
 
     public void OnPointerDown(PointerEventData eventData)
     {
-        // Click selection is handled by OnPointerClick so beginning a drag does not toggle
-        // an already-selected card out of the intended action set.
+        if (eventData.button != PointerEventData.InputButton.Left) return;
+        _suppressClick = false;
+        CaptureGrabPoint(eventData);
     }
 
     public void OnPointerClick(PointerEventData eventData)
     {
+        if (_isDragging || _suppressClick) return;
         var manager = CardManager.Instance;
         if (manager == null || GameplayInputGate.IsBlocked && !manager.CanRouteHandEnhancementTargetClick ||
             eventData.button != PointerEventData.InputButton.Left) return;
@@ -291,6 +339,7 @@ public class CardView : MonoBehaviour,
     public void OnPointerUp(PointerEventData eventData)
     {
         // Selection is persistent and is owned by CardManager. A normal release does not deselect.
+        if (!_isDragging) _hasGrabPoint = false;
     }
 
     public void OnBeginDrag(PointerEventData eventData)
@@ -300,11 +349,13 @@ public class CardView : MonoBehaviour,
         if (manager == null || manager.dragCanvas == null || homeField == null)
             return;
 
+        if (!_hasGrabPoint) CaptureGrabPoint(eventData);
         if (!manager.PrepareDragSelection(this))
             return;
+        _suppressClick = true;
+        eventData.eligibleForClick = false;
         _originalParent = transform.parent;
         _originalPosition = transform.position;
-        index = transform.GetSiblingIndex();
         _dragHomeField = homeField;
         _dragHomeField.BeginVisualDrag(this);
         _isDragging = true;
@@ -313,19 +364,11 @@ public class CardView : MonoBehaviour,
         transform.SetParent(manager.dragCanvas.transform, true);
         transform.SetAsLastSibling();
         _dragHomeField.RefreshLayout();
-        _layoutOffset = Vector2.zero;
-        _layoutVelocity = Vector2.zero;
-        _stateOffset = Vector2.zero;
-        _stateVelocity = Vector2.zero;
-        _visualRotation = 0f;
-        _rotationVelocity = 0f;
-        _presentFanOffset = Vector2.zero;
-        _fanVelocity = Vector2.zero;
-        if (visualRoot != null)
-        {
-            visualRoot.anchoredPosition = Vector2.zero;
-            visualRoot.localRotation = Quaternion.identity;
-        }
+        _rootVelocity = Vector3.zero;
+        _dragRect = manager.dragCanvas.transform as RectTransform;
+        _dragCamera = manager.dragCanvas.renderMode == RenderMode.ScreenSpaceOverlay
+            ? null : manager.dragCanvas.worldCamera;
+        _isPointerOver = false;
         MoveToPointer(eventData);
 
         if (canvasGroup) canvasGroup.blocksRaycasts = false;
@@ -384,24 +427,31 @@ public class CardView : MonoBehaviour,
         _selectionOrder = 0;
         _isSelected = false;
         _isPointerOver = false;
-        _layoutOffset = Vector2.zero;
-        _layoutVelocity = Vector2.zero;
-        _stateOffset = Vector2.zero;
-        _stateVelocity = Vector2.zero;
-        _visualScale = 1f;
-        _scaleVelocity = 0f;
-        _presentFanOffset = Vector2.zero;
-        _fanVelocity = Vector2.zero;
+        _hasGrabPoint = false;
+        // Targets reset immediately; the current pose settles rather than snapping.
         RefreshState();
+    }
+
+    void CaptureGrabPoint(PointerEventData eventData)
+    {
+        var grabbedRect = visualRoot != null ? visualRoot : transform as RectTransform;
+        _hasGrabPoint = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            grabbedRect, eventData.position, eventData.pressEventCamera, out _grabLocalPoint);
     }
 
     void MoveToPointer(PointerEventData eventData)
     {
-        var dragRect = transform.parent as RectTransform;
-        if (dragRect != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(
-                dragRect, eventData.position, eventData.pressEventCamera, out var pointerWorld))
-            transform.position += pointerWorld - (transform as RectTransform).TransformPoint(
-                (transform as RectTransform).rect.center);
+        _dragPointer = eventData.position;
+        AlignGrabPoint();
+    }
+
+    void AlignGrabPoint()
+    {
+        if (_dragRect == null || !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                _dragRect, _dragPointer, _dragCamera, out var pointerLocal)) return;
+        var grabbedRect = visualRoot != null ? visualRoot : transform as RectTransform;
+        Vector3 grip = _dragRect.InverseTransformPoint(grabbedRect.TransformPoint(_grabLocalPoint));
+        transform.localPosition += new Vector3(pointerLocal.x - grip.x, pointerLocal.y - grip.y, 0f);
     }
 
     CardActionDropTarget FindDropTarget(PointerEventData eventData)
@@ -437,6 +487,11 @@ public class CardView : MonoBehaviour,
     void FinishDrag()
     {
         _isDragging = false;
+        _isPointerOver = false;
+        _hasGrabPoint = false;
+        _dragRect = null;
+        _dragCamera = null;
+        _rootVelocity = Vector3.zero;
         if (canvasGroup) canvasGroup.blocksRaycasts = true;
         CardManager.Instance?.EndCardDrag(this);
         _originalParent = null;

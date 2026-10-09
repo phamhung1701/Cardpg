@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>Presentation order and layout targets only; CardCollection owns every card zone.</summary>
 public class Field : MonoBehaviour
 {
     [Header("References")]
@@ -16,28 +17,23 @@ public class Field : MonoBehaviour
     [Min(0f)] public float fanRise = 14f;
     [Range(0f, 20f)] public float fanAngle = 8f;
 
-    GameObject _dragPlaceholder;
-    HorizontalLayoutGroup _layoutGroup;
+    // Explicit view order, never reconstructed from rendering/sibling order.
     readonly List<CardView> _orderedCards = new();
-    float _lastHolderWidth = -1f;
-    int _lastChildCount = -1;
-
+    HorizontalLayoutGroup _layoutGroup;
+    GameObject _dragPlaceholder;
     CardView _draggedCard;
     int _dragOriginalIndex;
-    readonly Dictionary<CardView, Vector3> _positionsBeforeLayout = new();
+    bool _dragInsideHand;
+    Vector2 _lastHolderSize;
+    int _lastChildCount = -1;
 
     public int CardCount
     {
         get
         {
-            if (cardsHolder == null) return 0;
-
             int count = 0;
-            for (int i = 0; i < cardsHolder.childCount; i++)
-            {
-                if (cardsHolder.GetChild(i).TryGetComponent<CardView>(out _))
-                    count++;
-            }
+            for (int i = 0; i < _orderedCards.Count; i++)
+                if (_orderedCards[i] != null && _orderedCards[i].homeField == this) count++;
             return count;
         }
     }
@@ -45,34 +41,12 @@ public class Field : MonoBehaviour
     public GameObject BeginVisualDrag(CardView card)
     {
         if (!CanReorder(card) || _draggedCard != null) return null;
-
         _draggedCard = card;
-        _dragOriginalIndex = card.transform.GetSiblingIndex();
-        card.index = _dragOriginalIndex;
-
-        _dragPlaceholder = new GameObject($"{card.name} Drag Slot", typeof(RectTransform), typeof(LayoutElement));
+        _dragOriginalIndex = _orderedCards.IndexOf(card);
+        _dragInsideHand = true;
+        // A marker retains the drag slot identity, but never drives layout or ownership.
+        _dragPlaceholder = new GameObject($"{card.name} Drag Slot", typeof(RectTransform));
         _dragPlaceholder.transform.SetParent(cardsHolder, false);
-        _dragPlaceholder.transform.SetSiblingIndex(_dragOriginalIndex);
-
-        var sourceLayout = card.GetComponent<LayoutElement>();
-        var slotLayout = _dragPlaceholder.GetComponent<LayoutElement>();
-        var sourceRect = card.transform as RectTransform;
-        var slotRect = _dragPlaceholder.transform as RectTransform;
-        if (sourceRect != null && slotRect != null)
-        {
-            slotRect.anchorMin = sourceRect.anchorMin;
-            slotRect.anchorMax = sourceRect.anchorMax;
-            slotRect.pivot = sourceRect.pivot;
-            slotRect.sizeDelta = sourceRect.rect.size;
-        }
-        slotLayout.minWidth = sourceLayout != null && sourceLayout.minWidth >= 0 ? sourceLayout.minWidth : sourceRect.rect.width;
-        slotLayout.minHeight = sourceLayout != null && sourceLayout.minHeight >= 0 ? sourceLayout.minHeight : sourceRect.rect.height;
-        slotLayout.preferredWidth = sourceLayout != null && sourceLayout.preferredWidth >= 0 ? sourceLayout.preferredWidth : sourceRect.rect.width;
-        slotLayout.preferredHeight = sourceLayout != null && sourceLayout.preferredHeight >= 0 ? sourceLayout.preferredHeight : sourceRect.rect.height;
-        slotLayout.flexibleWidth = sourceLayout != null ? sourceLayout.flexibleWidth : -1;
-        slotLayout.flexibleHeight = sourceLayout != null ? sourceLayout.flexibleHeight : -1;
-        slotLayout.layoutPriority = sourceLayout != null ? sourceLayout.layoutPriority : 1;
-
         Reflow();
         return _dragPlaceholder;
     }
@@ -81,230 +55,210 @@ public class Field : MonoBehaviour
 
     public void UpdateVisualDrag(CardView card, Vector2 screenPosition, Camera eventCamera)
     {
-        if (card != _draggedCard || _dragPlaceholder == null ||
-            !RectTransformUtility.RectangleContainsScreenPoint(cardsHolder, screenPosition, eventCamera))
-            return;
-
-        int slotIndex = _dragPlaceholder.transform.GetSiblingIndex();
-        int targetIndex = slotIndex;
-        var left = FindCardAtOrBefore(slotIndex - 1, -1);
-        if (left != null && screenPosition.x < GetScreenCenterX(left.transform as RectTransform, eventCamera) - reorderThreshold)
+        if (card != _draggedCard || cardsHolder == null) return;
+        bool inside = ContainsScreenPoint(screenPosition, eventCamera);
+        if (_dragInsideHand != inside)
         {
-            targetIndex = left.transform.GetSiblingIndex();
+            _dragInsideHand = inside;
+            Reflow();
         }
-        else
-        {
-            var right = FindCardAtOrBefore(slotIndex + 1, 1);
-            if (right != null && screenPosition.x > GetScreenCenterX(right.transform as RectTransform, eventCamera) + reorderThreshold)
-                targetIndex = right.transform.GetSiblingIndex();
-        }
+        if (!inside || !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                cardsHolder, screenPosition, eventCamera, out var pointer)) return;
 
-        if (targetIndex == slotIndex) return;
-        CaptureLayoutPositions();
-        _dragPlaceholder.transform.SetSiblingIndex(targetIndex);
+        int slot = _orderedCards.IndexOf(card);
+        int destination = slot;
+        // Use stable targets rather than moving visuals, and canvas-local hysteresis.
+        if (slot > 0 && pointer.x < _orderedCards[slot - 1].LayoutTargetPosition.x - reorderThreshold)
+            destination--;
+        else if (slot < _orderedCards.Count - 1 &&
+                 pointer.x > _orderedCards[slot + 1].LayoutTargetPosition.x + reorderThreshold)
+            destination++;
+        if (destination == slot) return;
+        _orderedCards.RemoveAt(slot);
+        _orderedCards.Insert(destination, card);
         Reflow();
-        AnimateLayoutChanges();
     }
 
-    public bool ContainsScreenPoint(Vector2 screenPosition, Camera eventCamera)
-    {
-        return cardsHolder != null && RectTransformUtility.RectangleContainsScreenPoint(cardsHolder, screenPosition, eventCamera);
-    }
+    public bool ContainsScreenPoint(Vector2 screenPosition, Camera eventCamera) =>
+        cardsHolder != null && RectTransformUtility.RectangleContainsScreenPoint(cardsHolder, screenPosition, eventCamera);
 
     public void EndVisualDrag(CardView card, bool commitReorder)
     {
         if (card != _draggedCard) return;
-
-        Vector3 releaseWorldPosition = card.transform.position;
-        int targetIndex = commitReorder && _dragPlaceholder != null
-            ? _dragPlaceholder.transform.GetSiblingIndex()
-            : _dragOriginalIndex;
-
         if (card != null && card.homeField == this && cardsHolder != null)
         {
+            if (!commitReorder)
+            {
+                _orderedCards.Remove(card);
+                _orderedCards.Insert(Mathf.Clamp(_dragOriginalIndex, 0, _orderedCards.Count), card);
+            }
+            // Keep the release pose. CardView follows the freshly calculated return target.
             card.transform.SetParent(cardsHolder, true);
-            int maxIndex = Mathf.Max(0, cardsHolder.childCount - 1);
-            card.transform.SetSiblingIndex(Mathf.Clamp(targetIndex, 0, maxIndex));
-            card.index = card.transform.GetSiblingIndex();
         }
-
         DestroyPlaceholder();
         _draggedCard = null;
         Reflow();
-        if (card != null)
-            card.ApplyLayoutWorldOffset(releaseWorldPosition - card.transform.position);
     }
 
     public void RemoveVisualDragSlot(CardView card)
     {
         if (card != _draggedCard) return;
-        CaptureLayoutPositions();
+        _orderedCards.Remove(card);
         DestroyPlaceholder();
         _draggedCard = null;
-        if (cardsHolder != null)
-        {
-            Reflow();
-            AnimateLayoutChanges();
-        }
+        Reflow();
     }
 
     public void ReturnCardToStart(CardView card)
     {
         if (!CanReorder(card)) return;
-
         card.transform.SetParent(cardsHolder, true);
-        card.transform.SetSiblingIndex(Mathf.Clamp(card.index, 0, cardsHolder.childCount - 1));
         Reflow();
     }
 
-    public void SetNewCard(CardView card, CardView left, CardView right)
-    {
-        // Cross-field ownership transfers are not supported. New cards enter through AddCard.
-        if (!CanReorder(card)) return;
-        RepositionCard(card, left, right);
-    }
+    public void SetNewCard(CardView card, CardView left, CardView right) => RepositionCard(card, left, right);
 
     public void RepositionCard(CardView card, CardView left, CardView right)
     {
         if (!CanReorder(card)) return;
-
+        _orderedCards.Remove(card);
+        int leftIndex = left != null ? _orderedCards.IndexOf(left) : -1;
+        int rightIndex = right != null ? _orderedCards.IndexOf(right) : -1;
+        int target = leftIndex >= 0 && rightIndex >= 0 ? (leftIndex + rightIndex) / 2 + 1
+            : leftIndex >= 0 ? leftIndex + 1 : rightIndex >= 0 ? rightIndex : _orderedCards.Count;
+        _orderedCards.Insert(Mathf.Clamp(target, 0, _orderedCards.Count), card);
         card.transform.SetParent(cardsHolder, true);
-
-        if (!IsCardInThisField(left)) left = null;
-        if (!IsCardInThisField(right)) right = null;
-
-        int targetIndex;
-        if (left != null && right != null)
-        {
-            targetIndex = (left.transform.GetSiblingIndex() + right.transform.GetSiblingIndex()) / 2 + 1;
-        }
-        else if (left != null)
-        {
-            targetIndex = left.transform.GetSiblingIndex() + 1;
-        }
-        else if (right != null)
-        {
-            targetIndex = right.transform.GetSiblingIndex();
-        }
-        else
-        {
-            targetIndex = cardsHolder.childCount - 1;
-        }
-
-        targetIndex = Mathf.Clamp(targetIndex, 0, cardsHolder.childCount - 1);
-        card.transform.SetSiblingIndex(targetIndex);
-        card.index = card.transform.GetSiblingIndex();
         Reflow();
     }
 
     public void AddCard(CardView card, CardInstance data)
     {
         if (card == null || cardsHolder == null) return;
-
-        CaptureLayoutPositions();
         card.transform.SetParent(cardsHolder, false);
-        card.transform.SetAsLastSibling();
         card.homeField = this;
-        card.index = card.transform.GetSiblingIndex();
+        if (!_orderedCards.Contains(card)) _orderedCards.Add(card);
         card.Setup(data);
         Reflow();
-        AnimateLayoutChanges();
+        // Short, local entry from the draw-pile side; no dependency on gameplay timing.
+        card.BeginHandEntry(new Vector3(cardsHolder.rect.xMax + 35f,
+            cardsHolder.rect.center.y - cardsHolder.rect.height * 0.12f, 0f));
     }
 
     public void ClearCards()
     {
         if (cardsHolder == null) return;
-
-        for (int i = cardsHolder.childCount - 1; i >= 0; i--)
+        _draggedCard?.CancelActiveDrag();
+        for (int i = _orderedCards.Count - 1; i >= 0; i--)
         {
-            var child = cardsHolder.GetChild(i);
-            if (!child.TryGetComponent<CardView>(out var card)) continue;
-
+            var card = _orderedCards[i];
+            if (card == null) continue;
             card.homeField = null;
-            child.SetParent(null, false);
-            Destroy(child.gameObject);
+            card.transform.SetParent(null, false);
+            if (Application.isPlaying) Destroy(card.gameObject);
+            else DestroyImmediate(card.gameObject);
         }
+        _orderedCards.Clear();
+        DestroyPlaceholder();
+        _draggedCard = null;
         Reflow();
     }
 
-    // Presentation only: CardCollection's hand and combat selection order remain untouched.
     public void SortByRank() => SortHand(true);
     public void SortBySuit() => SortHand(false);
 
     void SortHand(bool rankFirst)
     {
         if (cardsHolder == null || _draggedCard != null) return;
-        _orderedCards.Clear();
-        for (int i = 0; i < cardsHolder.childCount; i++)
-            if (cardsHolder.GetChild(i).TryGetComponent<CardView>(out var card) &&
-                card.homeField == this && card.data != null)
-                _orderedCards.Add(card);
-
-        CaptureLayoutPositions();
-        // List.Sort is not stable; current order breaks identical rank/suit ties.
-        var originalOrder = new Dictionary<CardView, int>(_orderedCards.Count);
-        for (int i = 0; i < _orderedCards.Count; i++) originalOrder[_orderedCards[i]] = i;
-        _orderedCards.Sort((a, b) =>
+        PruneDepartedCards();
+        // Stable insertion sort: tiny hand, no allocation, identical rank/suit keep their order.
+        for (int i = 1; i < _orderedCards.Count; i++)
         {
-            int primary = rankFirst ? ((int)a.data.Rank).CompareTo((int)b.data.Rank)
-                : ((int)a.data.Suit).CompareTo((int)b.data.Suit);
-            int secondary = rankFirst ? ((int)a.data.Suit).CompareTo((int)b.data.Suit)
-                : ((int)a.data.Rank).CompareTo((int)b.data.Rank);
-            return primary != 0 ? primary : secondary != 0 ? secondary
-                : originalOrder[a].CompareTo(originalOrder[b]);
-        });
-        for (int i = 0; i < _orderedCards.Count; i++)
-            _orderedCards[i].transform.SetSiblingIndex(i);
+            var card = _orderedCards[i];
+            int j = i - 1;
+            while (j >= 0 && CompareCards(_orderedCards[j], card, rankFirst) > 0)
+            {
+                _orderedCards[j + 1] = _orderedCards[j];
+                j--;
+            }
+            _orderedCards[j + 1] = card;
+        }
         Reflow();
-        AnimateLayoutChanges();
+    }
+
+    static int CompareCards(CardView a, CardView b, bool rankFirst)
+    {
+        if (a.data == null || b.data == null) return 0;
+        int primary = rankFirst ? a.data.Rank.CompareTo(b.data.Rank) : a.data.Suit.CompareTo(b.data.Suit);
+        return primary != 0 ? primary : rankFirst ? a.data.Suit.CompareTo(b.data.Suit) : a.data.Rank.CompareTo(b.data.Rank);
     }
 
     void LateUpdate()
     {
         if (cardsHolder == null) return;
-        if (_lastChildCount == cardsHolder.childCount &&
-            Mathf.Abs(_lastHolderWidth - cardsHolder.rect.width) < 0.1f) return;
-        CaptureLayoutPositions();
-        Reflow();
-        AnimateLayoutChanges();
+        if (_lastChildCount != cardsHolder.childCount ||
+            (_lastHolderSize - cardsHolder.rect.size).sqrMagnitude > 0.01f)
+            Reflow();
+    }
+
+    void PruneDepartedCards()
+    {
+        for (int i = _orderedCards.Count - 1; i >= 0; i--)
+            if (_orderedCards[i] == null || _orderedCards[i].homeField != this)
+                _orderedCards.RemoveAt(i);
     }
 
     void Reflow()
     {
         if (cardsHolder == null) return;
-        _layoutGroup = cardsHolder.GetComponent<HorizontalLayoutGroup>();
-        int count = cardsHolder.childCount;
-        if (_layoutGroup != null && count > 1)
+        PruneDepartedCards();
+        if (_layoutGroup == null) _layoutGroup = cardsHolder.GetComponent<HorizontalLayoutGroup>();
+        if (_layoutGroup != null) _layoutGroup.enabled = false;
+        int count = _orderedCards.Count - (_draggedCard != null && !_dragInsideHand ? 1 : 0);
+        float cardWidth = 1f, cardHeight = 1f;
+        for (int i = 0; i < _orderedCards.Count; i++)
         {
-            float totalWidth = 0f;
-            float narrowestWidth = float.MaxValue;
-            for (int i = 0; i < count; i++)
-            {
-                var child = cardsHolder.GetChild(i) as RectTransform;
-                if (child == null) continue;
-                float width = Mathf.Max(child.rect.width, LayoutUtility.GetPreferredWidth(child));
-                totalWidth += width;
-                narrowestWidth = Mathf.Min(narrowestWidth, width);
-            }
-            float usableWidth = Mathf.Max(0f, cardsHolder.rect.width -
-                _layoutGroup.padding.left - _layoutGroup.padding.right);
-            float spacing = Mathf.Min(maximumSpacing, (usableWidth - totalWidth) / (count - 1));
-            _layoutGroup.spacing = Mathf.Max(minimumVisibleStep - narrowestWidth, spacing);
+            var rect = (RectTransform)_orderedCards[i].transform;
+            cardWidth = Mathf.Max(cardWidth, rect.rect.width);
+            cardHeight = Mathf.Max(cardHeight, rect.rect.height);
         }
-
-        LayoutRebuilder.ForceRebuildLayoutImmediate(cardsHolder);
-        int cardIndex = 0;
-        int cardCount = CardCount;
-        for (int i = 0; i < count; i++)
+        float leftPadding = _layoutGroup != null ? _layoutGroup.padding.left : 0f;
+        float rightPadding = _layoutGroup != null ? _layoutGroup.padding.right : 0f;
+        float usableWidth = Mathf.Max(1f, cardsHolder.rect.width - leftPadding - rightPadding);
+        // Reserve a little room for fan rotation/selection. Very large hands scale gently to fit.
+        float envelopeWidth = cardWidth + cardHeight * Mathf.Sin(fanAngle * Mathf.Deg2Rad) + 12f;
+        float minimumSpan = envelopeWidth + Mathf.Max(0, count - 1) * minimumVisibleStep;
+        float scale = Mathf.Min(1f, usableWidth / Mathf.Max(1f, minimumSpan),
+            Mathf.Max(1f, cardsHolder.rect.height - fanRise) / cardHeight);
+        float maxStep = Mathf.Max(minimumVisibleStep, cardWidth + maximumSpacing);
+        float step = count > 1 ? Mathf.Min(maxStep * scale,
+            Mathf.Max(0f, usableWidth - envelopeWidth * scale) / (count - 1)) : 0f;
+        float centerX = cardsHolder.rect.center.x + (leftPadding - rightPadding) * 0.5f;
+        int occupiedIndex = 0;
+        int siblingIndex = 0;
+        for (int i = 0; i < _orderedCards.Count; i++)
         {
-            if (!cardsHolder.GetChild(i).TryGetComponent<CardView>(out var card)) continue;
-            float t = cardCount > 1 ? (2f * cardIndex / (cardCount - 1) - 1f) : 0f;
-            card.SetFanPose(new Vector2(0f, fanRise * (1f - t * t)), -fanAngle * t);
+            var card = _orderedCards[i];
             card.index = i;
-            cardIndex++;
+            bool dragged = card == _draggedCard;
+            if (dragged && !_dragInsideHand) continue;
+            float t = count > 1 ? 2f * occupiedIndex / (count - 1) - 1f : 0f;
+            var position = new Vector3(centerX + (occupiedIndex - (count - 1) * 0.5f) * step,
+                cardsHolder.rect.center.y, 0f);
+            card.SetLayoutTarget(position, new Vector2(0f, fanRise * (1f - t * t)), -fanAngle * t, scale);
+            if (dragged)
+            {
+                if (_dragPlaceholder != null)
+                {
+                    _dragPlaceholder.transform.SetSiblingIndex(siblingIndex++);
+                    _dragPlaceholder.transform.localPosition = position;
+                }
+            }
+            else if (card.transform.parent == cardsHolder)
+                card.transform.SetSiblingIndex(siblingIndex++);
+            occupiedIndex++;
         }
-        _lastHolderWidth = cardsHolder.rect.width;
-        _lastChildCount = count;
+        _lastHolderSize = cardsHolder.rect.size;
+        _lastChildCount = cardsHolder.childCount;
     }
 
     void DestroyPlaceholder()
@@ -314,61 +268,10 @@ public class Field : MonoBehaviour
         _dragPlaceholder = null;
         placeholder.transform.SetParent(null, false);
         placeholder.SetActive(false);
-        if (Application.isPlaying)
-            Destroy(placeholder);
-        else
-            DestroyImmediate(placeholder);
+        if (Application.isPlaying) Destroy(placeholder);
+        else DestroyImmediate(placeholder);
     }
 
-    void CaptureLayoutPositions()
-    {
-        _positionsBeforeLayout.Clear();
-        if (cardsHolder == null) return;
-        for (int i = 0; i < cardsHolder.childCount; i++)
-        {
-            if (cardsHolder.GetChild(i).TryGetComponent<CardView>(out var card) && card != _draggedCard)
-                _positionsBeforeLayout[card] = card.transform.position;
-        }
-    }
-
-    void AnimateLayoutChanges()
-    {
-        foreach (var pair in _positionsBeforeLayout)
-        {
-            if (pair.Key == null) continue;
-            Vector3 offset = pair.Value - pair.Key.transform.position;
-            if (offset.sqrMagnitude > 0.01f)
-                pair.Key.ApplyLayoutWorldOffset(offset);
-        }
-        _positionsBeforeLayout.Clear();
-    }
-
-    CardView FindCardAtOrBefore(int startIndex, int direction)
-    {
-        if (cardsHolder == null) return null;
-        for (int i = startIndex; i >= 0 && i < cardsHolder.childCount; i += direction)
-        {
-            var child = cardsHolder.GetChild(i);
-            if (child == _dragPlaceholder?.transform) continue;
-            if (child.TryGetComponent<CardView>(out var card) && card != _draggedCard)
-                return card;
-        }
-        return null;
-    }
-
-    static float GetScreenCenterX(RectTransform rect, Camera eventCamera)
-    {
-        if (rect == null) return 0f;
-        return RectTransformUtility.WorldToScreenPoint(eventCamera, rect.TransformPoint(rect.rect.center)).x;
-    }
-
-    bool CanReorder(CardView card)
-    {
-        return card != null && cardsHolder != null && card.homeField == this;
-    }
-
-    bool IsCardInThisField(CardView card)
-    {
-        return card != null && card.homeField == this && card.transform.parent == cardsHolder;
-    }
+    bool CanReorder(CardView card) => card != null && cardsHolder != null &&
+        card.homeField == this && _orderedCards.Contains(card);
 }

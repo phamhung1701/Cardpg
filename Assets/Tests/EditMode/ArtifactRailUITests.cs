@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using TMPro;
@@ -70,6 +71,23 @@ public sealed class ArtifactRailUITests
     }
 
     [Test]
+    public void EmptyInventory_ShowsFiveBlankSlotsAndHidesMergeControls()
+    {
+        Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_ARTIFACT_CAPACITY));
+        for (int i = 0; i < _slots.childCount; i++)
+        {
+            var slot = _slots.GetChild(i).GetComponent<ArtifactIconSlotUI>();
+            Assert.That(_slots.GetChild(i).gameObject.activeSelf, Is.True);
+            Assert.That(slot.Artifact, Is.Null);
+            Assert.That(string.IsNullOrEmpty(slot.GetComponentInChildren<TMP_Text>(true).text), Is.True);
+        }
+        Assert.That(_mergeMode.gameObject.activeSelf, Is.False);
+        Assert.That(_mergeConfirm.gameObject.activeSelf, Is.False);
+        Assert.That(_mergeCancel.gameObject.activeSelf, Is.False);
+        Assert.That(_mergeStatus.gameObject.activeSelf, Is.False);
+    }
+
+    [Test]
     public void RuntimeControlsAreCreatedInTheRailAndWireSelectionLifecycle()
     {
         InvokeRail("OnDisable");
@@ -85,6 +103,11 @@ public sealed class ArtifactRailUITests
         var slots = CreateUI("Runtime Slots");
         slots.transform.SetParent(viewport.transform, false);
         _rail.slotsRoot = slots.GetComponent<RectTransform>();
+        _cards.ownedArtifacts.AddRange(new[]
+        {
+            Artifact("merge-a", "Merge A", "A", ""),
+            Artifact("merge-b", "Merge B", "B", "")
+        });
         InvokeRail("OnEnable");
 
         Assert.That(_rail.mergeModeButton, Is.Not.Null);
@@ -111,7 +134,8 @@ public sealed class ArtifactRailUITests
         next.tier = 2;
         next.upgradeFromId = "family-common";
         _cards.relicCatalog.AddRange(new[] { common, next });
-        _cards.ownedArtifacts.AddRange(new[] { common, common });
+        _cards.BuyArtifact(common, 0);
+        _cards.BuyArtifact(common, 0);
         InvokeRail("Refresh");
         _mergeMode.onClick.Invoke();
         var first = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
@@ -134,7 +158,8 @@ public sealed class ArtifactRailUITests
         var secondArtifact = Artifact("two", "Two", "2", "Two detail");
         secondArtifact.canonicalId = "family-two";
         _cards.relicCatalog.AddRange(new[] { firstArtifact, secondArtifact });
-        _cards.ownedArtifacts.AddRange(new[] { firstArtifact, secondArtifact });
+        Assert.That(_cards.BuyArtifact(firstArtifact, 0), Is.True);
+        Assert.That(_cards.BuyArtifact(secondArtifact, 0), Is.True);
         InvokeRail("Refresh");
         _mergeMode.onClick.Invoke();
         _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>().OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
@@ -149,7 +174,13 @@ public sealed class ArtifactRailUITests
         var artifact = Artifact("relic-1", "Hidden Name", "★", "Detail body");
         Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
         Assert.That(_capacity.text, Does.Contain("1/5"));
-        Assert.That(_slots.childCount, Is.EqualTo(1));
+                Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_ARTIFACT_CAPACITY));
+        Assert.That(Enumerable.Range(0, CardManager.BASE_ARTIFACT_CAPACITY)
+            .All(i => _slots.GetChild(i).gameObject.activeSelf), Is.True,
+            "The rail keeps a stable five-slot inventory footprint.");
+        Assert.That(Enumerable.Range(1, CardManager.BASE_ARTIFACT_CAPACITY - 1)
+            .Select(i => _slots.GetChild(i).GetComponent<ArtifactIconSlotUI>().Artifact),
+            Is.All.Null, "Unowned capacity remains represented by quiet empty slots.");
         var slot = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
         Assert.That(slot.Artifact, Is.SameAs(artifact));
         Assert.That(slot.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("★"));
@@ -179,16 +210,17 @@ public sealed class ArtifactRailUITests
         slot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         _cards.Reset();
         Assert.That(_capacity.text, Does.Contain("0/5"));
-        Assert.That(slot.gameObject.activeSelf, Is.False);
+        Assert.That(slot.gameObject.activeSelf, Is.True, "The same slot remains visible as an empty inventory slot.");
+        Assert.That(slot.Artifact, Is.Null);
         Assert.That(_detailPanel.activeSelf, Is.False);
         _cards.BuyArtifact(second, 0);
-        Assert.That(_slots.childCount, Is.EqualTo(1));
+        Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_ARTIFACT_CAPACITY));
         Assert.That(slot.Artifact, Is.SameAs(second));
         Assert.That(slot.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("B"));
     }
 
     void InvokeRail(string method) => typeof(ArtifactRailUI)
-        .GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)
+        .GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
         .Invoke(_rail, null);
 
     GameObject Create(string name)

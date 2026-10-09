@@ -94,8 +94,8 @@ public sealed class DrawDeckStackUI : MonoBehaviour
             var rect = (RectTransform)layer.transform;
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(6f - i * 3f, 6f + i * 3f);
-            rect.offsetMax = new Vector2(-6f - i * 3f, -6f + i * 3f);
+            rect.offsetMin = new Vector2(5f - i * 2f, 5f + i * 3f);
+            rect.offsetMax = new Vector2(-5f - i * 2f, -5f + i * 3f);
             _layers[i] = layer.GetComponent<Image>();
             _layers[i].raycastTarget = false;
         }

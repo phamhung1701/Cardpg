@@ -189,6 +189,89 @@ public sealed class Phase7AInteractionTests
         Assert.That(_field.cardsHolder.childCount, Is.EqualTo(holderChildren));
     }
 
+    [TestCase(1f, 1f)]
+    [TestCase(0.75f, 1.25f)]
+    public void PointerDownDrag_KeepsOffCenterVisualGripUnderPointerAcrossCanvasScales_AndCancelRestores(
+        float handCanvasScale, float dragCanvasScale)
+    {
+        _combat.StartEnemy(CreateEnemyRuntime("Drag Regression Target", 30, 4));
+        var views = HandViews();
+        var dragged = views[3];
+        var visualObject = CreateGameObject("Off-center Card Visual", typeof(RectTransform), typeof(Image));
+        visualObject.transform.SetParent(dragged.transform, false);
+        dragged.visualRoot = (RectTransform)visualObject.transform;
+        dragged.visualRoot.sizeDelta = new Vector2(132f, 184f);
+        _field.transform.root.localScale = Vector3.one * handCanvasScale;
+        _dragCanvas.transform.localScale = Vector3.one * dragCanvasScale;
+
+        var originalParent = dragged.transform.parent;
+        int originalIndex = dragged.transform.GetSiblingIndex();
+        _cards.ToggleCardSelection(dragged);
+        for (int i = 0; i < 60; i++) dragged.TickPresentation(1f / 60f);
+        Vector2 gripLocal = new(dragged.visualRoot.rect.width * 0.31f, -dragged.visualRoot.rect.height * 0.23f);
+        Vector2 pointerPosition = RectTransformUtility.WorldToScreenPoint(null,
+            dragged.visualRoot.TransformPoint(gripLocal));
+        var pointer = new UnityEngine.EventSystems.PointerEventData(
+            UnityEngine.EventSystems.EventSystem.current)
+        {
+            button = UnityEngine.EventSystems.PointerEventData.InputButton.Left,
+            position = pointerPosition,
+            pressPosition = pointerPosition
+        };
+
+        dragged.OnPointerDown(pointer);
+        dragged.OnBeginDrag(pointer);
+        Assert.That(dragged.IsDragging, Is.True);
+        Assert.That(dragged.transform.parent, Is.SameAs(_dragCanvas.transform));
+        AssertGripAtPointer(dragged, gripLocal, pointerPosition, "Begin drag must not jump the artwork grip.");
+
+        pointerPosition += new Vector2(140f, 95f);
+        pointer.position = pointerPosition;
+        dragged.OnDrag(pointer);
+        for (int i = 0; i < 24; i++)
+            dragged.TickPresentation(1f / 60f);
+        AssertGripAtPointer(dragged, gripLocal, pointerPosition,
+            "The captured visual grip must remain under the pointer while presentation rotation/scale settle.");
+
+        dragged.CancelActiveDrag();
+        Assert.That(dragged.IsDragging, Is.False);
+        Assert.That(dragged.transform.parent, Is.SameAs(originalParent));
+        Assert.That(dragged.transform.GetSiblingIndex(), Is.EqualTo(originalIndex));
+        Assert.That(dragged.canvasGroup.blocksRaycasts, Is.True);
+        Assert.That(_cards.ActiveDragCard, Is.Null);
+        Assert.That(_cards.SelectedCards, Is.EqualTo(new[] { dragged }));
+
+        dragged.OnPointerClick(pointer);
+        Assert.That(_cards.SelectedCards, Is.EqualTo(new[] { dragged }),
+            "A cancelled drag must suppress the trailing click rather than toggling selection.");
+    }
+
+    [Test]
+    public void SortingPresentation_DoesNotChangeHandOrSelectedCardOrder()
+    {
+        _combat.StartEnemy(CreateEnemyRuntime("Sort Regression Target", 30, 4));
+        var views = HandViews();
+        var selected = views[1];
+        _cards.ToggleCardSelection(selected);
+        var handBefore = _cards.hand.ToArray();
+        var selectedBefore = _cards.SelectedCards.ToArray();
+
+        _field.SortByRank();
+
+        Assert.That(_cards.hand, Is.EqualTo(handBefore));
+        Assert.That(_cards.SelectedCards, Is.EqualTo(selectedBefore));
+        _field.SortBySuit();
+        Assert.That(_cards.hand, Is.EqualTo(handBefore));
+        Assert.That(_cards.SelectedCards, Is.EqualTo(selectedBefore));
+    }
+
+    static void AssertGripAtPointer(CardView card, Vector2 localGrip, Vector2 screenPointer, string message)
+    {
+        Vector2 gripScreen = RectTransformUtility.WorldToScreenPoint(null,
+            card.visualRoot.TransformPoint(localGrip));
+        Assert.That(Vector2.Distance(gripScreen, screenPointer), Is.LessThan(0.1f), message);
+    }
+
     [Test]
     public void CancelAndReset_ClearTransientSelectionWithoutCorruptingZones()
     {

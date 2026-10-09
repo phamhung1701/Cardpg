@@ -181,7 +181,11 @@ public class DeckViewerUI : MonoBehaviour
             rect.anchoredPosition = new Vector2(startX + column * (cardWidth + horizontalSpacing), -42f - row * rowHeight);
             rect.localRotation = Quaternion.Euler(0f, 0f, centeredColumn * -2f);
             foreach (var canvas in snapshot.GetComponentsInChildren<Canvas>(true))
-                canvas.enabled = false;
+                canvas.overrideSorting = false;
+            // Snapshot artwork must join the clipped modal Canvas. The hand's nested canvases
+            // sort independently for live interaction; leaving that override on puts their order
+            // behind this higher-sorting modal Canvas and hides every card behind the backing.
+            // Preserve each nested Canvas for drawing, but disable snapshot input below.
             foreach (var graphic in snapshot.GetComponentsInChildren<Graphic>(true))
                 graphic.raycastTarget = false;
             var raycaster = snapshot.GetComponentInChildren<GraphicRaycaster>(true);

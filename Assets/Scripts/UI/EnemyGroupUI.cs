@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Owns the dynamic enemy presentation for the active encounter.
@@ -15,6 +16,8 @@ public class EnemyGroupUI : MonoBehaviour
     readonly HashSet<EnemyRuntime> _defeating = new();
     CombatManager _combat;
     RunManager _run;
+    Vector2 _lastLayoutSize;
+    int _lastLayoutCount = -1;
 
     public IReadOnlyList<EnemyDisplayUI> ActiveViews => _activeViews;
     public bool IsDefeatPresentationBusy => _defeating.Count > 0;
@@ -78,7 +81,9 @@ public class EnemyGroupUI : MonoBehaviour
 
     System.Collections.IEnumerator RemoveDefeatedView(EnemyRuntime enemy, EnemyDisplayUI view)
     {
-        yield return new WaitForSeconds(0.48f);
+        // Tie lane removal and the encounter-presentation barrier to the actual cue completion,
+        // not a parallel timer that can finish a frame before the visual fade does.
+        while (view != null && view.IsDefeatCuePlaying) yield return null;
         _defeating.Remove(enemy);
         if (view != null)
         {
@@ -104,11 +109,15 @@ public class EnemyGroupUI : MonoBehaviour
 
         var desired = new List<EnemyRuntime>(enemyCount + _defeating.Count);
         for (int i = 0; i < enemyCount; i++) desired.Add(enemies[i]);
+        // Keep each fading view in its previous lane while survivors are laid out around it.
+        // Appending defeated enemies to the desired list makes a killed middle/left target slide
+        // to the rightmost slot as soon as RemoveEnemy raises OnEnemiesChanged.
         for (int i = 0; i < _activeViews.Count; i++)
         {
             var view = _activeViews[i];
-            if (view != null && _defeating.Contains(view.DisplayedEnemy) && !desired.Contains(view.DisplayedEnemy))
-                desired.Add(view.DisplayedEnemy);
+            if (view != null && _defeating.Contains(view.DisplayedEnemy) &&
+                !desired.Contains(view.DisplayedEnemy))
+                desired.Insert(Mathf.Clamp(i, 0, desired.Count), view.DisplayedEnemy);
         }
 
         // Reconcile by runtime identity so simultaneous kills never animate the wrong recycled panel.
@@ -134,6 +143,57 @@ public class EnemyGroupUI : MonoBehaviour
             if (!used.Contains(_activeViews[i]) && _activeViews[i] != null) Destroy(_activeViews[i].gameObject);
         _activeViews.Clear();
         _activeViews.AddRange(orderedViews);
+        FitViewsToContainer();
+    }
+
+    void LateUpdate()
+    {
+        if (enemyContainer == null) return;
+        if (_lastLayoutCount != _activeViews.Count ||
+            (_lastLayoutSize - enemyContainer.rect.size).sqrMagnitude > 0.25f)
+            FitViewsToContainer();
+    }
+
+    void FitViewsToContainer()
+    {
+        if (enemyContainer == null || enemyViewPrefab == null || _activeViews.Count == 0) return;
+        var prefabRect = enemyViewPrefab.transform as RectTransform;
+        var prefabElement = enemyViewPrefab.GetComponent<LayoutElement>();
+        float baseWidth = prefabElement != null && prefabElement.preferredWidth > 0f
+            ? prefabElement.preferredWidth : prefabRect != null ? prefabRect.rect.width : 440f;
+        float baseHeight = prefabElement != null && prefabElement.preferredHeight > 0f
+            ? prefabElement.preferredHeight : prefabRect != null ? prefabRect.rect.height : 300f;
+        var layout = enemyContainer.GetComponent<HorizontalLayoutGroup>();
+        float spacing = layout != null ? layout.spacing : 0f;
+        float padding = layout != null ? layout.padding.left + layout.padding.right : 0f;
+        float available = Mathf.Max(1f, enemyContainer.rect.width - padding - spacing * (_activeViews.Count - 1));
+        float width = Mathf.Min(baseWidth, available / _activeViews.Count);
+        float scale = width / Mathf.Max(1f, baseWidth);
+        float height = baseHeight * scale;
+        float baseMinWidth = prefabElement != null ? Mathf.Max(0f, prefabElement.minWidth) : 0f;
+        float baseMinHeight = prefabElement != null ? Mathf.Max(0f, prefabElement.minHeight) : 0f;
+
+        for (int i = 0; i < _activeViews.Count; i++)
+        {
+            var view = _activeViews[i];
+            if (view == null) continue;
+            var rect = view.transform as RectTransform;
+            if (rect != null)
+            {
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            }
+            var element = view.GetComponent<LayoutElement>();
+            if (element != null)
+            {
+                element.minWidth = Mathf.Min(baseMinWidth, width);
+                element.preferredWidth = width;
+                element.minHeight = Mathf.Min(baseMinHeight, height);
+                element.preferredHeight = height;
+            }
+        }
+        _lastLayoutSize = enemyContainer.rect.size;
+        _lastLayoutCount = _activeViews.Count;
     }
 
     void EnsureViewCount(int requiredCount)

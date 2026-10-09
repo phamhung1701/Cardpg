@@ -250,13 +250,13 @@ public class RunEventUI : MonoBehaviour
         if (header == null && descriptionLabel != null) header = descriptionLabel.rectTransform;
         if (header == null && titleLabel != null) header = titleLabel.rectTransform;
 
-        float horizontalInset = cardRect.width * 0.06f;
-        float bottom = cardRect.yMin + cardRect.height * 0.035f;
+        float horizontalInset = cardRect.width * 0.04f;
+        float bottom = cardRect.yMin + cardRect.height * 0.025f;
         float top = cardRect.yMax - cardRect.height * 0.08f;
         if (header != null)
         {
             Bounds headerBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(card, header);
-            top = Mathf.Min(top, headerBounds.min.y - cardRect.height * 0.025f);
+            top = Mathf.Min(top, headerBounds.min.y - cardRect.height * 0.02f);
         }
         if (top <= bottom) return;
 

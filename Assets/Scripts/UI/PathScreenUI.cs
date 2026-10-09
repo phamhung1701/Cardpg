@@ -25,6 +25,14 @@ public class PathScreenUI : MonoBehaviour
     [Min(1f)] public float laneSpacing = 135f;
 
     readonly Dictionary<int, Vector2> _nodePositions = new();
+    Vector2 _lastMapSize;
+
+    void LateUpdate()
+    {
+        if (panel != null && panel.activeInHierarchy && mapContainer is RectTransform bounds &&
+            (bounds.rect.size - _lastMapSize).sqrMagnitude > 1f)
+            BuildMap();
+    }
 
     readonly struct RouteEdge
     {
@@ -210,6 +218,7 @@ public class PathScreenUI : MonoBehaviour
     void BuildMap()
     {
         if (mapContainer is not RectTransform bounds || nodeButtonPrefab == null) return;
+        _lastMapSize = bounds.rect.size;
 
         foreach (Transform child in mapContainer)
             Destroy(child.gameObject);
@@ -218,7 +227,7 @@ public class PathScreenUI : MonoBehaviour
         var run = RunManager.Instance;
         if (run == null || run.currentPath == null || run.currentPath.Count == 0) return;
 
-        Vector2 nodeSize = new Vector2(Mathf.Min(145f, Mathf.Max(110f, bounds.rect.width / 8f)), 68f);
+        Vector2 nodeSize = new Vector2(Mathf.Clamp(bounds.rect.width / 12f, 62f, 88f), 62f);
         float halfH = nodeSize.y * 0.5f;
         float usableWidth = Mathf.Max(0f, bounds.rect.width - nodeSize.x - 2f * horizontalInset);
         float xStep = usableWidth / (RunMapGenerator.RouteColumnCount + 1);
@@ -283,6 +292,10 @@ public class PathScreenUI : MonoBehaviour
                 button.interactable = !node.completed && node.accessible;
                 var image = buttonObject.GetComponent<Image>();
                 if (image) image.color = GetNodeColor(node);
+                var label = buttonObject.GetComponentInChildren<TMP_Text>();
+                if (label) label.color = node.accessible && !node.completed
+                    ? new Color(1f, 0.94f, 0.76f) : new Color(0.64f, 0.71f, 0.73f);
+                buttonObject.transform.localScale = Vector3.one * (node.accessible && !node.completed ? 1.08f : 1f);
                 int id = node.id;
                 button.onClick.AddListener(() => run.OnPathChosen(id));
             }
@@ -325,8 +338,8 @@ public class PathScreenUI : MonoBehaviour
 
     void CreateConnection(RouteEdge edge, Vector2 nodeSize)
     {
-        CreateLineSegment(edge.from, edge.to, nodeSize.y * 0.0735f,
-            new Color(0.52f, 0.62f, 0.78f, 1f), "RouteConnection");
+        CreateLineSegment(edge.from, edge.to, 2f,
+            new Color(0.43f, 0.57f, 0.59f, 0.42f), "RouteConnection");
     }
 
     void DrawCrossingBridges(IReadOnlyList<RouteEdge> edges, RectTransform bounds, Vector2 nodeSize)
@@ -361,7 +374,9 @@ public class PathScreenUI : MonoBehaviour
                 gapImage.sprite = cardImage.sprite;
                 gapImage.type = cardImage.type;
                 gapImage.pixelsPerUnitMultiplier = cardImage.pixelsPerUnitMultiplier;
-                gapImage.color = cardImage.color;
+                // With an unframed map, crossings mask against the tabletop rather than a panel.
+                var boardImage = transform.Find("Background")?.GetComponent<Image>();
+                gapImage.color = boardImage != null ? boardImage.color : cardImage.color;
                 gapImage.raycastTarget = false;
 
                 DrawBridgeArc(crossing, overpass, nodeSize);
@@ -387,13 +402,13 @@ public class PathScreenUI : MonoBehaviour
         Vector2 end = crossing + direction * halfSpan;
         Vector2 control = crossing + normal * (nodeSize.y * 0.28f);
         Vector2 previous = start;
-        Color lineColor = new Color(0.52f, 0.62f, 0.78f, 1f);
+        Color lineColor = new Color(0.43f, 0.57f, 0.59f, 0.65f);
         for (int i = 1; i <= 4; i++)
         {
             float t = i / 4f;
             float inverse = 1f - t;
             Vector2 point = inverse * inverse * start + 2f * inverse * t * control + t * t * end;
-            CreateLineSegment(previous, point, nodeSize.y * 0.10f, lineColor, "RouteCrossingBridge");
+            CreateLineSegment(previous, point, 2.5f, lineColor, "RouteCrossingBridge");
             previous = point;
         }
     }
@@ -455,7 +470,7 @@ public class PathScreenUI : MonoBehaviour
         rect.sizeDelta = new Vector2(150f, 42f);
 
         var image = control.GetComponent<Image>();
-        image.color = new Color(0.12f, 0.17f, 0.25f, 0.96f);
+        image.color = new Color(0.12f, 0.17f, 0.19f, 0.3f);
         var controlCanvas = control.GetComponent<Canvas>();
         controlCanvas.overrideSorting = true;
         controlCanvas.sortingOrder = 45;
@@ -521,9 +536,10 @@ public class PathScreenUI : MonoBehaviour
 
     static Color GetNodeColor(PathNode node)
     {
-        if (node.completed) return new Color(0.24f, 0.52f, 0.34f);
-        if (!node.accessible && node.kind != MapNodeType.Elite) return new Color(0.18f, 0.21f, 0.27f);
-        if (!node.revealed) return new Color(0.36f, 0.3f, 0.48f);
+        if (node.completed) return new Color(0.19f, 0.32f, 0.27f, 0.6f);
+        if (!node.accessible) return node.kind == MapNodeType.Elite
+            ? new Color(0.32f, 0.15f, 0.13f, 0.65f) : new Color(0.16f, 0.23f, 0.25f, 0.65f);
+        if (!node.revealed) return new Color(0.4f, 0.36f, 0.5f);
 
         return node.kind switch
         {

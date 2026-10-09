@@ -469,12 +469,12 @@ public class ShopUI : MonoBehaviour
             var colors = button.colors;
             bool selected = child.name == $"ShopOffer_{stableId.Replace(':', '_')}";
             // Persistent outline remains visible even while the button is hovered/focused.
-            colors.normalColor = selected ? new Color(0.52f, 0.86f, 1f) : Color.white;
+            colors.normalColor = selected ? new Color(0.83f, 0.88f, 0.91f) : Color.white;
             button.colors = colors;
             var outline = child.GetComponent<Outline>();
             if (outline == null) outline = child.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0.25f, 0.8f, 1f);
-            outline.effectDistance = new Vector2(3f, -3f);
+            outline.effectColor = new Color(0.62f, 0.72f, 0.78f, 0.72f);
+            outline.effectDistance = new Vector2(2f, -2f);
             outline.enabled = selected;
         }
         UpdateSelectionDetails();

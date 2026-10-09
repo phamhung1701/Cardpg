@@ -55,6 +55,32 @@ public sealed class Phase7EArtifactHudTests
     }
 
     [Test]
+    public void EmptyConsumableSlots_HideOnlyThePlaceholderLabels()
+    {
+        var labels = new TMP_Text[3];
+        var parents = new GameObject[labels.Length];
+        for (int i = 0; i < labels.Length; i++)
+        {
+            parents[i] = new GameObject($"Backpack Slot {i + 1}");
+            _objects.Add(parents[i]);
+            var labelObject = new GameObject("ItemDescriptionLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
+            _objects.Add(labelObject);
+            labelObject.transform.SetParent(parents[i].transform, false);
+            labels[i] = labelObject.GetComponent<TMP_Text>();
+        }
+        _hud.backpackSlotLabels = labels;
+
+        InvokeHud("Refresh");
+
+        for (int i = 0; i < labels.Length; i++)
+        {
+            Assert.That(parents[i].activeSelf, Is.True, "Keep the consumable slot control available.");
+            Assert.That(labels[i].gameObject.activeSelf, Is.False);
+            Assert.That(labels[i].text, Is.Empty);
+        }
+    }
+
+    [Test]
     public void EmptyCollection_ShowsZeroAndNoOwnedArtifacts()
     {
         Assert.That(_cards.ownedArtifacts, Is.Empty);
