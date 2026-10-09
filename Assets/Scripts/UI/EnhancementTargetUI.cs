@@ -1,10 +1,11 @@
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
-// Owns hand-field Enhancement targeting for Shop/Upgrade/Event acquisitions plus
-// the existing explicit card-list flows for owned-card consumables and deck mutations.
+// Owns contextual hand targeting. Separate entries are reserved for choices not visible in hand.
 public sealed class EnhancementTargetUI : MonoBehaviour
 {
     public GameObject panel;
@@ -41,6 +42,14 @@ public sealed class EnhancementTargetUI : MonoBehaviour
     RectTransformSnapshot _dialogCardSnapshot, _titleSnapshot, _feedbackSnapshot, _confirmSnapshot, _backSnapshot;
     Vector2 _savedAnchorMin, _savedAnchorMax, _savedPivot, _savedSizeDelta;
     Vector3 _savedAnchoredPosition;
+    ConsumableInstance _sourceConsumable;
+    GameState _targetingCombatState;
+    PathNode _targetingNode;
+    bool _resolving;
+    RectTransformSnapshot _viewportSnapshot;
+    TMP_Text _confirmLabel, _backLabel;
+    string _savedConfirmText, _savedBackText;
+    public bool IsTargeting => _acquisitionTargetMode || _sourceConsumable != null;
     public int SelectedCardId => _selectedCardId;
 
     struct RectTransformSnapshot
@@ -77,8 +86,14 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             run.OnHideUpgrade += Hide;
             run.OnHideEvent += Hide;
             run.OnRunStarted += HandleRunStarted;
+            run.OnShowPathScreen += Hide;
         }
-        if (CardManager.Instance != null) CardManager.Instance.OnBuildChanged += RefreshCards;
+        if (CardManager.Instance != null)
+        {
+            CardManager.Instance.OnBuildChanged += RefreshCards;
+            CardManager.Instance.OnDeckChanged += RefreshCards;
+            CardManager.Instance.OnConsumablesChanged += ValidateTargeting;
+        }
         if (confirmButton) confirmButton.onClick.AddListener(Confirm);
         if (backButton) backButton.onClick.AddListener(Back);
         Hide();
@@ -93,8 +108,14 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             run.OnHideUpgrade -= Hide;
             run.OnHideEvent -= Hide;
             run.OnRunStarted -= HandleRunStarted;
+            run.OnShowPathScreen -= Hide;
         }
-        if (CardManager.Instance != null) CardManager.Instance.OnBuildChanged -= RefreshCards;
+        if (CardManager.Instance != null)
+        {
+            CardManager.Instance.OnBuildChanged -= RefreshCards;
+            CardManager.Instance.OnDeckChanged -= RefreshCards;
+            CardManager.Instance.OnConsumablesChanged -= ValidateTargeting;
+        }
         if (confirmButton) confirmButton.onClick.RemoveListener(Confirm);
         if (backButton) backButton.onClick.RemoveListener(Back);
         Hide();
@@ -135,45 +156,82 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     public bool CanOpenEventEnhancementPicker => panel != null && cardsContainer != null &&
         cardButtonPrefab != null && confirmButton != null;
-    public bool CanOpenConsumableTarget => CanOpenEventEnhancementPicker;
-    public bool CanOpenDeckMutationTarget => CanOpenEventEnhancementPicker;
+    public bool CanOpenConsumableTarget => panel != null && confirmButton != null && backButton != null;
+    public bool CanOpenDeckMutationTarget => CanOpenConsumableTarget;
 
-    public void OpenDeckMutationTarget(int slotIndex)
-    {
-        var cards = CardManager.Instance;
-        var item = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
-        if (!CanOpenDeckMutationTarget || GameplayInputGate.IsBlocked ||
-            !cards.CanUseConsumableAtSlot(slotIndex, CombatManager.Instance) ||
-            item.effectType is not (ConsumableEffectType.DuplicateCard or
-                ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit)) return;
-        _shopOfferId = null;
-        _upgradeIndex = -1;
-        _eventChoiceIndex = -1;
-        _consumableSlotIndex = -1;
-        _mutationSlotIndex = slotIndex;
-        _mutationCardIds.Clear();
-        if (titleLabel) titleLabel.text = $"CHOOSE CARD: {item.displayName}";
-        if (panel) { panel.SetActive(true); panel.transform.SetAsLastSibling(); }
-        RefreshCards();
-        var scroll = cardsContainer ? cardsContainer.GetComponentInParent<ScrollRect>() : null;
-        if (scroll) scroll.verticalNormalizedPosition = 1f;
-    }
+    public void OpenDeckMutationTarget(int slotIndex) => OpenConsumableTarget(slotIndex);
 
     public void OpenConsumableTarget(int slotIndex)
     {
         var cards = CardManager.Instance;
-        var combat = CombatManager.Instance;
-        var consumable = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
-        if (!CanOpenConsumableTarget || GameplayInputGate.IsBlocked || consumable == null ||
-            consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
-            !cards.CanUseConsumableAtSlot(slotIndex, combat)) return;
-
-        _shopOfferId = null;
-        _upgradeIndex = -1;
-        _eventChoiceIndex = -1;
-        _eventEnhancement = null;
+        var item = cards != null ? cards.GetConsumableAtSlot(slotIndex) : null;
+        if (!CanOpenConsumableTarget || cards == null || item == null || GameplayInputGate.IsBlocked ||
+            cards.GetConsumableTargetMaximum(slotIndex) == 0 ||
+            !cards.CanUseConsumableAtSlot(slotIndex, CombatManager.Instance)) return;
+        Hide();
+        _sourceConsumable = cards.GetConsumableInstanceAtSlot(slotIndex);
         _consumableSlotIndex = slotIndex;
-        Show(new ShopOffer { kind = ShopOfferKind.Enhancement, enhancement = consumable.enhancementToApply, price = 0 });
+        _mutationSlotIndex = item.effectType == ConsumableEffectType.ApplyEnhancement ? -1 : slotIndex;
+        _targetingCombatState = CombatManager.Instance.currentState;
+        _targetingNode = RunManager.Instance?.ActiveNode;
+        ClearTargetCards();
+        if (titleLabel) titleLabel.text = item.displayName.ToUpperInvariant();
+        SaveAndCompactPanel();
+        // Outside combat the existing rules also allow deck/discard targets. Present only those
+        // off-board cards, while the real hand remains clickable below this bounded panel.
+        if (!cards.ConsumableRequiresHandTarget(slotIndex)) ShowOffHandChoicesLayout();
+        if (panel) { panel.SetActive(true); panel.transform.SetAsLastSibling(); }
+        cards.BeginHandTargeting(view => SelectCard(view.data.Id), id => cards.CanTargetConsumableAtSlot(slotIndex, id));
+        RefreshCards();
+        UpdateFeedback();
+    }
+
+    void Update()
+    {
+        if (!IsTargeting) return;
+        ValidateTargeting();
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) Back();
+    }
+
+    void ValidateTargeting()
+    {
+        if (_resolving || !IsTargeting) return;
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        if (cards == null || combat == null || combat.player.IsDefeated ||
+            !cards.IsHandEnhancementTargeting || RunManager.Instance?.ActiveNode != _targetingNode ||
+            combat.currentState != _targetingCombatState)
+        { Hide(); return; }
+        if (_sourceConsumable != null)
+        {
+            if (cards.GetConsumableInstanceAtSlot(_consumableSlotIndex) != _sourceConsumable ||
+                (!GameplayInputGate.IsBlocked && !cards.CanUseConsumableAtSlot(_consumableSlotIndex, combat)))
+            { Hide(); return; }
+            foreach (int id in _mutationCardIds)
+                if (!GameplayInputGate.IsBlocked && !cards.CanTargetConsumableAtSlot(_consumableSlotIndex, id))
+                { Hide(); return; }
+            if (_selectedCardId != 0 && !GameplayInputGate.IsBlocked &&
+                !cards.CanTargetConsumableAtSlot(_consumableSlotIndex, _selectedCardId))
+            { Hide(); return; }
+        }
+        else if (_selectedCardId != 0 && !cards.hand.Contains(cards.FindOwnedCard(_selectedCardId)))
+        { Hide(); return; }
+    }
+
+    void ShowOffHandChoicesLayout()
+    {
+        var root = panel.transform as RectTransform;
+        if (root) { root.anchorMin = root.anchorMax = new Vector2(0.5f, 0.64f); root.sizeDelta = new Vector2(680f, 360f); }
+        if (_dialogCardRect) _dialogCardRect.sizeDelta = new Vector2(660f, 340f);
+        CompactRect(_titleRect, new Vector2(0.04f, 0.86f), new Vector2(0.96f, 0.98f), Vector2.zero);
+        CompactRect(_feedbackRect, new Vector2(0.04f, 0.69f), new Vector2(0.96f, 0.85f), Vector2.zero);
+        CompactRect(_confirmRect, new Vector2(0.05f, 0.02f), new Vector2(0.48f, 0.13f), Vector2.zero);
+        CompactRect(_backRect, new Vector2(0.52f, 0.02f), new Vector2(0.95f, 0.13f), Vector2.zero);
+        if (_targetListViewport)
+        {
+            _targetListViewport.SetActive(true);
+            CompactRect(_targetListViewport.transform as RectTransform, new Vector2(0.04f, 0.15f), new Vector2(0.96f, 0.67f), Vector2.zero);
+        }
     }
 
     public void OpenEventEnhancement(int choiceIndex)
@@ -226,6 +284,8 @@ public sealed class EnhancementTargetUI : MonoBehaviour
     {
         if (offer == null || offer.enhancement == null || CardManager.Instance == null) return;
         _acquisitionTargetMode = true;
+        _targetingCombatState = CombatManager.Instance.currentState;
+        _targetingNode = RunManager.Instance?.ActiveNode;
         _acquisitionEnhancement = offer.enhancement;
         _selectedCardId = 0;
         _replacementConfirmed = false;
@@ -241,7 +301,9 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         if (confirmButton) confirmButton.interactable = false;
         SaveAndCompactPanel();
         if (panel) { panel.SetActive(true); panel.transform.SetAsLastSibling(); }
-        CardManager.Instance.BeginHandEnhancementTargeting(HandleHandCardTargeted);
+        ClearTargetCards();
+        CardManager.Instance.BeginHandTargeting(HandleHandCardTargeted, id =>
+            string.IsNullOrEmpty(RunManager.Instance.GetEnhancementAcquisitionTargetUnavailableReason(id, _acquisitionEnhancement)));
     }
 
     void HandleHandCardTargeted(CardView view)
@@ -296,10 +358,18 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         var scroll = cardsContainer ? cardsContainer.GetComponentInParent<ScrollRect>(true) : null;
         _targetListViewport = scroll ? scroll.gameObject : cardsContainer ? cardsContainer.gameObject : null;
         _targetListViewportWasActive = _targetListViewport && _targetListViewport.activeSelf;
+        _viewportSnapshot = RectTransformSnapshot.Capture(_targetListViewport ? _targetListViewport.transform as RectTransform : null);
+        _confirmLabel = confirmButton ? confirmButton.GetComponentInChildren<TMP_Text>(true) : null;
+        _backLabel = backButton ? backButton.GetComponentInChildren<TMP_Text>(true) : null;
+        _savedConfirmText = _confirmLabel ? _confirmLabel.text : null;
+        _savedBackText = _backLabel ? _backLabel.text : null;
+        if (_confirmLabel) _confirmLabel.text = "CONFIRM";
+        if (_backLabel) _backLabel.text = "CANCEL";
         if (_targetListViewport) _targetListViewport.SetActive(false);
         _hasSavedPanelLayout = true;
 
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.46f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
         rect.sizeDelta = new Vector2(460f, 190f);
         rect.anchoredPosition3D = Vector3.zero;
         CompactRect(_dialogCardRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -337,32 +407,22 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         _feedbackSnapshot.Restore(_feedbackRect);
         _confirmSnapshot.Restore(_confirmRect);
         _backSnapshot.Restore(_backRect);
-        if (_targetListViewport && _targetListViewportWasActive)
-            _targetListViewport.SetActive(true);
+        _viewportSnapshot.Restore(_targetListViewport ? _targetListViewport.transform as RectTransform : null);
+        if (_confirmLabel) _confirmLabel.text = _savedConfirmText;
+        if (_backLabel) _backLabel.text = _savedBackText;
+        if (_targetListViewport) _targetListViewport.SetActive(_targetListViewportWasActive);
         _dialogCardRect = _titleRect = _feedbackRect = _confirmRect = _backRect = null;
         _targetListViewport = null;
         _targetListViewportWasActive = false;
         _hasSavedPanelLayout = false;
     }
 
-    void Show(ShopOffer offer)
-    {
-        _mutationSlotIndex = -1;
-        _mutationCardIds.Clear();
-        _acquisitionTargetMode = false;
-        if (cardsContainer) cardsContainer.gameObject.SetActive(true);
-        _selectedCardId = 0;
-        if (titleLabel) titleLabel.text = $"CHOOSE CARD: {offer.Icon} {offer.DisplayName}";
-        if (panel) { panel.SetActive(true); panel.transform.SetAsLastSibling(); }
-        RefreshCards();
-        var scroll = cardsContainer ? cardsContainer.GetComponentInParent<ScrollRect>() : null;
-        if (scroll) scroll.verticalNormalizedPosition = 1f;
-    }
-
     public void Hide()
     {
         var cards = CardManager.Instance;
-        if (cards != null && cards.IsHandEnhancementTargeting) cards.EndHandEnhancementTargeting();
+        bool ownedTargeting = IsTargeting;
+        _sourceConsumable = null;
+        if (ownedTargeting && cards != null && cards.IsHandEnhancementTargeting) cards.EndHandEnhancementTargeting();
         bool restoreOrigin = _restoreOriginOnClose;
         _restoreOriginOnClose = false;
         _acquisitionTargetMode = false;
@@ -428,84 +488,89 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     void RefreshCards()
     {
-        if (!panel || !panel.activeSelf || !cardsContainer || !cardButtonPrefab || _acquisitionTargetMode ||
-            _eventChoiceIndex >= 0 && _eventEnhancement == null) return;
+        if (!panel || !panel.activeSelf) return;
+        ValidateTargeting();
+        if (!panel.activeSelf || _resolving) return;
+        CardManager.Instance?.RefreshHandTargetPresentation();
+        if (_acquisitionTargetMode) { UpdateFeedback(); return; }
+        if (_sourceConsumable == null || !cardsContainer || !cardButtonPrefab) return;
         ClearTargetCards();
-
         var cards = CardManager.Instance;
-        if (cards != null)
+        if (cards != null && !cards.ConsumableRequiresHandTarget(_consumableSlotIndex))
         {
-            var targetCards = _mutationSlotIndex >= 0 || _consumableSlotIndex >= 0
-                ? cards.ownedCards : cards.hand;
-            foreach (var card in targetCards)
+            foreach (var card in cards.ownedCards)
             {
-                if (card == null) continue;
+                if (card == null || cards.hand.Contains(card)) continue;
                 int id = card.Id;
-                string reason = _mutationSlotIndex >= 0
-                    ? cards.CanTargetDeckMutationAtSlot(_mutationSlotIndex, id) ? "" : "Not a valid target"
-                    : _consumableSlotIndex >= 0 ? RunManager.Instance.GetEnhancementTargetUnavailableReason(id) :
-                        RunManager.Instance.GetEnhancementAcquisitionTargetUnavailableReason(id);
+                bool eligible = cards.CanTargetConsumableAtSlot(_consumableSlotIndex, id);
                 var obj = Instantiate(cardButtonPrefab, cardsContainer);
-                obj.name = $"TargetCard_{id}";
+                obj.name = $"OffHandCard_{id}";
                 var label = obj.GetComponentInChildren<TMP_Text>();
                 bool selected = _mutationSlotIndex >= 0 ? _mutationCardIds.Contains(id) : id == _selectedCardId;
-                string current = _mutationSlotIndex < 0 && card.Enhancement != null && _consumableSlotIndex < 0
-                    ? $"\nReplace: {card.Enhancement.displayName}" : "";
-                if (label) label.text = (selected ? "SELECTED " : "") +
-                    $"{card.SuitSymbol} {card.DisplayName}{current}\n#{id}" +
-                    (string.IsNullOrEmpty(reason) ? "" : $"\n{reason}");
+                if (label) label.text = (selected ? "SELECTED  " : "") +
+                    $"{card.SuitSymbol} {card.DisplayName}" +
+                    (card.Enhancement != null ? $" · {card.Enhancement.displayName}" : "");
                 var button = obj.GetComponent<Button>();
                 if (button)
                 {
+                    button.interactable = eligible;
                     button.onClick.AddListener(() => SelectCard(id));
                     var colors = button.colors;
-                    colors.normalColor = selected ? new Color(0.52f, 0.86f, 1f) :
-                        string.IsNullOrEmpty(reason) ? Color.white : new Color(0.48f, 0.48f, 0.48f);
+                    colors.normalColor = selected ? new Color(0.52f, 0.86f, 1f) : Color.white;
                     button.colors = colors;
                 }
             }
         }
+        RefreshHandSelection();
         UpdateFeedback();
     }
 
     void SelectCard(int id)
     {
         if (IsInputBlockedForCurrentChoice() || !panel || !panel.activeSelf) return;
+        var cards = CardManager.Instance;
+        if (_sourceConsumable == null || cards == null ||
+            !cards.CanTargetConsumableAtSlot(_consumableSlotIndex, id)) return;
         if (_mutationSlotIndex >= 0)
         {
-            var cards = CardManager.Instance;
-            if (cards == null || !cards.CanTargetDeckMutationAtSlot(_mutationSlotIndex, id)) return;
             if (!_mutationCardIds.Remove(id))
             {
-                if (cards.GetConsumableAtSlot(_mutationSlotIndex).effectType != ConsumableEffectType.DestroyCards)
-                    _mutationCardIds.Clear();
-                if (_mutationCardIds.Count < 2) _mutationCardIds.Add(id);
+                int maximum = cards.GetConsumableTargetMaximum(_consumableSlotIndex);
+                if (maximum == 1) _mutationCardIds.Clear();
+                if (_mutationCardIds.Count < maximum) _mutationCardIds.Add(id);
             }
         }
         else
         {
-            _selectedCardId = id;
+            _selectedCardId = _selectedCardId == id ? 0 : id;
             _replacementConfirmed = false;
             _replacementToConfirm = null;
         }
         RefreshCards();
     }
 
+    void RefreshHandSelection()
+    {
+        var cards = CardManager.Instance;
+        if (cards == null || !cards.handField) return;
+        foreach (var view in cards.handField.GetComponentsInChildren<CardView>(true))
+            if (view.data != null)
+                view.SetSelected(_mutationSlotIndex >= 0 ? _mutationCardIds.Contains(view.data.Id) : view.data.Id == _selectedCardId);
+    }
+
     void UpdateFeedback(string failure = null)
     {
-        if (_mutationSlotIndex >= 0)
+        if (_sourceConsumable != null)
         {
             var cards = CardManager.Instance;
-            var item = cards != null ? cards.GetConsumableAtSlot(_mutationSlotIndex) : null;
-            bool valid = item != null && cards.CanUseConsumableAtSlot(_mutationSlotIndex, CombatManager.Instance) &&
-                _mutationCardIds.Count > 0 && _mutationCardIds.Count <=
-                    (item.effectType == ConsumableEffectType.DestroyCards ? 2 : 1) &&
-                _mutationCardIds.Count < cards.ownedCards.Count;
-            foreach (int id in _mutationCardIds)
-                valid &= cards.CanTargetDeckMutationAtSlot(_mutationSlotIndex, id);
-            if (feedbackLabel) feedbackLabel.text = failure ?? (valid
-                ? $"Selected {_mutationCardIds.Count} card(s). Confirm or cancel for free."
-                : "Select eligible card(s). Torch destroys one or two; keep at least one card.");
+            IReadOnlyList<int> ids = _mutationSlotIndex >= 0 ? _mutationCardIds :
+                _selectedCardId == 0 ? System.Array.Empty<int>() : new[] { _selectedCardId };
+            bool valid = cards != null && cards.CanConfirmConsumableTargets(_consumableSlotIndex, ids);
+            int maximum = cards != null ? cards.GetConsumableTargetMaximum(_consumableSlotIndex) : 1;
+            string range = maximum == 1 ? "a card" : $"1–{maximum} cards";
+            string scope = cards != null && cards.ConsumableRequiresHandTarget(_consumableSlotIndex)
+                ? "in your hand" : "in your hand, or an off-hand card below";
+            if (feedbackLabel) feedbackLabel.text = failure ?? $"Choose {range} {scope}\n{ids.Count}/{maximum} selected · Confirm or cancel";
             if (confirmButton) confirmButton.interactable = valid;
             return;
         }
@@ -525,12 +590,25 @@ public sealed class EnhancementTargetUI : MonoBehaviour
     void Confirm()
     {
         if (IsInputBlockedForCurrentChoice() || !panel || !panel.activeSelf) return;
-        if (_mutationSlotIndex >= 0)
+        ValidateTargeting();
+        if (!panel.activeSelf) return;
+        if (_sourceConsumable != null)
         {
             var cards = CardManager.Instance;
-            if (cards != null && cards.UseDeckMutationConsumableAtSlot(_mutationSlotIndex, _mutationCardIds.ToArray()))
-                Hide();
-            else UpdateFeedback("Consumable or target unavailable");
+            IReadOnlyList<int> ids = _mutationSlotIndex >= 0 ? _mutationCardIds.ToArray() :
+                _selectedCardId == 0 ? System.Array.Empty<int>() : new[] { _selectedCardId };
+            if (cards == null || !cards.CanConfirmConsumableTargets(_consumableSlotIndex, ids)) return;
+            _resolving = true;
+            bool consumed;
+            try
+            {
+                consumed = _mutationSlotIndex >= 0
+                    ? cards.UseDeckMutationConsumableAtSlot(_consumableSlotIndex, ids)
+                    : cards.UseEnhancementConsumableAtSlot(_consumableSlotIndex, _selectedCardId);
+            }
+            finally { _resolving = false; }
+            if (consumed) Hide();
+            else { ValidateTargeting(); UpdateFeedback("Consumable or target unavailable"); }
             return;
         }
         if (_selectedCardId == 0) return;

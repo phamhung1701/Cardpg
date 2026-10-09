@@ -20,6 +20,8 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
     Sprite _emptySlotSprite;
     Sprite _selectedSlotSprite;
     bool _mergeSelected;
+    bool _mergeMode;
+    bool _mergeEligible = true;
 
     public RelicData Artifact => _artifact;
 
@@ -40,6 +42,10 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         _mergeSelect = null;
         _instanceId = 0;
         _mergeSelected = false;
+        _mergeMode = false;
+        _mergeEligible = true;
+        if (TryGetComponent<CanvasGroup>(out var group)) group.alpha = 1f;
+        if (TryGetComponent<Outline>(out var outline)) outline.enabled = false;
         if (iconLabel) iconLabel.gameObject.SetActive(false);
         if (_authoredIcon) _authoredIcon.gameObject.SetActive(false);
         var image = GetComponent<Image>();
@@ -48,7 +54,8 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
     }
 
     public void Bind(RelicData artifact, Action<RelicData> hover, Action<RelicData> leave,
-        Action<RelicData> select, long instanceId, Action<long, RelicData> mergeSelect, bool mergeSelected)
+        Action<RelicData> select, long instanceId, Action<long, RelicData> mergeSelect, bool mergeSelected,
+        bool mergeMode = false, bool mergeEligible = true)
     {
         _artifact = artifact;
         _hover = hover;
@@ -57,6 +64,16 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         _instanceId = instanceId;
         _mergeSelect = mergeSelect;
         _mergeSelected = mergeSelected;
+        _mergeMode = mergeMode;
+        _mergeEligible = mergeEligible;
+        var group = GetComponent<CanvasGroup>();
+        if (!group) group = gameObject.AddComponent<CanvasGroup>();
+        group.alpha = mergeMode && !mergeEligible && !mergeSelected ? 0.4f : 1f;
+        var outline = GetComponent<Outline>();
+        if (!outline) outline = gameObject.AddComponent<Outline>();
+        outline.effectColor = mergeSelected ? new Color(1f, 0.72f, 0.2f) : new Color(0.4f, 0.85f, 0.65f);
+        outline.effectDistance = new Vector2(2f, -2f);
+        outline.enabled = mergeMode && (mergeEligible || mergeSelected);
         var image = GetComponent<Image>();
         if (image) image.raycastTarget = true;
         if (image) image.preserveAspect = true;
@@ -125,10 +142,13 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (_artifact && eventData.button == PointerEventData.InputButton.Left)
+        if (_artifact && !GameplayInputGate.IsBlocked && eventData.button == PointerEventData.InputButton.Left)
         {
-            _select?.Invoke(_artifact);
-            _mergeSelect?.Invoke(_instanceId, _artifact);
+            if (_mergeMode)
+            {
+                if (_mergeEligible || _mergeSelected) _mergeSelect?.Invoke(_instanceId, _artifact);
+            }
+            else _select?.Invoke(_artifact);
         }
     }
 

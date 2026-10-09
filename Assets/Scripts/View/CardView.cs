@@ -46,6 +46,8 @@ public class CardView : MonoBehaviour,
     bool _isSelected;
     bool _isPointerOver;
     bool _isDragging;
+    bool _isHandTargeting;
+    bool _isHandTargetEligible;
     int _selectionOrder;
     Vector3 _originalPosition;
     Transform _originalParent;
@@ -85,6 +87,15 @@ public class CardView : MonoBehaviour,
 
     public State CurrentState => _state;
     public bool IsSelected => _isSelected;
+    public bool IsHandTargetEligible => _isHandTargeting && _isHandTargetEligible;
+
+    public void SetHandTargetState(bool targeting, bool eligible)
+    {
+        _isHandTargeting = targeting;
+        _isHandTargetEligible = targeting && eligible;
+        if (targeting && !_isHandTargetEligible) _isPointerOver = false;
+        RefreshState();
+    }
 
     static readonly Color _selectedColor = new(1f, 0.72f, 0.2f, 1f);
     static readonly Color _dragColor = new(0.35f, 0.72f, 1f, 1f);
@@ -99,6 +110,8 @@ public class CardView : MonoBehaviour,
     {
         CancelActiveDrag();
         _isPointerOver = false;
+        _isHandTargeting = false;
+        _isHandTargetEligible = false;
         RefreshState();
         if (CardManager.TryGetInstance(out var manager))
             manager.OnBuildChanged -= RefreshContent;
@@ -148,6 +161,7 @@ public class CardView : MonoBehaviour,
             enhancementLabel.text = hasEnhancement
                 ? $"{data.Enhancement.icon}  {data.Enhancement.displayName}"
                 : string.Empty;
+        RefreshState();
     }
 
     public Sprite ResolveCardSprite(CardInstance card)
@@ -209,14 +223,24 @@ public class CardView : MonoBehaviour,
                 State.Hover => 2,
                 _ => 1
             };
-        _targetRaise = _isDragging ? 0f : (_isSelected ? selectedRaise : 0f) + (_isPointerOver ? hoverRaise : 0f);
+        _targetRaise = (_isDragging ? 0f : (_isSelected ? selectedRaise : 0f) + (_isPointerOver ? hoverRaise : 0f)) +
+            (_isHandTargetEligible ? 8f : 0f);
         _targetScale = _isDragging ? 1.065f : 1f + (_isSelected ? 0.045f : 0f) + (_isPointerOver ? 0.035f : 0f);
 
-        if (face) face.color = state == State.Idle ? new Color(0.97f, 0.97f, 0.97f, 1f) : Color.white;
+        if (face)
+        {
+            if (_isHandTargeting)
+                face.color = _isHandTargetEligible
+                    ? new Color(0.88f, 1f, 0.9f, 1f)
+                    : new Color(0.48f, 0.48f, 0.48f, 0.58f);
+            else
+                face.color = state == State.Idle ? new Color(0.97f, 0.97f, 0.97f, 1f) : Color.white;
+        }
         if (selectionOutline)
         {
-            selectionOutline.enabled = state == State.Click || state == State.Drag;
-            selectionOutline.effectColor = state == State.Drag ? _dragColor : _selectedColor;
+            bool selected = state == State.Click || state == State.Drag;
+            selectionOutline.enabled = selected || IsHandTargetEligible;
+            selectionOutline.effectColor = state == State.Drag ? _dragColor : selected ? _selectedColor : new Color(0.28f, 1f, 0.52f, 1f);
         }
         if (selectionBadge) selectionBadge.SetActive(state == State.Click);
         if (stateLabel) stateLabel.text = state == State.Click ? _selectionOrder.ToString() : string.Empty;
@@ -309,6 +333,7 @@ public class CardView : MonoBehaviour,
     public void OnPointerEnter(PointerEventData eventData)
     {
         if (_isDragging || GameplayInputGate.IsBlocked ||
+            (_isHandTargeting && !_isHandTargetEligible) ||
             (CardManager.TryGetInstance(out var manager) && manager.ActiveDragCard != null)) return;
         _isPointerOver = true;
         RefreshState();

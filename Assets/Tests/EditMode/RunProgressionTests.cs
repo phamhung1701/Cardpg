@@ -251,35 +251,49 @@ public sealed class RunProgressionTests
     }
 
     [Test]
-    public void RunStartClearsActionButtonsConsumableTargetSelection()
+    public void RunStartClearsContextualConsumableTargetSelection()
     {
-        var uiObject = new GameObject("Workflow ActionButtonsUI");
+        _runManager.StartRunWithSeed("WORKFLOW-BEFORE-TARGET");
+        var item = ScriptableObject.CreateInstance<ConsumableData>();
+        _testOwnedAssets.Add(item);
+        item.id = "workflow-target";
+        item.effectType = ConsumableEffectType.DuplicateCard;
+        item.uses = 1;
+        _cardManager.consumableCatalog.Add(item);
+        Assert.That(_cardManager.AddConsumable(item), Is.True);
+
+        var uiObject = new GameObject("Workflow Target UI", typeof(RectTransform));
         uiObject.SetActive(false);
-        var ui = uiObject.AddComponent<ActionButtonsUI>();
-        var slot = typeof(ActionButtonsUI).GetField("_directConsumableTargetSlot",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        var targetIds = (List<int>)typeof(ActionButtonsUI).GetField("_directRuneTargetIds",
-            BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
-        slot.SetValue(ui, 2);
-        targetIds.Add(17);
-        _cardManager.BeginHandEnhancementTargeting(_ => { });
-        uiObject.SetActive(true);
-        typeof(ActionButtonsUI).GetMethod("OnEnable", BindingFlags.Instance | BindingFlags.NonPublic)
-            .Invoke(ui, null);
-        Assert.That(_cardManager.IsHandEnhancementTargeting, Is.True);
+        var ui = uiObject.AddComponent<EnhancementTargetUI>();
+        ui.panel = new GameObject("Contextual prompt", typeof(RectTransform));
+        ui.panel.transform.SetParent(uiObject.transform);
+        var confirm = new GameObject("Confirm", typeof(RectTransform), typeof(UnityEngine.UI.Button));
+        confirm.transform.SetParent(ui.panel.transform);
+        ui.confirmButton = confirm.GetComponent<UnityEngine.UI.Button>();
+        var cancel = new GameObject("Cancel", typeof(RectTransform), typeof(UnityEngine.UI.Button));
+        cancel.transform.SetParent(ui.panel.transform);
+        ui.backButton = cancel.GetComponent<UnityEngine.UI.Button>();
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(EnhancementTargetUI).GetMethod("OnEnable", flags).Invoke(ui, null);
+        ui.OpenConsumableTarget(0);
+        typeof(EnhancementTargetUI).GetMethod("SelectCard", flags)
+            .Invoke(ui, new object[] { _cardManager.ownedCards[0].Id });
+        var targetIds = (List<int>)typeof(EnhancementTargetUI).GetField("_mutationCardIds", flags).GetValue(ui);
+        Assert.That(ui.IsTargeting, Is.True);
+        Assert.That(targetIds.Count, Is.EqualTo(1));
 
         try
         {
             _runManager.StartRunWithSeed("WORKFLOW-CLEAR-TARGET");
 
-            Assert.That(slot.GetValue(ui), Is.EqualTo(-1));
+            Assert.That(ui.IsTargeting, Is.False);
+            Assert.That(ui.panel.activeSelf, Is.False);
             Assert.That(targetIds, Is.Empty);
             Assert.That(_cardManager.IsHandEnhancementTargeting, Is.False);
         }
         finally
         {
-            typeof(ActionButtonsUI).GetMethod("OnDisable", BindingFlags.Instance | BindingFlags.NonPublic)
-                .Invoke(ui, null);
+            typeof(EnhancementTargetUI).GetMethod("OnDisable", flags).Invoke(ui, null);
             UnityEngine.Object.DestroyImmediate(uiObject);
         }
     }

@@ -39,6 +39,7 @@ public class CardManager : Singleton<CardManager>
     int _nextCardId = 1;
     bool _consumableUsedThisEncounter;
     Action<CardView> _handEnhancementTargetHandler;
+    Func<int, bool> _handTargetEligibility;
 
     public bool IsHandEnhancementTargeting => _handEnhancementTargetHandler != null;
 
@@ -352,15 +353,10 @@ public class CardManager : Singleton<CardManager>
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
         var instance = GetConsumableInstanceAtSlot(slotIndex);
         var consumable = instance.Definition;
-        bool inCombat = combat != null &&
-            combat.currentState is (GameState.PlayerTurn or GameState.EnemyAttacking);
         if (consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
-            consumable.enhancementToApply == null ||
-            !_cards.OwnedCards.Any(card => card != null && card.Enhancement == null &&
-                (!inCombat || _cards.ContainsInHand(card)))) return false;
+            consumable.enhancementToApply == null || !CanTargetConsumableAtSlot(slotIndex, cardId)) return false;
         var card = FindOwnedCard(cardId);
-        if (card == null || card.Enhancement != null || inCombat && !_cards.ContainsInHand(card) ||
-            !ApplyEnhancement(cardId, consumable.enhancementToApply)) return false;
+        if (card == null || !ApplyEnhancement(cardId, consumable.enhancementToApply)) return false;
         CompleteConsumableUse(slotIndex, instance, combat, IsActiveEncounter(combat));
         return true;
     }
@@ -424,6 +420,38 @@ public class CardManager : Singleton<CardManager>
         OnDeckChanged?.Invoke();
         OnBuildChanged?.Invoke();
         return true;
+    }
+
+    public bool CanTargetConsumableAtSlot(int slotIndex, int cardId)
+    {
+        var combat = CombatManager.Instance;
+        if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
+        var item = GetConsumableAtSlot(slotIndex);
+        var card = FindOwnedCard(cardId);
+        if (item == null || card == null) return false;
+        bool inCombat = combat != null && combat.currentState is GameState.PlayerTurn or GameState.EnemyAttacking;
+        switch (item.effectType)
+        {
+            case ConsumableEffectType.ApplyEnhancement:
+                return item.enhancementToApply != null && card.Enhancement == null &&
+                    (!inCombat || _cards.ContainsInHand(card));
+            case ConsumableEffectType.DuplicateCard:
+            case ConsumableEffectType.DestroyCards:
+            case ConsumableEffectType.ChangeSuit:
+                return CanTargetDeckMutationAtSlot(slotIndex, cardId);
+            default:
+                return false;
+        }
+    }
+
+    public int CountConsumableTargetsAtSlot(int slotIndex)
+    {
+        var item = GetConsumableAtSlot(slotIndex);
+        if (item == null) return 0;
+        int count = 0;
+        foreach (var card in _cards.OwnedCards)
+            if (card != null && CanTargetConsumableAtSlot(slotIndex, card.Id)) count++;
+        return count;
     }
 
     public bool CanTargetDeckMutationAtSlot(int slotIndex, int cardId)
@@ -649,23 +677,32 @@ public class CardManager : Singleton<CardManager>
         return true;
     }
 
-    public bool MergeArtifacts(long firstInstanceId, long secondInstanceId)
+    public RelicData GetArtifactMergeResult(long firstInstanceId, long secondInstanceId)
     {
-        EnsureArtifactInstances();
-        if (firstInstanceId == secondInstanceId) return false;
+        if (firstInstanceId == secondInstanceId) return null;
         int firstIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == firstInstanceId);
         int secondIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == secondInstanceId);
-        if (firstIndex < 0 || secondIndex < 0) return false;
+        if (firstIndex < 0 || secondIndex < 0 || firstIndex >= ownedArtifacts.Count ||
+            secondIndex >= ownedArtifacts.Count) return null;
         var first = _orderedArtifactInstances[firstIndex];
         var second = _orderedArtifactInstances[secondIndex];
         var source = first.Definition;
-        if (source == null || second.Definition == null || source.tier != second.Definition.tier ||
-            string.IsNullOrEmpty(source.canonicalId) || source.canonicalId != second.Definition.canonicalId ||
-            source.tier < 1) return false;
+        if (source == null || second.Definition == null ||
+            ownedArtifacts[firstIndex] != source || ownedArtifacts[secondIndex] != second.Definition ||
+            source.tier != second.Definition.tier || string.IsNullOrEmpty(source.canonicalId) ||
+            source.canonicalId != second.Definition.canonicalId || source.tier < 1) return null;
         var nextCandidates = relicCatalog.Where(value => value != null &&
             value.tier == source.tier + 1 && value.upgradeFromId == source.canonicalId).ToArray();
-        if (nextCandidates.Length != 1) return false;
-        var next = nextCandidates[0];
+        return nextCandidates.Length == 1 ? nextCandidates[0] : null;
+    }
+
+    public bool MergeArtifacts(long firstInstanceId, long secondInstanceId)
+    {
+        EnsureArtifactInstances();
+        var next = GetArtifactMergeResult(firstInstanceId, secondInstanceId);
+        if (next == null) return false;
+        int firstIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == firstInstanceId);
+        int secondIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == secondInstanceId);
         int firstPosition = Math.Min(firstIndex, secondIndex);
         int lastPosition = Math.Max(firstIndex, secondIndex);
         ownedArtifacts.RemoveAt(lastPosition);
@@ -914,16 +951,84 @@ public class CardManager : Singleton<CardManager>
 
     public void NotifyDeckChanged() => OnDeckChanged?.Invoke();
 
-    public void BeginHandEnhancementTargeting(Action<CardView> onTarget)
+    public void BeginHandEnhancementTargeting(Action<CardView> onTarget) =>
+        BeginHandTargeting(onTarget, null);
+
+    public void BeginHandTargeting(Action<CardView> onTarget, Func<int, bool> isEligible)
     {
+        EndHandEnhancementTargeting();
         _handEnhancementTargetHandler = onTarget;
+        _handTargetEligibility = isEligible;
         ClearSelection();
+        CancelCardInteractions();
+        RefreshHandTargetPresentation();
     }
 
     public void EndHandEnhancementTargeting()
     {
         _handEnhancementTargetHandler = null;
+        _handTargetEligibility = null;
+        foreach (var view in _trackedViews)
+        {
+            if (view == null) continue;
+            view.SetHandTargetState(false, false);
+            view.SetSelected(false);
+        }
         ClearSelection();
+    }
+
+    public void RefreshHandTargetPresentation()
+    {
+        foreach (var view in _trackedViews)
+        {
+            if (view == null) continue;
+            bool isHand = view.data != null && _cards.ContainsInHand(view.data);
+            bool targeting = IsHandEnhancementTargeting && isHand;
+            bool eligible = targeting && (_handTargetEligibility == null || _handTargetEligibility(view.data.Id));
+            view.SetHandTargetState(targeting, eligible);
+        }
+    }
+
+    public int GetConsumableTargetMinimum(int slotIndex) =>
+        GetConsumableAtSlot(slotIndex) == null ? 0 : 1;
+
+    public int GetConsumableTargetMaximum(int slotIndex)
+    {
+        var item = GetConsumableAtSlot(slotIndex);
+        if (item == null) return 0;
+        return item.effectType switch
+        {
+            ConsumableEffectType.DestroyCards => 2,
+            ConsumableEffectType.ChangeSuit => 3,
+            ConsumableEffectType.DuplicateCard or ConsumableEffectType.ApplyEnhancement => 1,
+            _ => 0
+        };
+    }
+
+    public bool ConsumableRequiresHandTarget(int slotIndex)
+    {
+        var item = GetConsumableAtSlot(slotIndex);
+        var combat = CombatManager.Instance;
+        if (item == null || combat == null) return false;
+        return item.effectType == ConsumableEffectType.ChangeSuit ||
+            combat.currentState is GameState.PlayerTurn or GameState.EnemyAttacking;
+    }
+
+    public bool CanConfirmConsumableTargets(int slotIndex, IReadOnlyList<int> cardIds) =>
+        CanConfirmConsumableTargetsAtSlot(slotIndex, cardIds);
+
+    public bool CanConfirmConsumableTargetsAtSlot(int slotIndex, IReadOnlyList<int> cardIds)
+    {
+        if (cardIds == null || cardIds.Count < GetConsumableTargetMinimum(slotIndex) ||
+            cardIds.Count > GetConsumableTargetMaximum(slotIndex) ||
+            !CanUseConsumableAtSlot(slotIndex, CombatManager.Instance)) return false;
+        var unique = new HashSet<int>();
+        foreach (int id in cardIds)
+            if (!unique.Add(id) || !CanTargetConsumableAtSlot(slotIndex, id)) return false;
+        var item = GetConsumableAtSlot(slotIndex);
+        if (item != null && item.effectType == ConsumableEffectType.DestroyCards &&
+            cardIds.Count >= _cards.OwnedCards.Count) return false;
+        return true;
     }
 
     public bool CanRouteHandEnhancementTargetClick => IsHandEnhancementTargeting &&
@@ -934,7 +1039,8 @@ public class CardManager : Singleton<CardManager>
     {
         if (IsHandEnhancementTargeting)
         {
-            if (CanRouteHandEnhancementTargetClick && IsTrackedHandView(card))
+            if (CanRouteHandEnhancementTargetClick && IsTrackedHandView(card) &&
+                (_handTargetEligibility == null || _handTargetEligibility(card.data.Id)))
                 _handEnhancementTargetHandler?.Invoke(card);
             return;
         }
@@ -962,7 +1068,8 @@ public class CardManager : Singleton<CardManager>
     {
         if (IsHandEnhancementTargeting)
         {
-            if (CanRouteHandEnhancementTargetClick && IsTrackedHandView(card))
+            if (CanRouteHandEnhancementTargetClick && IsTrackedHandView(card) &&
+                (_handTargetEligibility == null || _handTargetEligibility(card.data.Id)))
                 _handEnhancementTargetHandler?.Invoke(card);
             return;
         }
@@ -1088,6 +1195,8 @@ public class CardManager : Singleton<CardManager>
         var view = Instantiate(cardPrefab);
         _trackedViews.Add(view);
         handField.AddCard(view, cardInstance);
+        if (IsHandEnhancementTargeting)
+            view.SetHandTargetState(true, _handTargetEligibility == null || _handTargetEligibility(cardInstance.Id));
         return view;
     }
 
@@ -1097,6 +1206,13 @@ public class CardManager : Singleton<CardManager>
             _activeDragCard.CancelActiveDrag();
         _activeDragCard = null;
         _handEnhancementTargetHandler = null;
+        _handTargetEligibility = null;
+        foreach (var view in _trackedViews)
+            if (view != null)
+            {
+                view.SetHandTargetState(false, false);
+                view.SetSelected(false);
+            }
         ClearSelection(false);
 
         if (_trackedViews.Count > 0)

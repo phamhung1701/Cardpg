@@ -40,6 +40,8 @@ public sealed class ArtifactRailUI : MonoBehaviour
     long _secondMergeId;
     int _ownedArtifactCount;
     RelicData _mergePreview;
+    PathNode _mergeNode;
+    GameState _mergeCombatState;
 
     void OnEnable()
     {
@@ -48,6 +50,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (mergeModeButton) mergeModeButton.onClick.AddListener(BeginMergeSelection);
         if (mergeConfirmButton) mergeConfirmButton.onClick.AddListener(ConfirmMerge);
         if (mergeCancelButton) mergeCancelButton.onClick.AddListener(CancelMerge);
+        if (RunManager.Instance != null) RunManager.Instance.OnRunStarted += HandleRunStarted;
         HideTooltip();
         CloseDetail();
         Refresh();
@@ -55,6 +58,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
 
     void OnDisable()
     {
+        if (RunManager.Instance != null) RunManager.Instance.OnRunStarted -= HandleRunStarted;
         if (_subscribedSource) _subscribedSource.OnBuildChanged -= Refresh;
         _subscribedSource = null;
         if (detailCloseButton) detailCloseButton.onClick.RemoveListener(CloseDetail);
@@ -74,6 +78,10 @@ public sealed class ArtifactRailUI : MonoBehaviour
     void Update()
     {
         if (!_subscribedSource && (source || CardManager.Instance)) Refresh();
+        if (_mergeSelecting && (GameplayInputGate.IsBlocked ||
+            _subscribedSource != null && _subscribedSource.IsHandEnhancementTargeting ||
+            RunManager.Instance?.ActiveNode != _mergeNode ||
+            CombatManager.Instance != null && CombatManager.Instance.currentState != _mergeCombatState)) CancelMerge();
     }
 
     public void Refresh()
@@ -84,6 +92,16 @@ public sealed class ArtifactRailUI : MonoBehaviour
             if (_subscribedSource) _subscribedSource.OnBuildChanged -= Refresh;
             _subscribedSource = cards;
             if (_subscribedSource) _subscribedSource.OnBuildChanged += Refresh;
+        }
+
+        if (_mergeSelecting && (!cards || cards.ownedArtifacts.Count < 2 ||
+            (_firstMergeId != 0 && cards.GetArtifactInstanceById(_firstMergeId) == null) ||
+            (_secondMergeId != 0 && cards.GetArtifactInstanceById(_secondMergeId) == null)))
+        {
+            _mergeSelecting = false;
+            _firstMergeId = _secondMergeId = 0;
+            _mergeAwaitingConfirmation = false;
+            _mergePreview = null;
         }
 
         if (capacityLabel)
@@ -104,7 +122,8 @@ public sealed class ArtifactRailUI : MonoBehaviour
                     slot.SetSlotSprites(occupiedSlotSprite, emptySlotSprite, selectedSlotSprite);
                     var instanceId = cards.GetArtifactInstanceAt(currentArtifactIndex)?.Id ?? 0;
                     slot.Bind(artifact, ShowTooltip, HideTooltipFor, ShowDetail,
-                        instanceId, SelectForMerge, _firstMergeId == instanceId || _secondMergeId == instanceId);
+                        instanceId, SelectForMerge, _firstMergeId == instanceId || _secondMergeId == instanceId,
+                        _mergeSelecting, IsMergeEligible(cards, instanceId));
                     slot.gameObject.SetActive(true);
                 }
                 count++;
@@ -127,14 +146,6 @@ public sealed class ArtifactRailUI : MonoBehaviour
 
         if (_hovered && (!cards || !cards.ownedArtifacts.Contains(_hovered))) HideTooltip();
         if (_selected && (!cards || !cards.ownedArtifacts.Contains(_selected))) CloseDetail();
-        if (_mergeSelecting && (!cards ||
-            (_firstMergeId != 0 && cards.GetArtifactInstanceById(_firstMergeId) == null) ||
-            (_secondMergeId != 0 && cards.GetArtifactInstanceById(_secondMergeId) == null)))
-        {
-            _firstMergeId = _secondMergeId = 0;
-            _mergeAwaitingConfirmation = false;
-            _mergePreview = null;
-        }
         UpdateMergeControls();
     }
 
@@ -247,9 +258,28 @@ public sealed class ArtifactRailUI : MonoBehaviour
         return go.GetComponent<ArtifactIconSlotUI>();
     }
 
+    void HandleRunStarted(string _) => CancelMerge();
+
+    bool IsMergeEligible(CardManager cards, long id)
+    {
+        if (!_mergeSelecting) return true;
+        if (id == _firstMergeId || id == _secondMergeId) return true;
+        long anchor = _firstMergeId != 0 ? _firstMergeId : _secondMergeId;
+        if (anchor != 0) return cards.GetArtifactMergeResult(anchor, id) != null;
+        foreach (var candidate in cards.OwnedArtifactInstances)
+            if (candidate != null && cards.GetArtifactMergeResult(id, candidate.Id) != null) return true;
+        return false;
+    }
+
     void BeginMergeSelection()
     {
-        if (_ownedArtifactCount < 2) return;
+        var cards = source ? source : CardManager.Instance;
+        if (_ownedArtifactCount < 2 || GameplayInputGate.IsBlocked ||
+            cards != null && cards.IsHandEnhancementTargeting) return;
+        CloseDetail();
+        HideTooltip();
+        _mergeNode = RunManager.Instance?.ActiveNode;
+        _mergeCombatState = CombatManager.Instance != null ? CombatManager.Instance.currentState : GameState.Idle;
         _mergeSelecting = true;
         _mergeAwaitingConfirmation = false;
         _firstMergeId = _secondMergeId = 0;
@@ -259,7 +289,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
 
     void SelectForMerge(long instanceId, RelicData artifact)
     {
-        if (!_mergeSelecting || instanceId == 0) return;
+        if (!_mergeSelecting || instanceId == 0 || GameplayInputGate.IsBlocked) return;
         if (_firstMergeId == instanceId) _firstMergeId = 0;
         else if (_secondMergeId == instanceId) _secondMergeId = 0;
         else if (_firstMergeId == 0) _firstMergeId = instanceId;
@@ -267,30 +297,14 @@ public sealed class ArtifactRailUI : MonoBehaviour
         _mergeAwaitingConfirmation = false;
         _mergePreview = null;
         var cards = source ? source : CardManager.Instance;
-        var first = cards ? cards.GetArtifactInstanceById(_firstMergeId) : null;
-        var second = cards ? cards.GetArtifactInstanceById(_secondMergeId) : null;
-        if (first != null && second != null && first.Definition != null && second.Definition != null &&
-            first.Definition.canonicalId == second.Definition.canonicalId &&
-            first.Definition.tier == second.Definition.tier && first.Definition.tier >= 1)
-        {
-            RelicData nextCandidate = null;
-            int nextCandidateCount = 0;
-            foreach (var value in cards.relicCatalog)
-            {
-                if (!value || value.tier != first.Definition.tier + 1 ||
-                    value.upgradeFromId != first.Definition.canonicalId) continue;
-                nextCandidate = value;
-                nextCandidateCount++;
-            }
-            if (nextCandidateCount == 1) _mergePreview = nextCandidate;
-        }
+        _mergePreview = cards ? cards.GetArtifactMergeResult(_firstMergeId, _secondMergeId) : null;
         _mergeAwaitingConfirmation = _mergePreview != null;
         Refresh();
     }
 
     void ConfirmMerge()
     {
-        if (!_mergeAwaitingConfirmation || !_mergePreview) return;
+        if (!_mergeAwaitingConfirmation || !_mergePreview || GameplayInputGate.IsBlocked) return;
         var cards = source ? source : CardManager.Instance;
         if (!cards || cards.GetArtifactInstanceById(_firstMergeId) == null ||
             cards.GetArtifactInstanceById(_secondMergeId) == null || _firstMergeId == _secondMergeId ||
@@ -334,7 +348,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
         {
             mergeStatusText.gameObject.SetActive(_mergeSelecting);
             if (!_mergeSelecting) mergeStatusText.text = string.Empty;
-            else if (_mergePreview) mergeStatusText.text = $"Merge into {_mergePreview.displayName}? Select Merge to confirm.";
+            else if (_mergePreview) mergeStatusText.text = $"Merge into {_mergePreview.displayName}? Confirm or Cancel.";
             else if (_firstMergeId != 0 && _secondMergeId != 0)
                 mergeStatusText.text = "These copies cannot be merged. Select a matching pair.";
             else mergeStatusText.text = $"Select two matching artifact copies ({(_firstMergeId != 0 ? 1 : 0) + (_secondMergeId != 0 ? 1 : 0)}/2).";
