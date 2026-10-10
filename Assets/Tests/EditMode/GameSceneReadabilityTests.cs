@@ -1,0 +1,114 @@
+using NUnit.Framework;
+using TMPro;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+public sealed class GameSceneReadabilityTests
+{
+    const string GameScenePath = "Assets/Scenes/Game.unity";
+    Scene _scene;
+    bool _openedAdditively;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _scene = SceneManager.GetSceneByPath(GameScenePath);
+        if (!_scene.IsValid() || !_scene.isLoaded)
+        {
+            _scene = EditorSceneManager.OpenScene(GameScenePath, OpenSceneMode.Additive);
+            _openedAdditively = true;
+        }
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        if (_openedAdditively && _scene.IsValid() && _scene.isLoaded)
+            EditorSceneManager.CloseScene(_scene, true);
+        _openedAdditively = false;
+    }
+
+    [Test]
+    public void ImportantGameHudTextHasReadableMinimumSizesAtReferenceResolution()
+    {
+        var canvas = Find("Canvas");
+        Assert.That(canvas, Is.Not.Null);
+        var scaler = canvas.GetComponent<CanvasScaler>();
+        Assert.That(scaler, Is.Not.Null);
+        Assert.That(scaler.referenceResolution, Is.EqualTo(new Vector2(1920f, 1080f)));
+
+        AssertReadable("Canvas/GoldLabel", 20f);
+        AssertReadable("Canvas/PlayerArea/HealthPanel/PlayerHealthLabel", 19f);
+        AssertReadable("Canvas/PlayerArea/ActionBar/PlayButton/PlayCardButtonLabel", 19f);
+        AssertReadable("Canvas/PlayerArea/ActionBar/BlockButton/PlayCardButtonLabel", 19f);
+        AssertReadable("Canvas/PlayerArea/SelectionLabel", 16f);
+        AssertReadable("Canvas/RunHeader/RunProgressLabel", 17f);
+        AssertReadable("Canvas/OwnedArtifactsBar/ArtifactsHeader", 18f);
+        AssertReadable("Canvas/PathPanel/PathCard/PathInstructionLabel", 16f);
+        AssertReadable("Canvas/ShopPanel/ShopCard/ShopTitleLabel", 21f);
+    }
+
+    [Test]
+    public void ImportantLabelsAndPrimaryButtonsFitTheir1920ReferenceRects()
+    {
+        Canvas.ForceUpdateCanvases();
+        AssertTextFits("Canvas/GoldLabel");
+        AssertTextFits("Canvas/RunHeader/RunProgressLabel");
+        AssertTextFits("Canvas/RunHeader/BossProgressLabel");
+        AssertTextFits("Canvas/PlayerArea/SelectionLabel");
+        AssertTextFits("Canvas/PlayerArea/ActionBar/PlayButton/PlayCardButtonLabel");
+        AssertTextFits("Canvas/PlayerArea/ActionBar/BlockButton/PlayCardButtonLabel");
+        AssertTextFits("Canvas/PathPanel/PathCard/PathInstructionLabel");
+        AssertTextFits("Canvas/ShopPanel/ShopCard/ShopTitleLabel");
+
+        AssertHitTarget("Canvas/PlayerArea/ActionBar/PlayButton", 200f, 56f);
+        AssertHitTarget("Canvas/PlayerArea/ActionBar/BlockButton", 180f, 56f);
+        AssertHitTarget("Canvas/PlayerArea/HealthPanel/TakeDamageButton", 220f, 38f);
+    }
+
+    void AssertReadable(string path, float minimumSize)
+    {
+        var label = Find(path)?.GetComponent<TMP_Text>();
+        Assert.That(label, Is.Not.Null, path);
+        Assert.That(label.fontSizeMax, Is.GreaterThanOrEqualTo(minimumSize), path + " maximum font size");
+        if (label.enableAutoSizing)
+            Assert.That(label.fontSizeMin, Is.GreaterThanOrEqualTo(minimumSize), path + " minimum autosized font size");
+    }
+
+    void AssertTextFits(string path)
+    {
+        var label = Find(path)?.GetComponent<TMP_Text>();
+        Assert.That(label, Is.Not.Null, path);
+        if (string.IsNullOrWhiteSpace(label.text)) Assert.Ignore(path + " has no authored preview text.");
+        var rect = label.rectTransform.rect;
+        float preferredHeight = label.GetPreferredValues(label.text, Mathf.Max(1f, rect.width - 8f), 0f).y;
+        Assert.That(preferredHeight, Is.LessThanOrEqualTo(rect.height + 2f),
+            $"{path}: preferred height {preferredHeight:0.0} exceeds rect {rect.height:0.0} at the 1920×1080 reference resolution.");
+    }
+
+    void AssertHitTarget(string path, float minWidth, float minHeight)
+    {
+        var rect = Find(path)?.GetComponent<RectTransform>();
+        Assert.That(rect, Is.Not.Null, path);
+        Assert.That(rect.rect.width, Is.GreaterThanOrEqualTo(minWidth), path + " width");
+        Assert.That(rect.rect.height, Is.GreaterThanOrEqualTo(minHeight), path + " height");
+    }
+
+    GameObject Find(string path)
+    {
+        string[] parts = path.Split('/');
+        GameObject[] roots = _scene.GetRootGameObjects();
+        Transform current = null;
+        for (int i = 0; i < roots.Length; i++)
+            if (roots[i].name == parts[0]) { current = roots[i].transform; break; }
+        if (current == null) return null;
+        for (int i = 1; i < parts.Length; i++)
+        {
+            current = current.Find(parts[i]);
+            if (current == null) return null;
+        }
+        return current.gameObject;
+    }
+}

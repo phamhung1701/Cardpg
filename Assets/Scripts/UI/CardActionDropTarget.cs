@@ -102,7 +102,9 @@ public class CardActionDropTarget : MonoBehaviour, IPointerEnterHandler, IPointe
     public void OnPointerClick(PointerEventData eventData)
     {
         if (GameplayInputGate.IsBlocked || eventData.button != PointerEventData.InputButton.Left) return;
-        CombatManager.Instance?.SelectEnemyTarget(ResolveEnemyTarget());
+        var target = ResolveEnemyTarget();
+        if (CardManager.Instance != null && CardManager.Instance.HandleEnemyTargetClick(target)) return;
+        CombatManager.Instance?.SelectEnemyTarget(target);
     }
 
     void ResolveReferences()

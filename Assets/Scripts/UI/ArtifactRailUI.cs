@@ -33,7 +33,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
     readonly List<ArtifactIconSlotUI> _slots = new();
     CardManager _subscribedSource;
     RelicData _hovered;
-    RelicData _selected;
+    long _selectedInstanceId;
     bool _mergeSelecting;
     bool _mergeAwaitingConfirmation;
     long _firstMergeId;
@@ -42,6 +42,8 @@ public sealed class ArtifactRailUI : MonoBehaviour
     RelicData _mergePreview;
     PathNode _mergeNode;
     GameState _mergeCombatState;
+    Vector2 _lastDetailParentSize;
+    bool _hasLastDetailParentSize;
 
     void OnEnable()
     {
@@ -50,7 +52,14 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (mergeModeButton) mergeModeButton.onClick.AddListener(BeginMergeSelection);
         if (mergeConfirmButton) mergeConfirmButton.onClick.AddListener(ConfirmMerge);
         if (mergeCancelButton) mergeCancelButton.onClick.AddListener(CancelMerge);
-        if (RunManager.Instance != null) RunManager.Instance.OnRunStarted += HandleRunStarted;
+        if (RunManager.Instance != null)
+        {
+            RunManager.Instance.OnRunStarted += HandleRunStarted;
+            RunManager.Instance.OnHideShop += HandleContextEnded;
+            RunManager.Instance.OnShowPathScreen += HandleContextEnded;
+            RunManager.Instance.OnHidePathScreen += HandleContextEnded;
+        }
+        if (CombatManager.Instance != null) CombatManager.Instance.OnEncounterResult += HandleEncounterResult;
         HideTooltip();
         CloseDetail();
         Refresh();
@@ -58,7 +67,14 @@ public sealed class ArtifactRailUI : MonoBehaviour
 
     void OnDisable()
     {
-        if (RunManager.Instance != null) RunManager.Instance.OnRunStarted -= HandleRunStarted;
+        if (RunManager.Instance != null)
+        {
+            RunManager.Instance.OnRunStarted -= HandleRunStarted;
+            RunManager.Instance.OnHideShop -= HandleContextEnded;
+            RunManager.Instance.OnShowPathScreen -= HandleContextEnded;
+            RunManager.Instance.OnHidePathScreen -= HandleContextEnded;
+        }
+        if (CombatManager.Instance != null) CombatManager.Instance.OnEncounterResult -= HandleEncounterResult;
         if (_subscribedSource) _subscribedSource.OnBuildChanged -= Refresh;
         _subscribedSource = null;
         if (detailCloseButton) detailCloseButton.onClick.RemoveListener(CloseDetail);
@@ -82,6 +98,10 @@ public sealed class ArtifactRailUI : MonoBehaviour
             _subscribedSource != null && _subscribedSource.IsHandEnhancementTargeting ||
             RunManager.Instance?.ActiveNode != _mergeNode ||
             CombatManager.Instance != null && CombatManager.Instance.currentState != _mergeCombatState)) CancelMerge();
+        if (_selectedInstanceId != 0 && detailPanel && detailPanel.activeSelf &&
+            detailPanel.transform.parent is RectTransform detailParent &&
+            (!_hasLastDetailParentSize || (detailParent.rect.size - _lastDetailParentSize).sqrMagnitude > 0.25f))
+            PositionDetailBesideSlot(_selectedInstanceId);
     }
 
     public void Refresh()
@@ -121,9 +141,10 @@ public sealed class ArtifactRailUI : MonoBehaviour
                     var slot = _slots[count];
                     slot.SetSlotSprites(occupiedSlotSprite, emptySlotSprite, selectedSlotSprite);
                     var instanceId = cards.GetArtifactInstanceAt(currentArtifactIndex)?.Id ?? 0;
-                    slot.Bind(artifact, ShowTooltip, HideTooltipFor, ShowDetail,
+                    slot.Bind(artifact, ShowTooltip, HideTooltipFor,
+                        selectedArtifact => SelectArtifact(instanceId, selectedArtifact),
                         instanceId, SelectForMerge, _firstMergeId == instanceId || _secondMergeId == instanceId,
-                        _mergeSelecting, IsMergeEligible(cards, instanceId));
+                        _mergeSelecting, IsMergeEligible(cards, instanceId), _selectedInstanceId == instanceId);
                     slot.gameObject.SetActive(true);
                 }
                 count++;
@@ -145,7 +166,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
             _slots[i].gameObject.SetActive(false);
 
         if (_hovered && (!cards || !cards.ownedArtifacts.Contains(_hovered))) HideTooltip();
-        if (_selected && (!cards || !cards.ownedArtifacts.Contains(_selected))) CloseDetail();
+        if (_selectedInstanceId != 0 && (!cards || cards.GetArtifactInstanceById(_selectedInstanceId) == null)) CloseDetail();
         UpdateMergeControls();
     }
 
@@ -258,7 +279,19 @@ public sealed class ArtifactRailUI : MonoBehaviour
         return go.GetComponent<ArtifactIconSlotUI>();
     }
 
-    void HandleRunStarted(string _) => CancelMerge();
+    void HandleRunStarted(string _)
+    {
+        CancelMerge();
+        CloseDetail();
+    }
+
+    void HandleContextEnded()
+    {
+        CloseDetail();
+        CancelMerge();
+    }
+
+    void HandleEncounterResult(EncounterResult _) => CloseDetail();
 
     bool IsMergeEligible(CardManager cards, long id)
     {
@@ -373,21 +406,117 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (tooltipPanel) tooltipPanel.SetActive(false);
     }
 
-    void ShowDetail(RelicData artifact)
+    void SelectArtifact(long instanceId, RelicData artifact)
     {
-        _selected = artifact;
+        if (instanceId == 0 || artifact == null) return;
+        if (_selectedInstanceId == instanceId)
+        {
+            CloseDetail();
+            Refresh();
+            return;
+        }
+        CardManager.Instance?.ClearSelection();
+        FindFirstObjectByType<ActionButtonsUI>()?.ClearSelectedConsumable();
+        _selectedInstanceId = instanceId;
         HideTooltip();
-        if (detailText) detailText.text = Describe(artifact);
+        if (detailText) detailText.text = $"<size=115%><b>{artifact.displayName}</b></size>\n<size=85%>{artifact.description}</size>";
+        PositionDetailBesideSlot(instanceId);
         if (detailPanel)
         {
             detailPanel.SetActive(true);
             detailPanel.transform.SetAsLastSibling();
         }
+        Refresh();
+    }
+
+    void PositionDetailBesideSlot(long instanceId)
+    {
+        if (!detailPanel || !slotsRoot || !(detailPanel.transform is RectTransform detailRect)) return;
+        var detailCanvas = detailPanel.GetComponent<Canvas>();
+        if (detailCanvas)
+        {
+            detailCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            detailCanvas.enabled = true;
+            detailCanvas.overrideSorting = true;
+            detailCanvas.sortingOrder = 60;
+        }
+        var raycaster = detailPanel.GetComponent<GraphicRaycaster>();
+        if (raycaster) raycaster.enabled = true;
+        detailRect.anchorMin = detailRect.anchorMax = new Vector2(0.5f, 0.5f);
+        detailRect.pivot = new Vector2(0.5f, 0.5f);
+        detailRect.sizeDelta = new Vector2(190f, 96f);
+        if (detailText)
+        {
+            var textRect = detailText.rectTransform;
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(10f, 8f);
+            textRect.offsetMax = new Vector2(-38f, -8f);
+            detailText.fontSize = 18f;
+            detailText.enableAutoSizing = true;
+            detailText.fontSizeMin = 14f;
+            detailText.fontSizeMax = 18f;
+            detailText.fontStyle = FontStyles.Normal;
+            detailText.alignment = TextAlignmentOptions.TopLeft;
+            detailText.overflowMode = TextOverflowModes.Ellipsis;
+            float textHeight = detailText.GetPreferredValues(detailText.text,
+                Mathf.Max(40f, detailRect.rect.width - 58f), 0f).y;
+            detailRect.sizeDelta = new Vector2(190f, Mathf.Clamp(Mathf.Ceil(textHeight + 18f), 96f, 220f));
+        }
+        var closeRect = detailCloseButton ? detailCloseButton.transform as RectTransform : null;
+        if (closeRect)
+        {
+            closeRect.anchorMin = closeRect.anchorMax = Vector2.one;
+            closeRect.pivot = Vector2.one;
+            closeRect.sizeDelta = new Vector2(28f, 24f);
+            closeRect.anchoredPosition = new Vector2(-4f, -4f);
+            var closeLabel = detailCloseButton.GetComponentInChildren<TMP_Text>(true);
+            if (closeLabel)
+            {
+                closeLabel.text = "×";
+                closeLabel.fontSize = 18f;
+                closeLabel.enableAutoSizing = false;
+            }
+        }
+        var discardText = detailPanel.transform.Find("DiscardPileText");
+        if (discardText) discardText.gameObject.SetActive(false);
+        var drawViewport = detailPanel.transform.Find("DrawDeckViewport");
+        if (drawViewport) drawViewport.gameObject.SetActive(false);
+        var panelImage = detailPanel.GetComponent<Image>();
+        if (panelImage) panelImage.color = new Color(0.08f, 0.11f, 0.16f, 0.96f);
+        var parentRect = detailRect.parent as RectTransform;
+        if (parentRect == null) return;
+        ArtifactIconSlotUI selectedSlot = null;
+        foreach (var slot in _slots)
+            if (slot && slot.InstanceId == instanceId) { selectedSlot = slot; break; }
+        if (!selectedSlot) return;
+        var canvas = parentRect.GetComponentInParent<Canvas>();
+        Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        var slotRect = selectedSlot.transform as RectTransform;
+        var corners = new Vector3[4];
+        slotRect.GetWorldCorners(corners);
+        Vector2 screen = RectTransformUtility.WorldToScreenPoint(camera, corners[3]);
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, screen, camera, out var local)) return;
+        float halfWidth = detailRect.rect.width * 0.5f;
+        float halfHeight = detailRect.rect.height * 0.5f;
+        local.x += halfWidth + 12f;
+        if (local.x + halfWidth > parentRect.rect.xMax)
+            local.x -= detailRect.rect.width + slotRect.rect.width + 24f;
+        local.x = Mathf.Clamp(local.x, parentRect.rect.xMin + halfWidth, parentRect.rect.xMax - halfWidth);
+        local.y += slotRect.rect.height * 0.5f;
+        local.y = Mathf.Clamp(local.y, parentRect.rect.yMin + halfHeight, parentRect.rect.yMax - halfHeight);
+        detailRect.anchoredPosition = local;
+        _lastDetailParentSize = parentRect.rect.size;
+        _hasLastDetailParentSize = true;
     }
 
     public void CloseDetail()
     {
-        _selected = null;
+        _selectedInstanceId = 0;
+        _hasLastDetailParentSize = false;
+        if (detailText) detailText.text = string.Empty;
+        foreach (var slot in _slots)
+            if (slot) slot.SetDetailSelected(false);
         if (detailPanel) detailPanel.SetActive(false);
     }
 

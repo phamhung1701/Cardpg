@@ -1,8 +1,9 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class EnemyDisplayUI : MonoBehaviour
+public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("References")]
     public TMP_Text nameText;
@@ -29,6 +30,12 @@ public class EnemyDisplayUI : MonoBehaviour
     Vector3 _preDefeatScale;
     Color _preDefeatPortraitColor;
     CanvasGroup _defeatCanvasGroup;
+    bool _enemyTargeting;
+    bool _enemyTargetEligible;
+    bool _enemyPointerHovered;
+    CanvasGroup _targetCanvasGroup;
+    Outline _targetOutline;
+    Vector3 _baseTargetScale;
 
     public EnemyRuntime DisplayedEnemy => _hasExplicitBinding
         ? _boundEnemy
@@ -36,6 +43,7 @@ public class EnemyDisplayUI : MonoBehaviour
 
     void Awake()
     {
+        _baseTargetScale = transform.localScale;
         if (!portrait) return;
 
         _placeholderSprite = portrait.sprite;
@@ -49,6 +57,53 @@ public class EnemyDisplayUI : MonoBehaviour
         _portraitAnchorMax = rect.anchorMax;
         _portraitAnchoredPosition = rect.anchoredPosition;
         _portraitSizeDelta = rect.sizeDelta;
+    }
+
+    public void SetEnemyTargeting(bool targeting, bool eligible)
+    {
+        _enemyTargeting = targeting;
+        _enemyTargetEligible = targeting && eligible;
+        if (_enemyTargeting && _targetCanvasGroup == null)
+            _targetCanvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        if (_enemyTargeting && portrait != null && _targetOutline == null)
+        {
+            _targetOutline = portrait.GetComponent<Outline>() ?? portrait.gameObject.AddComponent<Outline>();
+            _targetOutline.effectDistance = new Vector2(3f, -3f);
+        }
+        RefreshEnemyTargetPresentation();
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        _enemyPointerHovered = true;
+        RefreshEnemyTargetPresentation();
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        _enemyPointerHovered = false;
+        RefreshEnemyTargetPresentation();
+    }
+
+    void RefreshEnemyTargetPresentation()
+    {
+        if (!_enemyTargeting)
+        {
+            if (_targetCanvasGroup != null) _targetCanvasGroup.alpha = 1f;
+            if (_targetOutline != null) _targetOutline.enabled = false;
+            if (_baseTargetScale != Vector3.zero) transform.localScale = _baseTargetScale;
+            return;
+        }
+        if (_targetCanvasGroup != null) _targetCanvasGroup.alpha = _enemyTargetEligible ? 1f : 0.38f;
+        if (_targetOutline != null)
+        {
+            _targetOutline.enabled = _enemyTargetEligible;
+            _targetOutline.effectColor = _enemyPointerHovered
+                ? new Color(1f, 0.86f, 0.32f, 1f)
+                : new Color(0.36f, 1f, 0.52f, 1f);
+        }
+        float scale = _enemyTargetEligible ? (_enemyPointerHovered ? 1.07f : 1.035f) : 0.96f;
+        transform.localScale = _baseTargetScale * scale;
     }
 
     public void Bind(EnemyRuntime enemy)

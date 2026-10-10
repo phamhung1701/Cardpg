@@ -20,16 +20,32 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
     Sprite _emptySlotSprite;
     Sprite _selectedSlotSprite;
     bool _mergeSelected;
+    bool _detailSelected;
     bool _mergeMode;
     bool _mergeEligible = true;
 
     public RelicData Artifact => _artifact;
+    public long InstanceId => _instanceId;
+    public bool IsDetailSelected => _detailSelected;
 
     public void SetSlotSprites(Sprite occupied, Sprite empty, Sprite selected)
     {
         _occupiedSlotSprite = occupied;
         _emptySlotSprite = empty;
         _selectedSlotSprite = selected;
+        RefreshSlotBackground();
+    }
+
+    public void SetDetailSelected(bool selected)
+    {
+        _detailSelected = selected && _artifact != null;
+        var outline = GetComponent<Outline>();
+        if (outline)
+        {
+            outline.effectColor = _mergeSelected ? new Color(1f, 0.72f, 0.2f) :
+                _detailSelected ? new Color(0.35f, 0.85f, 1f) : new Color(0.4f, 0.85f, 0.65f);
+            outline.enabled = _detailSelected || _mergeMode && (_mergeEligible || _mergeSelected);
+        }
         RefreshSlotBackground();
     }
 
@@ -42,6 +58,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         _mergeSelect = null;
         _instanceId = 0;
         _mergeSelected = false;
+        _detailSelected = false;
         _mergeMode = false;
         _mergeEligible = true;
         if (TryGetComponent<CanvasGroup>(out var group)) group.alpha = 1f;
@@ -55,7 +72,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
 
     public void Bind(RelicData artifact, Action<RelicData> hover, Action<RelicData> leave,
         Action<RelicData> select, long instanceId, Action<long, RelicData> mergeSelect, bool mergeSelected,
-        bool mergeMode = false, bool mergeEligible = true)
+        bool mergeMode = false, bool mergeEligible = true, bool detailSelected = false)
     {
         _artifact = artifact;
         _hover = hover;
@@ -64,6 +81,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         _instanceId = instanceId;
         _mergeSelect = mergeSelect;
         _mergeSelected = mergeSelected;
+        _detailSelected = detailSelected;
         _mergeMode = mergeMode;
         _mergeEligible = mergeEligible;
         var group = GetComponent<CanvasGroup>();
@@ -71,9 +89,10 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         group.alpha = mergeMode && !mergeEligible && !mergeSelected ? 0.4f : 1f;
         var outline = GetComponent<Outline>();
         if (!outline) outline = gameObject.AddComponent<Outline>();
-        outline.effectColor = mergeSelected ? new Color(1f, 0.72f, 0.2f) : new Color(0.4f, 0.85f, 0.65f);
+        outline.effectColor = _mergeSelected ? new Color(1f, 0.72f, 0.2f) :
+            _detailSelected ? new Color(0.35f, 0.85f, 1f) : new Color(0.4f, 0.85f, 0.65f);
         outline.effectDistance = new Vector2(2f, -2f);
-        outline.enabled = mergeMode && (mergeEligible || mergeSelected);
+        outline.enabled = _detailSelected || mergeMode && (mergeEligible || mergeSelected);
         var image = GetComponent<Image>();
         if (image) image.raycastTarget = true;
         if (image) image.preserveAspect = true;
@@ -116,7 +135,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         var image = GetComponent<Image>();
         if (image == null) return;
         var sprite = _artifact == null ? _emptySlotSprite
-            : _mergeSelected && _selectedSlotSprite != null ? _selectedSlotSprite : _occupiedSlotSprite;
+            : (_mergeSelected || _detailSelected) && _selectedSlotSprite != null ? _selectedSlotSprite : _occupiedSlotSprite;
         if (sprite != null)
         {
             image.sprite = sprite;
@@ -127,6 +146,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         else
             image.color = _artifact == null ? new Color(0.12f, 0.16f, 0.22f, 0.55f)
                 : _mergeSelected ? new Color(0.25f, 0.58f, 0.34f, 0.95f)
+                : _detailSelected ? new Color(0.2f, 0.45f, 0.62f, 0.95f)
                 : new Color(0.16f, 0.20f, 0.27f, 0.78f);
     }
 
@@ -142,7 +162,9 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (_artifact && !GameplayInputGate.IsBlocked && eventData.button == PointerEventData.InputButton.Left)
+        if (_artifact && !GameplayInputGate.IsBlocked &&
+            CardManager.Instance?.IsHandEnhancementTargeting != true && CardManager.Instance?.IsEnemyTargeting != true &&
+            eventData.button == PointerEventData.InputButton.Left)
         {
             if (_mergeMode)
             {

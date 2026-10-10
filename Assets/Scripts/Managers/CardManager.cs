@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+public enum ConsumableTargetType { None, Card, Enemy }
+
 public class CardManager : Singleton<CardManager>
 {
     public const int HAND_SIZE = 8;
@@ -40,8 +42,12 @@ public class CardManager : Singleton<CardManager>
     bool _consumableUsedThisEncounter;
     Action<CardView> _handEnhancementTargetHandler;
     Func<int, bool> _handTargetEligibility;
+    Action<EnemyRuntime> _enemyTargetHandler;
+    Func<EnemyRuntime, bool> _enemyTargetEligibility;
 
     public bool IsHandEnhancementTargeting => _handEnhancementTargetHandler != null;
+    public bool IsEnemyTargeting => _enemyTargetHandler != null;
+    public event Action<bool> OnEnemyTargetingChanged;
 
     public IReadOnlyList<ArtifactRuntimeInstance> OwnedArtifactInstances
     {
@@ -300,7 +306,8 @@ public class CardManager : Singleton<CardManager>
         {
             ConsumableEffectType.Heal => consumable.healAmount > 0 &&
                 combat.player.currentHealth < combat.player.maxHealth,
-            ConsumableEffectType.DirectEnemyDamage => combat.CanUseConsumableDamage(consumable.damageAmount),
+            ConsumableEffectType.DirectEnemyDamage => combat.Enemies.Any(enemy =>
+                enemy != null && combat.CanUseConsumableDamage(consumable.damageAmount, enemy)),
             ConsumableEffectType.ApplyEnhancement => consumable.enhancementToApply != null && hasEnhancementTarget,
             ConsumableEffectType.DuplicateCard => canEdit && hasTarget,
             ConsumableEffectType.DestroyCards => canEdit && _cards.OwnedCards.Count > 1 && hasTarget,
@@ -956,12 +963,42 @@ public class CardManager : Singleton<CardManager>
 
     public void BeginHandTargeting(Action<CardView> onTarget, Func<int, bool> isEligible)
     {
+        EndEnemyTargeting();
         EndHandEnhancementTargeting();
         _handEnhancementTargetHandler = onTarget;
         _handTargetEligibility = isEligible;
         ClearSelection();
         CancelCardInteractions();
         RefreshHandTargetPresentation();
+    }
+
+    public void BeginEnemyTargeting(Action<EnemyRuntime> onTarget, Func<EnemyRuntime, bool> isEligible)
+    {
+        EndEnemyTargeting();
+        if (IsHandEnhancementTargeting) EndHandEnhancementTargeting();
+        if (onTarget == null) return;
+        _enemyTargetHandler = onTarget;
+        _enemyTargetEligibility = isEligible;
+        if (_activeDragCard != null) _activeDragCard.CancelActiveDrag();
+        _activeDragCard = null;
+        OnEnemyTargetingChanged?.Invoke(true);
+    }
+
+    public bool HandleEnemyTargetClick(EnemyRuntime enemy)
+    {
+        if (!IsEnemyTargeting) return false;
+        if (!GameplayInputGate.IsBlocked && enemy != null &&
+            (_enemyTargetEligibility == null || _enemyTargetEligibility(enemy)))
+            _enemyTargetHandler?.Invoke(enemy);
+        return true;
+    }
+
+    public void EndEnemyTargeting()
+    {
+        if (!IsEnemyTargeting) return;
+        _enemyTargetHandler = null;
+        _enemyTargetEligibility = null;
+        OnEnemyTargetingChanged?.Invoke(false);
     }
 
     public void EndHandEnhancementTargeting()
@@ -987,6 +1024,41 @@ public class CardManager : Singleton<CardManager>
             bool eligible = targeting && (_handTargetEligibility == null || _handTargetEligibility(view.data.Id));
             view.SetHandTargetState(targeting, eligible);
         }
+    }
+
+    public ConsumableTargetType GetConsumableTargetTypeAtSlot(int slotIndex)
+    {
+        var item = GetConsumableAtSlot(slotIndex);
+        if (item == null) return ConsumableTargetType.None;
+        return item.effectType switch
+        {
+            ConsumableEffectType.DirectEnemyDamage => ConsumableTargetType.Enemy,
+            ConsumableEffectType.ApplyEnhancement or ConsumableEffectType.DuplicateCard or
+                ConsumableEffectType.DestroyCards or ConsumableEffectType.ChangeSuit => ConsumableTargetType.Card,
+            _ => ConsumableTargetType.None
+        };
+    }
+
+    public IReadOnlyList<EnemyRuntime> GetValidEnemyTargetsForConsumableAtSlot(int slotIndex)
+    {
+        var combat = CombatManager.Instance;
+        var result = new List<EnemyRuntime>();
+        var item = GetConsumableAtSlot(slotIndex);
+        if (item == null || item.effectType != ConsumableEffectType.DirectEnemyDamage ||
+            !CanUseConsumableAtSlot(slotIndex, combat) || combat == null) return result;
+        foreach (var enemy in combat.Enemies)
+            if (enemy != null && combat.CanUseConsumableDamage(item.damageAmount, enemy)) result.Add(enemy);
+        return result;
+    }
+
+    public int GetConsumableEffectTargetMinimumAtSlot(int slotIndex) =>
+        GetConsumableTargetTypeAtSlot(slotIndex) == ConsumableTargetType.None ? 0 : 1;
+
+    public int GetConsumableEffectTargetMaximumAtSlot(int slotIndex)
+    {
+        var type = GetConsumableTargetTypeAtSlot(slotIndex);
+        return type == ConsumableTargetType.Enemy ? 1 :
+            type == ConsumableTargetType.Card ? GetConsumableTargetMaximum(slotIndex) : 0;
     }
 
     public int GetConsumableTargetMinimum(int slotIndex) =>
@@ -1037,6 +1109,7 @@ public class CardManager : Singleton<CardManager>
 
     public void HandleCardClick(CardView card)
     {
+        if (IsEnemyTargeting) return;
         if (IsHandEnhancementTargeting)
         {
             if (CanRouteHandEnhancementTargetClick && IsTrackedHandView(card) &&
@@ -1052,6 +1125,7 @@ public class CardManager : Singleton<CardManager>
 
     public void CancelCardInteractions()
     {
+        EndEnemyTargeting();
         ClearSelection();
         if (_activeDragCard != null)
             _activeDragCard.CancelActiveDrag();
@@ -1230,7 +1304,7 @@ public class CardManager : Singleton<CardManager>
 
     bool CanSelect(CardView card)
     {
-        return !IsHandEnhancementTargeting && !GameplayInputGate.IsBlocked && card != null && card.data != null &&
+        return !IsHandEnhancementTargeting && !IsEnemyTargeting && !GameplayInputGate.IsBlocked && card != null && card.data != null &&
             _trackedViews.Contains(card) && _cards.ContainsInHand(card.data);
     }
 

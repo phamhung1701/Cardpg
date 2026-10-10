@@ -123,6 +123,7 @@ public class RunManager : Singleton<RunManager>
     }
 
     public PathNode ActiveNode => _activeNode;
+    public bool CanSellItems => IsActiveShopForSale();
     public RunEventDefinition ActiveEvent => _activeEvent;
     public bool IsPendingHammerReward => _pendingHammerReward;
     public EnemyTypeData CurrentBoss => bossDeck.Count == 0 || bossIndex < 0

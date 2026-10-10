@@ -24,9 +24,7 @@ public class ShopUI : MonoBehaviour
     string _selectedOfferId;
     bool _sellingMode;
     long _selectedArtifactInstanceId;
-    int _selectedConsumableSlot = -1;
     int _selectedSaleAuthoredPrice = -1;
-    ConsumableInstance _selectedConsumableInstance;
     public string SelectedOfferId => _selectedOfferId;
     public bool SellingMode => _sellingMode;
 
@@ -152,9 +150,7 @@ public class ShopUI : MonoBehaviour
     void ClearSaleSelection()
     {
         _selectedArtifactInstanceId = 0;
-        _selectedConsumableSlot = -1;
         _selectedSaleAuthoredPrice = -1;
-        _selectedConsumableInstance = null;
         if (buyButton) SetButtonLabel(buyButton, _sellingMode ? "Confirm Sale" : "Buy");
         if (buyButton) buyButton.interactable = false;
     }
@@ -171,26 +167,12 @@ public class ShopUI : MonoBehaviour
         var item = CardManager.Instance != null ? CardManager.Instance.GetArtifactInstanceById(instanceId) : null;
         if (item == null || item.Definition == null || item.Definition.price < 0) return;
         _selectedArtifactInstanceId = instanceId;
-        _selectedConsumableSlot = -1;
         _selectedSaleAuthoredPrice = item.Definition.price;
-        _selectedConsumableInstance = null;
         UpdateSaleDetails(item.Definition.displayName, item.Definition.price / 2);
     }
 
-    void SelectConsumableForSale(int slot, ConsumableInstance instance)
-    {
-        if (GameplayInputGate.IsBlocked || !IsShopOpen() || instance == null || instance.Definition == null ||
-            instance.Definition.price < 0) return;
-        _selectedArtifactInstanceId = 0;
-        _selectedConsumableSlot = slot;
-        _selectedSaleAuthoredPrice = instance.Definition.price;
-        _selectedConsumableInstance = instance;
-        UpdateSaleDetails(instance.Definition.displayName, instance.Definition.price / 2);
-    }
-
     bool IsShopOpen() => panel != null && panel.activeSelf && RunManager.Instance != null &&
-        RunManager.Instance.ActiveNode != null && RunManager.Instance.ActiveNode.kind == MapNodeType.Shop &&
-        !RunManager.Instance.ActiveNode.completed;
+        RunManager.Instance.CanSellItems;
 
     void UpdateSaleDetails(string itemName, int payout)
     {
@@ -206,10 +188,8 @@ public class ShopUI : MonoBehaviour
     {
         if (GameplayInputGate.IsBlocked || !IsShopOpen() || !_sellingMode) return;
         var run = RunManager.Instance;
-        bool sold = _selectedArtifactInstanceId != 0
-            ? run.SellArtifact(_selectedArtifactInstanceId, _selectedSaleAuthoredPrice)
-            : _selectedConsumableInstance != null &&
-                run.SellConsumable(_selectedConsumableSlot, _selectedConsumableInstance, _selectedSaleAuthoredPrice);
+        bool sold = _selectedArtifactInstanceId != 0 &&
+            run.SellArtifact(_selectedArtifactInstanceId, _selectedSaleAuthoredPrice);
         if (!sold)
         {
             ClearSaleSelection();
@@ -407,17 +387,10 @@ public class ShopUI : MonoBehaviour
             AddSellRow($"artifact:{artifact.Id}", artifact.Definition.icon, artifact.Definition.displayName,
                 artifact.Definition.price / 2, () => SelectArtifactForSale(artifact.Id));
         }
-        for (int slot = 0; slot < cards.BackpackSlotsUsed; slot++)
-        {
-            var stackInstance = cards.GetConsumableInstanceAtSlot(slot);
-            if (stackInstance == null || stackInstance.Definition == null || stackInstance.Definition.price < 0) continue;
-            int capturedSlot = slot;
-            var capturedInstance = stackInstance;
-            AddSellRow($"consumable:{slot}", stackInstance.Definition.icon, stackInstance.Definition.displayName,
-                stackInstance.Definition.price / 2, () => SelectConsumableForSale(capturedSlot, capturedInstance));
-        }
         if (itemsContainer.childCount == 0 && selectedOfferText)
-            selectedOfferText.text = "No owned Artifacts or Consumables to sell.";
+            selectedOfferText.text = cards.BackpackSlotsUsed > 0
+                ? "No Artifacts to sell. Select a Consumable in your backpack to use or sell it here."
+                : "No owned Artifacts or Consumables to sell.";
     }
 
     void AddSellRow(string rowName, string icon, string itemName, int payout, UnityEngine.Events.UnityAction onClick)
@@ -498,7 +471,7 @@ public class ShopUI : MonoBehaviour
         if (selected == null)
         {
             selectedOfferText.text = _sellingMode
-                ? "Select an owned Artifact or Consumable to sell."
+                ? "Select an Artifact to sell, or select a backpack Consumable to use or sell it."
                 : "Select an offer to inspect before buying.";
             return;
         }

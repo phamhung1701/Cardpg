@@ -201,6 +201,39 @@ public sealed class ArtifactRailUITests
     }
 
     [Test]
+    public void SelectingArtifactShowsAdjacentDetailsUpdatesSelectionAndEmptySlotsStayBlank()
+    {
+        var first = Artifact("first-detail", "First Name", "A", "First description");
+        var second = Artifact("second-detail", "Second Name", "B", "Second description");
+        Assert.That(_cards.BuyArtifact(first, 0), Is.True);
+        Assert.That(_cards.BuyArtifact(second, 0), Is.True);
+        InvokeRail("Refresh");
+        var firstSlot = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
+        var secondSlot = _slots.GetChild(1).GetComponent<ArtifactIconSlotUI>();
+        firstSlot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(firstSlot.IsDetailSelected, Is.True);
+        Assert.That(_detailPanel.activeSelf, Is.True);
+        Assert.That(_detail.text, Does.Contain("First Name").And.Contain("First description"));
+        var detailRect = _detailPanel.GetComponent<RectTransform>();
+        Assert.That(detailRect.rect.width, Is.LessThanOrEqualTo(200f), "Artifact information remains a compact side card, not a modal.");
+        Assert.That(detailRect.rect.height, Is.LessThanOrEqualTo(220f));
+
+        secondSlot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(firstSlot.IsDetailSelected, Is.False);
+        Assert.That(secondSlot.IsDetailSelected, Is.True);
+        Assert.That(_detail.text, Does.Contain("Second Name").And.Contain("Second description"));
+        string selectedDescription = _detail.text;
+        _slots.GetChild(2).GetComponent<ArtifactIconSlotUI>()
+            .OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(_detail.text, Is.EqualTo(selectedDescription));
+        Assert.That(_slots.GetChild(2).GetComponent<ArtifactIconSlotUI>().Artifact, Is.Null);
+
+        secondSlot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(_detailPanel.activeSelf, Is.False);
+        Assert.That(secondSlot.IsDetailSelected, Is.False);
+    }
+
+    [Test]
     public void Reset_ClearsSlotsAndOpenDetail_ThenAcquisitionReusesSlot()
     {
         var first = Artifact("first", "First", "A", "First detail");
