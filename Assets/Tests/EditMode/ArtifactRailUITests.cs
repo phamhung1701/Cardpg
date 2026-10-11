@@ -115,6 +115,12 @@ public sealed class ArtifactRailUITests
         Assert.That(_rail.mergeCancelButton, Is.Not.Null);
         Assert.That(_rail.mergeStatusText, Is.Not.Null);
         Assert.That(_rail.mergeModeButton.transform.parent, Is.SameAs(bar.transform));
+        foreach (var button in new[] { _rail.mergeModeButton, _rail.mergeConfirmButton, _rail.mergeCancelButton })
+        {
+            Assert.That(((RectTransform)button.transform).rect.height, Is.GreaterThanOrEqualTo(40f));
+            Assert.That(button.GetComponentInChildren<TMP_Text>().fontSizeMin, Is.GreaterThanOrEqualTo(16f));
+        }
+        Assert.That(_rail.mergeStatusText.fontSizeMin, Is.GreaterThanOrEqualTo(16f));
         Assert.That(viewport.GetComponent<RectTransform>().anchoredPosition.y, Is.LessThan(0f));
         _rail.mergeModeButton.onClick.Invoke();
         Assert.That(_rail.mergeCancelButton.interactable, Is.True);
@@ -215,7 +221,7 @@ public sealed class ArtifactRailUITests
         Assert.That(_detailPanel.activeSelf, Is.True);
         Assert.That(_detail.text, Does.Contain("First Name").And.Contain("First description"));
         var detailRect = _detailPanel.GetComponent<RectTransform>();
-        Assert.That(detailRect.rect.width, Is.LessThanOrEqualTo(200f), "Artifact information remains a compact side card, not a modal.");
+        Assert.That(detailRect.rect.width, Is.LessThanOrEqualTo(240f), "Artifact information remains a compact side card, not a modal.");
         Assert.That(detailRect.rect.height, Is.LessThanOrEqualTo(220f));
 
         secondSlot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
@@ -231,6 +237,30 @@ public sealed class ArtifactRailUITests
         secondSlot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(_detailPanel.activeSelf, Is.False);
         Assert.That(secondSlot.IsDetailSelected, Is.False);
+    }
+
+    [Test]
+    public void EnemyTargetingClosesArtifactDetailsAndPreventsCompetingMergeSelection()
+    {
+        Assert.That(_cards.BuyArtifact(Artifact("target-a", "Target A", "A", "Readable description"), 0), Is.True);
+        Assert.That(_cards.BuyArtifact(Artifact("target-b", "Target B", "B", "Other description"), 0), Is.True);
+        var slot = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
+        slot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        Assert.That(_detailPanel.activeSelf, Is.True);
+        Assert.That(_detail.fontSize, Is.GreaterThanOrEqualTo(18f));
+        slot.OnPointerEnter(null);
+        Assert.That(_tooltipPanel.activeSelf, Is.False, "Selected details must not be covered by a duplicate hover tooltip.");
+        _cards.BeginEnemyTargeting(_ => { }, _ => true);
+        Assert.That(_detailPanel.activeSelf, Is.False);
+        Assert.That(slot.IsDetailSelected, Is.False);
+        _mergeMode.onClick.Invoke();
+        Assert.That(_mergeCancel.gameObject.activeSelf, Is.False);
+        _cards.EndEnemyTargeting();
+        _mergeMode.onClick.Invoke();
+        Assert.That(_mergeCancel.gameObject.activeSelf, Is.True);
+        _cards.BeginEnemyTargeting(_ => { }, _ => true);
+        Assert.That(_mergeCancel.gameObject.activeSelf, Is.False);
+        _cards.EndEnemyTargeting();
     }
 
     [Test]

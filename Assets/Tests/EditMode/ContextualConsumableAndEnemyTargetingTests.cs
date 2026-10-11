@@ -234,6 +234,82 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
     }
 
+    [Test]
+    public void EnemyListRefreshPreservesConsumableTargetingWhileValidEnemiesRemain()
+    {
+        var enemies = StartEncounter(2);
+        Assert.That(_cards.AddConsumable(_knife), Is.True);
+        _backpackButton.onClick.Invoke();
+        GetPrivate<Button>(_actions, "_consumableUseButton").onClick.Invoke();
+        InvokePrivate(_actions, "HandleEnemiesChanged");
+        Assert.That(_cards.IsEnemyTargeting, Is.True);
+        Assert.That(_cards.HandleEnemyTargetClick(enemies[1]), Is.True);
+        Assert.That(enemies[1].currentHp, Is.EqualTo(enemies[1].maxHp - _knife.damageAmount));
+        Assert.That(enemies[0].currentHp, Is.EqualTo(enemies[0].maxHp));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void RemovingOrMovingConsumableSourceClearsEnemyTargeting(bool move)
+    {
+        var enemies = StartEncounter(2);
+        Assert.That(_cards.AddConsumable(_knife), Is.True);
+        Assert.That(_cards.AddConsumable(_heal), Is.True);
+        var source = _cards.GetConsumableInstanceAtSlot(0);
+        _backpackButton.onClick.Invoke();
+        GetPrivate<Button>(_actions, "_consumableUseButton").onClick.Invoke();
+        Assert.That(_cards.IsEnemyTargeting, Is.True);
+        Assert.That(move ? _cards.MoveConsumableSlot(0, 1) : _cards.RemoveConsumableInstanceAtSlot(0, source), Is.True);
+        Assert.That(_cards.IsEnemyTargeting, Is.False);
+        Assert.That(_actions.transform.Find("Selected Consumable Actions").gameObject.activeSelf, Is.False);
+        Assert.That(enemies.All(enemy => enemy.currentHp == enemy.maxHp), Is.True);
+    }
+
+    [Test]
+    public void RemovingAttackSourceClearsEnemyTargetingWithoutResolving()
+    {
+        var enemies = StartEncounter(2);
+        var card = SelectHandCard();
+        _attackButton.onClick.Invoke();
+        Assert.That(_cards.IsEnemyTargeting, Is.True);
+        Assert.That(_cards.TryDiscard(card), Is.True);
+        Assert.That(_cards.IsEnemyTargeting, Is.False);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(enemies.All(enemy => enemy.currentHp == enemy.maxHp), Is.True);
+    }
+
+    [Test]
+    public void PrimaryActionBecomesClickableCancelAndPreservesAttackSelection()
+    {
+        StartEncounter(2);
+        var card = SelectHandCard();
+        _attackButton.onClick.Invoke();
+        Assert.That(_attackButton.interactable, Is.True);
+        Assert.That(_attackButton.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("Cancel"));
+        _attackButton.onClick.Invoke();
+        Assert.That(_cards.IsEnemyTargeting, Is.False);
+        Assert.That(_cards.SelectedCards, Does.Contain(card));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(_attackButton.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("ATTACK"));
+    }
+
+    [Test]
+    public void ConsumableDetailsReserveSpaceAboveReadableActionButtons()
+    {
+        _combat.player.TakeDamage(10);
+        Assert.That(_cards.AddConsumable(_heal), Is.True);
+        _backpackButton.onClick.Invoke();
+        var text = GetPrivate<TMP_Text>(_actions, "_consumableContextText");
+        var use = GetPrivate<Button>(_actions, "_consumableUseButton");
+        var buttonRect = (RectTransform)use.transform;
+        Assert.That(text.fontSize, Is.GreaterThanOrEqualTo(18f));
+        Assert.That(buttonRect.rect.height, Is.GreaterThanOrEqualTo(44f));
+        Assert.That(text.rectTransform.offsetMin.y,
+            Is.GreaterThan(buttonRect.anchoredPosition.y + buttonRect.rect.height));
+        Assert.That(text.GetPreferredValues(text.text, text.rectTransform.rect.width, 0f).y,
+            Is.LessThanOrEqualTo(text.rectTransform.rect.height + 1f));
+    }
+
     EnemyRuntime[] StartEncounter(int count)
     {
         var definition = EnemyTypeData.Create("Direct target test enemy", 100, 0, 0);

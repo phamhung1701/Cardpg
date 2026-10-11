@@ -43,6 +43,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
     PathNode _mergeNode;
     GameState _mergeCombatState;
     Vector2 _lastDetailParentSize;
+    RectTransform _generatedControlsViewport;
     bool _hasLastDetailParentSize;
 
     void OnEnable()
@@ -75,7 +76,12 @@ public sealed class ArtifactRailUI : MonoBehaviour
             RunManager.Instance.OnHidePathScreen -= HandleContextEnded;
         }
         if (CombatManager.Instance != null) CombatManager.Instance.OnEncounterResult -= HandleEncounterResult;
-        if (_subscribedSource) _subscribedSource.OnBuildChanged -= Refresh;
+        if (_subscribedSource)
+        {
+            _subscribedSource.OnBuildChanged -= Refresh;
+            _subscribedSource.OnEnemyTargetingChanged -= HandleEnemyTargetingChanged;
+            _subscribedSource.OnCardSelected -= HandleCardSelected;
+        }
         _subscribedSource = null;
         if (detailCloseButton) detailCloseButton.onClick.RemoveListener(CloseDetail);
         if (mergeModeButton) mergeModeButton.onClick.RemoveListener(BeginMergeSelection);
@@ -95,7 +101,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
     {
         if (!_subscribedSource && (source || CardManager.Instance)) Refresh();
         if (_mergeSelecting && (GameplayInputGate.IsBlocked ||
-            _subscribedSource != null && _subscribedSource.IsHandEnhancementTargeting ||
+            _subscribedSource != null && (_subscribedSource.IsHandEnhancementTargeting || _subscribedSource.IsEnemyTargeting) ||
             RunManager.Instance?.ActiveNode != _mergeNode ||
             CombatManager.Instance != null && CombatManager.Instance.currentState != _mergeCombatState)) CancelMerge();
         if (_selectedInstanceId != 0 && detailPanel && detailPanel.activeSelf &&
@@ -109,11 +115,22 @@ public sealed class ArtifactRailUI : MonoBehaviour
         var cards = source ? source : CardManager.Instance;
         if (_subscribedSource != cards)
         {
-            if (_subscribedSource) _subscribedSource.OnBuildChanged -= Refresh;
+            if (_subscribedSource)
+            {
+                _subscribedSource.OnBuildChanged -= Refresh;
+                _subscribedSource.OnEnemyTargetingChanged -= HandleEnemyTargetingChanged;
+                _subscribedSource.OnCardSelected -= HandleCardSelected;
+            }
             _subscribedSource = cards;
-            if (_subscribedSource) _subscribedSource.OnBuildChanged += Refresh;
+            if (_subscribedSource)
+            {
+                _subscribedSource.OnBuildChanged += Refresh;
+                _subscribedSource.OnEnemyTargetingChanged += HandleEnemyTargetingChanged;
+                _subscribedSource.OnCardSelected += HandleCardSelected;
+            }
         }
 
+        if (_mergeSelecting && cards != null && (cards.IsEnemyTargeting || cards.IsHandEnhancementTargeting)) CancelMerge();
         if (_mergeSelecting && (!cards || cards.ownedArtifacts.Count < 2 ||
             (_firstMergeId != 0 && cards.GetArtifactInstanceById(_firstMergeId) == null) ||
             (_secondMergeId != 0 && cards.GetArtifactInstanceById(_secondMergeId) == null)))
@@ -178,23 +195,23 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (!controlsRoot) return;
 
         if (!mergeModeButton)
-            mergeModeButton = CreateMergeButton(controlsRoot, "Merge Artifacts", "Merge", new Vector2(0f, -64f), new Vector2(88f, 24f));
+            mergeModeButton = CreateMergeButton(controlsRoot, "Merge Artifacts", "Merge", new Vector2(0f, -72f), new Vector2(176f, 40f), 20f, 16f);
         if (!mergeConfirmButton)
-            mergeConfirmButton = CreateMergeButton(controlsRoot, "Confirm Artifact Merge", "Confirm", new Vector2(-35f, -94f), new Vector2(64f, 24f));
+            mergeConfirmButton = CreateMergeButton(controlsRoot, "Confirm Artifact Merge", "Confirm", new Vector2(-48f, -120f), new Vector2(108f, 40f), 20f, 16f);
         if (!mergeCancelButton)
-            mergeCancelButton = CreateMergeButton(controlsRoot, "Cancel Artifact Merge", "Cancel", new Vector2(35f, -94f), new Vector2(64f, 24f));
+            mergeCancelButton = CreateMergeButton(controlsRoot, "Cancel Artifact Merge", "Cancel", new Vector2(66f, -120f), new Vector2(84f, 40f), 20f, 16f);
         if (!mergeStatusText)
         {
             var statusObject = new GameObject("Artifact Merge Status", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
             var rect = (RectTransform)statusObject.transform;
             rect.SetParent(controlsRoot, false);
-            SetTopAnchoredRect(rect, new Vector2(0f, -126f), new Vector2(160f, 28f));
+            SetTopAnchoredRect(rect, new Vector2(0f, -180f), new Vector2(200f, 66f));
             mergeStatusText = statusObject.GetComponent<TMP_Text>();
             CopyTextStyle(mergeStatusText);
-            mergeStatusText.fontSize = 12f;
+            mergeStatusText.fontSize = 16f;
             mergeStatusText.enableAutoSizing = true;
-            mergeStatusText.fontSizeMin = 9f;
-            mergeStatusText.fontSizeMax = 12f;
+            mergeStatusText.fontSizeMin = 16f;
+            mergeStatusText.fontSizeMax = 16f;
             mergeStatusText.alignment = TextAlignmentOptions.Center;
             mergeStatusText.raycastTarget = false;
         }
@@ -202,12 +219,13 @@ public sealed class ArtifactRailUI : MonoBehaviour
         // Reserve a strip above the scrollable artifact icons for the generated controls.
         if (slotsRoot && slotsRoot.parent is RectTransform viewport && viewport.parent == controlsRoot)
         {
-            viewport.anchoredPosition += Vector2.down * 58f;
-            viewport.sizeDelta += Vector2.down * 92f;
+            _generatedControlsViewport = viewport;
+            viewport.offsetMin = new Vector2(viewport.offsetMin.x, 10f);
+            viewport.offsetMax = new Vector2(viewport.offsetMax.x, -222f);
         }
     }
 
-    Button CreateMergeButton(RectTransform parent, string objectName, string label, Vector2 position, Vector2 size)
+    Button CreateMergeButton(RectTransform parent, string objectName, string label, Vector2 position, Vector2 size, float fontSize, float minFontSize)
     {
         var go = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         var rect = (RectTransform)go.transform;
@@ -228,10 +246,10 @@ public sealed class ArtifactRailUI : MonoBehaviour
         var text = labelObject.GetComponent<TMP_Text>();
         CopyTextStyle(text);
         text.text = label;
-        text.fontSize = 14f;
+        text.fontSize = fontSize;
         text.enableAutoSizing = true;
-        text.fontSizeMin = 10f;
-        text.fontSizeMax = 14f;
+        text.fontSizeMin = minFontSize;
+        text.fontSizeMax = fontSize;
         text.alignment = TextAlignmentOptions.Center;
         text.raycastTarget = false;
         return button;
@@ -291,6 +309,22 @@ public sealed class ArtifactRailUI : MonoBehaviour
         CancelMerge();
     }
 
+    void HandleCardSelected(CardView card)
+    {
+        if (card == null) return;
+        CloseDetail();
+        HideTooltip();
+        if (_mergeSelecting) CancelMerge();
+    }
+
+    void HandleEnemyTargetingChanged(bool active)
+    {
+        if (!active) return;
+        CloseDetail();
+        HideTooltip();
+        if (_mergeSelecting) CancelMerge();
+    }
+
     void HandleEncounterResult(EncounterResult _) => CloseDetail();
 
     bool IsMergeEligible(CardManager cards, long id)
@@ -308,9 +342,11 @@ public sealed class ArtifactRailUI : MonoBehaviour
     {
         var cards = source ? source : CardManager.Instance;
         if (_ownedArtifactCount < 2 || GameplayInputGate.IsBlocked ||
-            cards != null && cards.IsHandEnhancementTargeting) return;
+            cards != null && (cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting)) return;
         CloseDetail();
         HideTooltip();
+        FindFirstObjectByType<ActionButtonsUI>()?.ClearSelectedConsumable();
+        cards?.ClearSelection();
         _mergeNode = RunManager.Instance?.ActiveNode;
         _mergeCombatState = CombatManager.Instance != null ? CombatManager.Instance.currentState : GameState.Idle;
         _mergeSelecting = true;
@@ -322,7 +358,8 @@ public sealed class ArtifactRailUI : MonoBehaviour
 
     void SelectForMerge(long instanceId, RelicData artifact)
     {
-        if (!_mergeSelecting || instanceId == 0 || GameplayInputGate.IsBlocked) return;
+        if (!_mergeSelecting || instanceId == 0 || GameplayInputGate.IsBlocked ||
+            (_subscribedSource != null && _subscribedSource.IsEnemyTargeting)) return;
         if (_firstMergeId == instanceId) _firstMergeId = 0;
         else if (_secondMergeId == instanceId) _secondMergeId = 0;
         else if (_firstMergeId == 0) _firstMergeId = instanceId;
@@ -337,7 +374,8 @@ public sealed class ArtifactRailUI : MonoBehaviour
 
     void ConfirmMerge()
     {
-        if (!_mergeAwaitingConfirmation || !_mergePreview || GameplayInputGate.IsBlocked) return;
+        if (!_mergeAwaitingConfirmation || !_mergePreview || GameplayInputGate.IsBlocked ||
+            (_subscribedSource != null && _subscribedSource.IsEnemyTargeting)) return;
         var cards = source ? source : CardManager.Instance;
         if (!cards || cards.GetArtifactInstanceById(_firstMergeId) == null ||
             cards.GetArtifactInstanceById(_secondMergeId) == null || _firstMergeId == _secondMergeId ||
@@ -362,6 +400,9 @@ public sealed class ArtifactRailUI : MonoBehaviour
     void UpdateMergeControls()
     {
         bool canMergeMode = _ownedArtifactCount >= 2;
+        if (_generatedControlsViewport)
+            _generatedControlsViewport.offsetMax = new Vector2(_generatedControlsViewport.offsetMax.x,
+                _mergeSelecting ? -222f : canMergeMode ? -104f : -62f);
         if (mergeModeButton)
         {
             mergeModeButton.gameObject.SetActive(_mergeSelecting || canMergeMode);
@@ -391,8 +432,12 @@ public sealed class ArtifactRailUI : MonoBehaviour
     void ShowTooltip(RelicData artifact)
     {
         _hovered = artifact;
-        if (tooltipText) tooltipText.text = Describe(artifact);
-        if (tooltipPanel) tooltipPanel.SetActive(true);
+        if (_selectedInstanceId != 0 && detailPanel && detailPanel.activeSelf) HideTooltip();
+        else
+        {
+            if (tooltipText) tooltipText.text = Describe(artifact);
+            if (tooltipPanel) tooltipPanel.SetActive(true);
+        }
     }
 
     void HideTooltipFor(RelicData artifact)
@@ -415,11 +460,12 @@ public sealed class ArtifactRailUI : MonoBehaviour
             Refresh();
             return;
         }
+        CloseDetail();
         CardManager.Instance?.ClearSelection();
         FindFirstObjectByType<ActionButtonsUI>()?.ClearSelectedConsumable();
         _selectedInstanceId = instanceId;
         HideTooltip();
-        if (detailText) detailText.text = $"<size=115%><b>{artifact.displayName}</b></size>\n<size=85%>{artifact.description}</size>";
+        if (detailText) detailText.text = $"<size=22><b>{artifact.displayName}</b></size>\n{artifact.description}";
         PositionDetailBesideSlot(instanceId);
         if (detailPanel)
         {
@@ -453,28 +499,27 @@ public sealed class ArtifactRailUI : MonoBehaviour
             textRect.offsetMin = new Vector2(10f, 8f);
             textRect.offsetMax = new Vector2(-38f, -8f);
             detailText.fontSize = 18f;
-            detailText.enableAutoSizing = true;
-            detailText.fontSizeMin = 14f;
-            detailText.fontSizeMax = 18f;
+            detailText.enableAutoSizing = false;
+            detailText.fontSizeMin = 16f;
+            detailText.fontSizeMax = 20f;
             detailText.fontStyle = FontStyles.Normal;
             detailText.alignment = TextAlignmentOptions.TopLeft;
             detailText.overflowMode = TextOverflowModes.Ellipsis;
-            float textHeight = detailText.GetPreferredValues(detailText.text,
-                Mathf.Max(40f, detailRect.rect.width - 58f), 0f).y;
-            detailRect.sizeDelta = new Vector2(190f, Mathf.Clamp(Mathf.Ceil(textHeight + 18f), 96f, 220f));
+            float textHeight = detailText.GetPreferredValues(detailText.text, 192f, 0f).y;
+            detailRect.sizeDelta = new Vector2(240f, Mathf.Max(112f, Mathf.Ceil(textHeight + 18f)));
         }
         var closeRect = detailCloseButton ? detailCloseButton.transform as RectTransform : null;
         if (closeRect)
         {
             closeRect.anchorMin = closeRect.anchorMax = Vector2.one;
             closeRect.pivot = Vector2.one;
-            closeRect.sizeDelta = new Vector2(28f, 24f);
+            closeRect.sizeDelta = new Vector2(32f, 32f);
             closeRect.anchoredPosition = new Vector2(-4f, -4f);
             var closeLabel = detailCloseButton.GetComponentInChildren<TMP_Text>(true);
             if (closeLabel)
             {
                 closeLabel.text = "×";
-                closeLabel.fontSize = 18f;
+                closeLabel.fontSize = 20f;
                 closeLabel.enableAutoSizing = false;
             }
         }
@@ -508,6 +553,13 @@ public sealed class ArtifactRailUI : MonoBehaviour
         detailRect.anchoredPosition = local;
         _lastDetailParentSize = parentRect.rect.size;
         _hasLastDetailParentSize = true;
+    }
+
+    public void ClearObjectSelection()
+    {
+        CloseDetail();
+        HideTooltip();
+        if (_mergeSelecting) CancelMerge();
     }
 
     public void CloseDetail()

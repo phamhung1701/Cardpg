@@ -44,8 +44,7 @@ public class ActionButtonsUI : MonoBehaviour
     RectTransform _consumableContextRect;
     EnemyGroupUI _enemyGroup;
     readonly Vector3[] _consumableSlotCorners = new Vector3[4];
-    Vector2 _lastConsumableParentSize;
-    bool _hasLastConsumableParentSize;
+    readonly List<CardView> _contextHandViews = new();
 
     void OnEnable()
     {
@@ -138,11 +137,12 @@ public class ActionButtonsUI : MonoBehaviour
                 CancelEnemyTargeting();
             RefreshEnemyTargetPresentation();
         }
-        if (_consumableContextPanel && _consumableContextPanel.activeSelf &&
-            _consumableContextRect.parent is RectTransform contextParent &&
-            (!_hasLastConsumableParentSize || (contextParent.rect.size - _lastConsumableParentSize).sqrMagnitude > 0.25f))
-            PositionConsumableContext();
         RefreshBoardGuidance();
+    }
+
+    void LateUpdate()
+    {
+        if (_consumableContextPanel && _consumableContextPanel.activeSelf) PositionConsumableContext();
     }
 
     // These labels support encounters, not the Shop/Event objects occupying the same surface.
@@ -196,11 +196,16 @@ public class ActionButtonsUI : MonoBehaviour
         _validEnemyTargets.Clear();
         var combat = CombatManager.Instance;
         if (combat != null && _enemyTargetAction == EnemyTargetAction.Attack)
+        {
             foreach (var enemy in combat.Enemies)
                 if (enemy != null && combat.CanPlayCards(_attackTargetCards, enemy)) _validEnemyTargets.Add(enemy);
+        }
         else if (_enemyTargetAction == EnemyTargetAction.Consumable)
-            _validEnemyTargets.AddRange(CardManager.Instance?.GetValidEnemyTargetsForConsumableAtSlot(_targetConsumableSlot)
-                ?? System.Array.Empty<EnemyRuntime>());
+        {
+            var cards = CardManager.Instance;
+            if (cards != null && cards.GetConsumableInstanceAtSlot(_targetConsumableSlot) == _targetConsumableInstance)
+                _validEnemyTargets.AddRange(cards.GetValidEnemyTargetsForConsumableAtSlot(_targetConsumableSlot));
+        }
         if (_validEnemyTargets.Count == 0) CancelEnemyTargeting();
         else RefreshEnemyTargetPresentation();
     }
@@ -220,7 +225,12 @@ public class ActionButtonsUI : MonoBehaviour
         if (view != null) ClearSelectedConsumable();
         RefreshAll();
     }
-    void HandleDeckChanged() => RefreshAll();
+    void HandleDeckChanged()
+    {
+        // Source removal/reordering and hand mutations invalidate the captured action, not just its label.
+        if (_enemyTargetAction != EnemyTargetAction.None) HandleEnemiesChanged();
+        RefreshAll();
+    }
     void HandlePlayerHealthChanged(int _, int __) => RefreshAll();
 
     void HandleCombatLog(string message)
@@ -244,7 +254,8 @@ public class ActionButtonsUI : MonoBehaviour
         bool canRecover = combat.currentState == GameState.PlayerTurn && cards.HandCount == 0;
 
         bool targeting = cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting;
-        if (playButton) playButton.interactable = !targeting && combat.currentState == GameState.PlayerTurn && canPlay;
+        if (playButton) playButton.interactable = !GameplayInputGate.IsBlocked &&
+            (cards.IsEnemyTargeting || !targeting && combat.currentState == GameState.PlayerTurn && canPlay);
         if (blockButton) blockButton.interactable = !targeting && isDefense && canDefend;
         if (rankSortButton) rankSortButton.interactable = cards.HandCount > 1;
         if (suitSortButton) suitSortButton.interactable = cards.HandCount > 1;
@@ -257,7 +268,7 @@ public class ActionButtonsUI : MonoBehaviour
                 ? new Color(0.32f, 0.48f, 0.64f, 1f) : new Color(0.14f, 0.22f, 0.23f, 0.3f);
         if (_primaryActionLabel)
         {
-            _primaryActionLabel.text = combat.currentState switch
+            _primaryActionLabel.text = cards.IsEnemyTargeting ? "Cancel" : combat.currentState switch
             {
                 GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilySelection(cards.SelectedCards.Select(view => view.data).ToArray(), cards) => "ATTACK ROYAL FAMILY",
                 GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) => "ATTACK ACE PAIR",
@@ -306,23 +317,23 @@ public class ActionButtonsUI : MonoBehaviour
 
         if (selectionLabel)
         {
-        if (cards.IsEnemyTargeting) selectionLabel.text = "CHOOSE A TARGET · Click a highlighted enemy or press Escape to cancel";
+        if (cards.IsEnemyTargeting) selectionLabel.text = "Choose a target · Click a highlighted enemy · Cancel or Esc to go back";
         else if (cards.IsHandEnhancementTargeting) selectionLabel.text = "Choose highlighted targets above · Confirm or Cancel";
         else selectionLabel.text = combat.currentState switch
             {
                 GameState.PlayerTurn when cards.HandCount == 0 =>
                     $"Hand empty: Recover takes {combat.TotalEnemyAttack} damage, then draws 1 card",
                 GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilySelection(cards.SelectedCards.Select(view => view.data).ToArray(), cards) =>
-                    "Royal Family: exact 10/J/Q/K/A in one effective suit — instant defeat. Press Play or drag to target",
+                    "Royal Family: exact 10/J/Q/K/A in one effective suit — instant defeat. Press Attack or drag to target",
                 GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilyPartialSelection(cards.SelectedCards, cards) =>
                     $"Royal Family selection ({selectedCount}/5)  •  exact 10/J/Q/K/A, one effective suit; target will be instantly defeated when complete",
                 GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) =>
-                    $"Ace pair: {cards.SelectedCards[0].data.DisplayName} + {cards.SelectedCards[1].data.DisplayName}  •  Press Play or drag to the enemy",
+                    $"Ace pair: {cards.SelectedCards[0].data.DisplayName} + {cards.SelectedCards[1].data.DisplayName}  •  Press Attack or drag to the enemy",
                 GameState.PlayerTurn when selectedCount >= 2 && GameplayEffectResolver.IsSameRankMultiCardAction(cards.SelectedCards, cards) =>
-                    $"Same-rank set ({selectedCount} cards): {cards.SelectedCards[0].data.Rank}  •  Press Play or drag to the enemy",
+                    $"Same-rank set ({selectedCount} cards): {cards.SelectedCards[0].data.Rank}  •  Press Attack or drag to the enemy",
                 GameState.PlayerTurn when hasSelected =>
-                    $"Selected: {cards.selectedCard.data.DisplayName}  •  Press Play or drag to the enemy",
-                GameState.PlayerTurn => "Select a card, then press Play or drag it to the enemy",
+                    $"Selected: {cards.selectedCard.data.DisplayName}  •  Press Attack or drag to the enemy",
+                GameState.PlayerTurn => "Select a card, then press Attack or drag it to the enemy",
                 GameState.EnemyAttacking when hasSelected && combat.TryPreviewDefense(cards.SelectedCards, out int blocked, out int remaining) =>
                     $"{selectedCount} selected  •  Blocks {blocked} of {combat.PendingAttackCount} pending attacks  •  Remaining damage {remaining}",
                 GameState.EnemyAttacking when hasSelected =>
@@ -356,6 +367,12 @@ public class ActionButtonsUI : MonoBehaviour
 
     void OnPlayClicked()
     {
+        if (GameplayInputGate.IsBlocked) return;
+        if (CardManager.Instance?.IsEnemyTargeting == true)
+        {
+            CancelEnemyTargeting();
+            return;
+        }
         var cards = CardManager.Instance;
         var combat = CombatManager.Instance;
         if (cards != null && combat != null && combat.currentState == GameState.PlayerTurn)
@@ -374,6 +391,8 @@ public class ActionButtonsUI : MonoBehaviour
 
     void StartSelectedAttack(CardManager cards, CombatManager combat)
     {
+        if (GameplayInputGate.IsBlocked || cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting) return;
+        ClearSelectedConsumable();
         var selection = cards.GetSelectedCardsSnapshot();
         var targets = GetValidAttackTargets(cards, combat);
         if (targets.Count == 1)
@@ -576,11 +595,12 @@ public class ActionButtonsUI : MonoBehaviour
 
     void SelectBackpackSlot(int slotIndex)
     {
+        if (GameplayInputGate.IsBlocked) return;
         var cards = CardManager.Instance;
         var item = cards?.GetConsumableInstanceAtSlot(slotIndex);
         if (cards == null || item == null || cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting) return;
         cards.ClearSelection();
-        FindFirstObjectByType<ArtifactRailUI>()?.CloseDetail();
+        FindFirstObjectByType<ArtifactRailUI>()?.ClearObjectSelection();
         if (_selectedConsumableSlot == slotIndex && ReferenceEquals(_selectedConsumable, item))
             ClearSelectedConsumable();
         else
@@ -608,7 +628,7 @@ public class ActionButtonsUI : MonoBehaviour
         _consumableContextRect = (RectTransform)_consumableContextPanel.transform;
         _consumableContextRect.anchorMin = _consumableContextRect.anchorMax = new Vector2(0.5f, 0.5f);
         _consumableContextRect.pivot = new Vector2(0.5f, 0.5f);
-        _consumableContextRect.sizeDelta = new Vector2(230f, 126f);
+        _consumableContextRect.sizeDelta = new Vector2(270f, 150f);
         var background = _consumableContextPanel.GetComponent<Image>();
         background.color = new Color(0.08f, 0.12f, 0.16f, 0.96f);
         background.raycastTarget = true;
@@ -616,22 +636,22 @@ public class ActionButtonsUI : MonoBehaviour
         var textObject = new GameObject("Consumable Details", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         textObject.transform.SetParent(_consumableContextPanel.transform, false);
         var textRect = (RectTransform)textObject.transform;
-        textRect.anchorMin = new Vector2(0f, 0.18f);
-        textRect.anchorMax = new Vector2(1f, 1f);
-        textRect.offsetMin = new Vector2(10f, 2f);
-        textRect.offsetMax = new Vector2(-10f, -6f);
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(12f, 64f);
+        textRect.offsetMax = new Vector2(-12f, -10f);
         _consumableContextText = textObject.GetComponent<TMP_Text>();
         var styleSource = selectionLabel != null ? selectionLabel : backpackSlotButtons[0].GetComponentInChildren<TMP_Text>(true);
         if (styleSource != null) _consumableContextText.font = styleSource.font;
-        _consumableContextText.fontSize = 17f;
+        _consumableContextText.fontSize = 18f;
         _consumableContextText.enableAutoSizing = false;
         _consumableContextText.fontSizeMin = 14f;
         _consumableContextText.fontSizeMax = 19f;
         _consumableContextText.alignment = TextAlignmentOptions.TopLeft;
         _consumableContextText.raycastTarget = false;
 
-        _consumableUseButton = CreateConsumableActionButton("Use Consumable", "USE", new Vector2(-55f, 0f));
-        _consumableSellButton = CreateConsumableActionButton("Sell Consumable", "SELL", new Vector2(55f, 0f));
+        _consumableUseButton = CreateConsumableActionButton("Use Consumable", "USE", new Vector2(-62f, 10f));
+        _consumableSellButton = CreateConsumableActionButton("Sell Consumable", "SELL", new Vector2(62f, 10f));
         _consumableUseButton.onClick.AddListener(UseSelectedConsumable);
         _consumableSellButton.onClick.AddListener(SellSelectedConsumable);
         _consumableContextPanel.SetActive(false);
@@ -642,10 +662,10 @@ public class ActionButtonsUI : MonoBehaviour
         var go = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         go.transform.SetParent(_consumableContextPanel.transform, false);
         var rect = (RectTransform)go.transform;
-        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.08f);
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0f);
         rect.pivot = new Vector2(0.5f, 0f);
         rect.anchoredPosition = position;
-        rect.sizeDelta = new Vector2(100f, 40f);
+        rect.sizeDelta = new Vector2(112f, 44f);
         var image = go.GetComponent<Image>();
         image.color = new Color(0.22f, 0.43f, 0.34f, 1f);
         var button = go.GetComponent<Button>();
@@ -658,7 +678,8 @@ public class ActionButtonsUI : MonoBehaviour
         var labelRect = (RectTransform)labelObject.transform;
         labelRect.anchorMin = Vector2.zero;
         labelRect.anchorMax = Vector2.one;
-        labelRect.offsetMin = labelRect.offsetMax = new Vector2(4f, 2f);
+        labelRect.offsetMin = new Vector2(4f, 2f);
+        labelRect.offsetMax = new Vector2(-4f, -2f);
         var text = labelObject.GetComponent<TMP_Text>();
         text.font = _consumableContextText.font;
         text.text = label;
@@ -689,9 +710,9 @@ public class ActionButtonsUI : MonoBehaviour
         {
             _consumableContextText.text = $"<size=115%><b>{definition.displayName}</b></size>\n{definition.description}" +
                 (run != null && run.CanSellItems ? string.Empty : "\n<size=85%><color=#B7C0C7>Sell in Shop</color></size>");
-            float availableWidth = Mathf.Max(80f, _consumableContextRect.rect.width - 20f);
+            float availableWidth = Mathf.Max(80f, _consumableContextRect.rect.width - 24f);
             float textHeight = _consumableContextText.GetPreferredValues(_consumableContextText.text, availableWidth, 0f).y;
-            _consumableContextRect.sizeDelta = new Vector2(230f, Mathf.Clamp(Mathf.Ceil(textHeight / 0.82f + 20f), 126f, 320f));
+            _consumableContextRect.sizeDelta = new Vector2(270f, Mathf.Max(150f, Mathf.Ceil(textHeight + 74f)));
         }
         if (_consumableUseButton) _consumableUseButton.interactable = cards.CanUseConsumableAtSlot(_selectedConsumableSlot, CombatManager.Instance);
         if (_consumableSellButton) _consumableSellButton.interactable = run != null && run.CanSellItems;
@@ -719,10 +740,35 @@ public class ActionButtonsUI : MonoBehaviour
             local.x -= _consumableContextRect.rect.width + buttonRect.rect.width + 24f;
         local.x = Mathf.Clamp(local.x, parentRect.rect.xMin + halfWidth, parentRect.rect.xMax - halfWidth);
         local.y += buttonRect.rect.height * 0.5f;
+        // On narrower canvases the fan can reach into the side context. Keep details above
+        // actual visible cards rather than covering a target or shrinking the text.
+        var holder = (handField != null ? handField : CardManager.Instance?.handField)?.cardsHolder;
+        if (holder != null)
+        {
+            float handLeft = float.PositiveInfinity, handRight = float.NegativeInfinity;
+            float handBottom = float.PositiveInfinity, handTop = float.NegativeInfinity;
+            holder.GetComponentsInChildren(false, _contextHandViews);
+            foreach (var view in _contextHandViews)
+            {
+                if (view.data == null) continue;
+                var cardRect = view.visualRoot != null ? view.visualRoot : view.transform as RectTransform;
+                if (cardRect == null) continue;
+                cardRect.GetWorldCorners(corners);
+                foreach (var corner in corners)
+                {
+                    Vector3 point = parentRect.InverseTransformPoint(corner);
+                    handLeft = Mathf.Min(handLeft, point.x);
+                    handRight = Mathf.Max(handRight, point.x);
+                    handBottom = Mathf.Min(handBottom, point.y);
+                    handTop = Mathf.Max(handTop, point.y);
+                }
+            }
+            if (local.x + halfWidth > handLeft && local.x - halfWidth < handRight &&
+                local.y - halfHeight < handTop && local.y + halfHeight > handBottom)
+                local.y = handTop + halfHeight + 12f;
+        }
         local.y = Mathf.Clamp(local.y, parentRect.rect.yMin + halfHeight, parentRect.rect.yMax - halfHeight);
         _consumableContextRect.anchoredPosition = local;
-        _lastConsumableParentSize = parentRect.rect.size;
-        _hasLastConsumableParentSize = true;
     }
 
     void UseSelectedConsumable()
@@ -784,7 +830,7 @@ public class ActionButtonsUI : MonoBehaviour
     {
         _selectedConsumableSlot = -1;
         _selectedConsumable = null;
-        _hasLastConsumableParentSize = false;
+        _contextHandViews.Clear();
         if (_consumableContextPanel) _consumableContextPanel.SetActive(false);
         var cards = CardManager.Instance;
         if (cards == null || backpackSlotButtons == null) return;

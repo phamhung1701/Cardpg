@@ -61,8 +61,10 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     public void SetEnemyTargeting(bool targeting, bool eligible)
     {
+        bool wasTargeting = _enemyTargeting;
         _enemyTargeting = targeting;
         _enemyTargetEligible = targeting && eligible;
+        if (wasTargeting && !targeting) RefreshStateGuidance();
         if (_enemyTargeting && _targetCanvasGroup == null)
             _targetCanvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
         if (_enemyTargeting && portrait != null && _targetOutline == null)
@@ -94,6 +96,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             if (_baseTargetScale != Vector3.zero) transform.localScale = _baseTargetScale;
             return;
         }
+        if (statusText) statusText.text = _enemyTargetEligible ? "Click to target" : "Not a valid target";
         if (_targetCanvasGroup != null) _targetCanvasGroup.alpha = _enemyTargetEligible ? 1f : 0.38f;
         if (_targetOutline != null)
         {

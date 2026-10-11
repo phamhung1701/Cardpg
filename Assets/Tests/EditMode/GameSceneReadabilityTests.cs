@@ -48,6 +48,8 @@ public sealed class GameSceneReadabilityTests
         AssertReadable("Canvas/OwnedArtifactsBar/ArtifactsHeader", 18f);
         AssertReadable("Canvas/PathPanel/PathCard/PathInstructionLabel", 16f);
         AssertReadable("Canvas/ShopPanel/ShopCard/ShopTitleLabel", 21f);
+        AssertReadable("Canvas/EnhancementTargetPanel/TargetPickerCard/ConfirmTargetButton/ContinueRunButtonLabel", 20f);
+        AssertReadable("Canvas/EnhancementTargetPanel/TargetPickerCard/BackToOfferButton/ContinueRunButtonLabel", 20f);
     }
 
     [Test]
