@@ -239,6 +239,138 @@ public sealed class PerAttackerDefenseTests
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
     }
 
+    [TestCase(0, 1)]
+    [TestCase(1, 0)]
+    public void PerfectParry_ExactWindowDrawsOnce_OverblockDoesNot(int excess, int expectedDraw)
+    {
+        var defense = HandViews().Skip(1).First(view => _combat.CalculateCardDefense(view.data) > 1);
+        int value = _combat.CalculateCardDefense(defense.data);
+        StartDefenseWindow(value - excess);
+        var eligible = _cards.deck.Select(card => card.Id).ToHashSet();
+        int before = _cards.HandCount;
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1 + expectedDraw));
+        if (expectedDraw > 0) Assert.That(eligible.Contains(_cards.hand.Last().Id), Is.True);
+        _combat.TakeRemainingDamage();
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1 + expectedDraw));
+    }
+
+    [Test]
+    public void PerfectParry_SeparatePartialCommitsAwardOnlyAtWindowCompletion()
+    {
+        var pair = HandViews().Skip(1).Take(2).ToArray();
+        int total = pair.Sum(view => _combat.CalculateCardDefense(view.data));
+        StartDefenseWindow(total);
+        int before = _cards.HandCount;
+        Assert.That(_combat.TryDefendWithCards(new[] { pair[0] }), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
+        Assert.That(_combat.TryDefendWithCards(new[] { pair[1] }), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
+    }
+
+    [Test]
+    public void PerfectParry_UsesPostModifierDamage()
+    {
+        var defense = HandViews()[1];
+        var armor = ScriptableObject.CreateInstance<RelicData>();
+        _created.Add(armor);
+        armor.effects = new[] { new GameplayEffectDefinition {
+            kind = GameplayEffectKind.IncomingCombatDamageReduction,
+            trigger = GameplayEffectTrigger.IncomingDamageCalculated, amount = 3 } };
+        _cards.ownedArtifacts.Add(armor);
+        StartDefenseWindow(_combat.CalculateCardDefense(defense.data) + 3);
+        int before = _cards.HandCount;
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
+        _combat.TakeRemainingDamage();
+        Assert.That(_cards.HandCount, Is.EqualTo(before));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
+    }
+
+    [Test]
+    public void PerfectParry_EmptyInitialDeckCannotDrawReturnedDefenseCard()
+    {
+        var collection = (CardCollection)typeof(CardManager).GetField("_cards",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(_cards);
+        foreach (var card in collection.Deck.ToArray()) collection.RemoveOwnedCard(card);
+        var defense = HandViews()[1];
+        StartDefenseWindow(_combat.CalculateCardDefense(defense.data));
+        int before = _cards.HandCount;
+        Assert.That(_cards.deck, Is.Empty);
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
+        Assert.That(_cards.deck.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void PerfectParry_ModifiersReducingIncomingToZeroNeverAward()
+    {
+        var armor = ScriptableObject.CreateInstance<RelicData>();
+        _created.Add(armor);
+        armor.effects = new[] { new GameplayEffectDefinition {
+            kind = GameplayEffectKind.IncomingCombatDamageReduction,
+            trigger = GameplayEffectTrigger.IncomingDamageCalculated, amount = 100 } };
+        _cards.ownedArtifacts.Add(armor);
+        var defense = HandViews()[1];
+        StartDefenseWindow(_combat.CalculateCardDefense(defense.data));
+        int before = _cards.HandCount;
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
+    }
+
+    [Test]
+    public void PerfectParry_MultipleAttacksAndCardsAwardOneDrawTotal()
+    {
+        var pair = HandViews().Skip(1).Take(2).ToArray();
+        StartDefenseWindow(pair.Select(view => _combat.CalculateCardDefense(view.data)).ToArray());
+        int before = _cards.HandCount;
+        Assert.That(_combat.TryDefendWithCards(pair), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
+        Assert.That(_combat.PendingAttackCount, Is.Zero);
+    }
+
+    [Test]
+    public void PerfectParry_DoubleStrikeIncludesArtifactAndEnhancementBlock_AndDrawsOnlyOnce()
+    {
+        var pair = HandViews().Skip(1).Take(2).ToArray();
+        foreach (var view in pair)
+        {
+            var enhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
+            _created.Add(enhancement);
+            enhancement.defenseBonus = 10 - _combat.CalculateCardDefense(view.data);
+            Assert.That(_cards.ApplyEnhancement(view.data.Id, enhancement), Is.True);
+        }
+        AddDefenseBonus(2);
+        Assert.That(pair.All(view => _combat.CalculateCardDefense(view.data) == 12), Is.True);
+        var type = EnemyTypeData.Create("Double Strike Parry", 1000, 20, 0);
+        var ability = ScriptableObject.CreateInstance<EnemyAbility>();
+        ability.effect = EnemyAbilityEffect.DoubleStrike;
+        type.abilities = new[] { ability };
+        _created.Add(type); _created.Add(ability);
+        _combat.StartEnemy(new EnemyRuntime(type));
+        Assert.That(_combat.TryPlayCards(new[] { HandViews().First(view => !pair.Contains(view)) }, _combat.currentEnemy), Is.True);
+        Assert.That(_combat.PendingAttackCount, Is.EqualTo(2));
+        Assert.That(_combat.pendingDamage, Is.EqualTo(24));
+        int before = _cards.HandCount;
+        Assert.That(_combat.TryDefendWithCards(pair), Is.True);
+        Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
+        Assert.That(_combat.PendingAttackCount, Is.Zero);
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
+    }
+
+    [Test]
+    public void StrictDraw_EmptyDeckNeverRecyclesDiscard_AndHonorsCapacity()
+    {
+        var collection = new CardCollection();
+        collection.Initialize(_cards.ownedCards.Take(2));
+        Assert.That(collection.DrawExistingToHand(5, 1), Is.EqualTo(1));
+        Assert.That(collection.DrawExistingToHand(5, 1), Is.Zero);
+        Assert.That(collection.TryDiscard(collection.Hand.ToArray()), Is.True);
+        Assert.That(collection.DrawExistingToHand(5, 8), Is.EqualTo(1));
+        Assert.That(collection.DrawExistingToHand(5, 8), Is.Zero);
+        Assert.That(collection.DiscardPile.Count, Is.EqualTo(1));
+    }
+
     EnemyRuntime[] StartDefenseWindow(params int[] attacks)
     {
         var enemies = new EnemyRuntime[attacks.Length];

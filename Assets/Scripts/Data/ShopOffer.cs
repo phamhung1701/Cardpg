@@ -7,7 +7,8 @@ public enum ShopOfferKind
     Investment,
     Guidance,
     Consumable,
-    Contract
+    Contract,
+    Supply
 }
 
 [Serializable]
@@ -21,8 +22,13 @@ public sealed class ShopOffer
     public int basePrice;
     public int price;
     public int investmentStake;
+    public int supplyQuantity = 1;
+    public bool purchased;
+    public int generation;
+    public bool IsService => kind is ShopOfferKind.Investment or ShopOfferKind.Guidance or ShopOfferKind.Contract or ShopOfferKind.Supply;
 
-    public string StableId => kind switch
+    public string StableId => generation == 0 ? BaseStableId : $"refresh:{generation}:{BaseStableId}";
+    string BaseStableId => kind switch
     {
         ShopOfferKind.Artifact => $"artifact:{artifact?.id}",
         ShopOfferKind.Enhancement => $"enhancement:{slot}:{enhancement?.id}",
@@ -30,6 +36,7 @@ public sealed class ShopOffer
         ShopOfferKind.Guidance => "guidance",
         ShopOfferKind.Consumable => $"consumable:{consumable?.id}",
         ShopOfferKind.Contract => "contract:quest",
+        ShopOfferKind.Supply => "supply",
         _ => "unknown"
     };
 
@@ -40,7 +47,8 @@ public sealed class ShopOffer
         ShopOfferKind.Investment => "Investment",
         ShopOfferKind.Guidance => "Guidance",
         ShopOfferKind.Consumable => consumable != null ? consumable.displayName : "Unknown Consumable",
-        ShopOfferKind.Contract => "Quest Contract",
+        ShopOfferKind.Contract => "Quest",
+        ShopOfferKind.Supply => "Supply",
         _ => "Unknown Offer"
     };
 
@@ -69,6 +77,8 @@ public sealed class ShopOffer
             return $"Invest a positive amount of Gold (up to your current Gold). At the next Shop, a seeded 50% chance pays 3× your stake; otherwise you lose the stake.";
         if (kind == ShopOfferKind.Guidance)
             return "Reveal one reachable hidden Event or Risk node on the current map.";
+        if (kind == ShopOfferKind.Supply)
+            return "Draw cards from the existing Draw Pile for 3 Gold each, up to your hand limit. Once per Shop; no recycling.";
         if (kind == ShopOfferKind.Contract)
             return "Pay 20 Gold, then choose one run-local objective. Complete it for a reward; failure costs 5 HP.";
         return string.Empty;

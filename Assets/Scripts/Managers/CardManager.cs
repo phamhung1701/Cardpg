@@ -875,6 +875,32 @@ public class CardManager : Singleton<CardManager>
         return drawn;
     }
 
+    public int PurchaseExistingDraw(int quantity, int pricePerCard)
+    {
+        if (quantity <= 0 || pricePerCard <= 0 || quantity > gold / pricePerCard ||
+            quantity > deck.Count || quantity > HandCapacity - HandCount) return 0;
+        int previous = _cards.HandCount;
+        int drawn = _cards.DrawExistingToHand(quantity, HandCapacity);
+        if (drawn <= 0) return 0;
+        gold -= drawn * pricePerCard;
+        if (CanCreateViews())
+            for (int i = previous; i < _cards.HandCount; i++) CreateView(_cards.Hand[i]);
+        OnGoldChanged?.Invoke(gold);
+        OnDeckChanged?.Invoke();
+        return drawn;
+    }
+
+    public int DrawExistingToHand(int count, ISet<int> eligibleIds = null)
+    {
+        int previous = _cards.HandCount;
+        int drawn = _cards.DrawExistingToHand(count, HandCapacity, eligibleIds);
+        if (drawn == 0) return 0;
+        if (CanCreateViews())
+            for (int i = previous; i < _cards.HandCount; i++) CreateView(_cards.Hand[i]);
+        OnDeckChanged?.Invoke();
+        return drawn;
+    }
+
     public bool TryReturnDiscardCardToHand(CardInstance card)
     {
         if (!_cards.TryReturnDiscardToHand(card, HandCapacity)) return false;

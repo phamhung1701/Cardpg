@@ -124,6 +124,22 @@ public sealed class CardCollection
         return drawn;
     }
 
+    // Strict draws never recycle discards or use overflow capacity. An eligibility snapshot
+    // lets Perfect Parry exclude cards returned to the deck during the defense window.
+    public int DrawExistingToHand(int requestedCount, int handCapacity, ISet<int> eligibleIds = null)
+    {
+        int drawn = 0;
+        for (int i = _deck.Count - 1; i >= 0 && drawn < requestedCount && _hand.Count < handCapacity; i--)
+        {
+            var card = _deck[i];
+            if (eligibleIds != null && !eligibleIds.Contains(card.Id)) continue;
+            _deck.RemoveAt(i);
+            _hand.Add(card);
+            drawn++;
+        }
+        return drawn;
+    }
+
     public bool ContainsInHand(CardInstance card) => card != null && _hand.Contains(card);
 
     public bool TryDiscard(CardInstance card)

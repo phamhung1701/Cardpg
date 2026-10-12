@@ -270,6 +270,23 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(_cards.ownedArtifacts, Is.Empty);
     }
 
+    [Test]
+    public void GoodsAndServices_HaveSeparateVisibleContainers_AndRefreshDoesNotRerollServices()
+    {
+        var labels = _ui.panel.GetComponentsInChildren<TMP_Text>(true);
+        Assert.That(labels.Any(label => label.text == "GOODS"), Is.True);
+        Assert.That(labels.Any(label => label.text == "SERVICES — once per Shop"), Is.True);
+        var services = _run.GetCurrentShopOffers().Where(offer => offer.IsService).ToArray();
+        Assert.That(services.Length, Is.EqualTo(2));
+        foreach (var service in services)
+            Assert.That(ButtonFor(service).transform.parent, Is.Not.SameAs(_ui.itemsContainer));
+        _cards.AddGold(10);
+        _ui.itemsContainer.Find("RefreshGoods").GetComponent<Button>().onClick.Invoke();
+        Assert.That(_cards.gold, Is.EqualTo(7));
+        Assert.That(_run.GoodsRefreshPrice, Is.EqualTo(5));
+        Assert.That(_run.GetCurrentShopOffers().Where(offer => offer.IsService), Is.EqualTo(services));
+    }
+
     void InvokeUi(string method) => typeof(ShopUI)
         .GetMethod(method, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
         .Invoke(_ui, null);
@@ -285,9 +302,8 @@ public sealed class Phase7EShopSelectionTests
 
     ShopOffer ArtifactOffer() => _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Artifact);
 
-    Button ButtonFor(ShopOffer offer) => _ui.itemsContainer.Cast<Transform>()
-        .Last(child => child && child.name == $"ShopOffer_{offer.StableId.Replace(':', '_')}")
-        .GetComponent<Button>();
+    Button ButtonFor(ShopOffer offer) => _ui.panel.GetComponentsInChildren<Button>(true)
+        .Last(button => button && button.name == $"ShopOffer_{offer.StableId.Replace(':', '_')}");
 
     void Click(ShopOffer offer) => ButtonFor(offer).onClick.Invoke();
 

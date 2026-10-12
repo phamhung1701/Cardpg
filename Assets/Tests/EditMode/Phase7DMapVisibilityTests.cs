@@ -22,7 +22,7 @@ public sealed class Phase7DMapVisibilityTests
             Assert.That(elites.All(node => node.col > 0 && node.revealed && !node.hidden), Is.True);
             Assert.That(nodes.Where(node => node.hidden).All(node => !node.revealed), Is.True);
             Assert.That(nodes.Where(node => node.kind == MapNodeType.Shop && node.col > 0)
-                .All(node => !node.revealed), Is.True, "This slice reveals only distant Elites.");
+                .All(node => node.isShopCheckpoint && node.revealed), Is.True, "Mandatory checkpoints are always visible.");
         }
         Assert.That(totalElites, Is.GreaterThan(0), "The visibility assertions must include actual Elite nodes.");
     }
@@ -230,11 +230,12 @@ public sealed class Phase7DMapVisibilityTests
 
             foreach (var node in nodes.Where(node => node.kind != MapNodeType.Boss))
                 foreach (int nextId in node.next)
-                    Assert.That(byId[nextId].col, Is.EqualTo(node.col + 1f),
-                        "Route links must continue to advance by one depth.");
+                    Assert.That(byId[nextId].col - node.col, Is.InRange(0.5f, 1f),
+                        "Route links advance one depth or cross a zero-depth checkpoint.");
 
             for (int depth = 0; depth < RunMapGenerator.RouteColumnCount - 1; depth++)
             {
+                if (depth == 1) continue; // The mandatory Shop merges routes after Depth 2.
                 var middle = nodes.Single(node => Mathf.Approximately(node.col, depth) &&
                     Mathf.Approximately(node.row, 1f));
                 var nextLanes = middle.next.Select(id => byId[id])

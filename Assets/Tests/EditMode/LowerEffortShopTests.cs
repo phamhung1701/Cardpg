@@ -35,7 +35,7 @@ public sealed class LowerEffortShopTests
     }
 
     [Test]
-    public void ShopOffers_ContainSeededInvestmentAndGuidanceWithVariableStakeDescription()
+    public void ServiceDescriptions_PreserveInvestmentAndGuidanceMechanics()
     {
         OpenShop(Shop(3, 0));
         var investment = FindOffer(ShopOfferKind.Investment);
@@ -129,8 +129,16 @@ public sealed class LowerEffortShopTests
         _run.OnPathChosen(shop.id);
     }
 
-    ShopOffer FindOffer(ShopOfferKind kind) =>
-        System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == kind);
+    ShopOffer FindOffer(ShopOfferKind kind)
+    {
+        var offers = (List<ShopOffer>)_run.GetCurrentShopOffers();
+        var existing = System.Linq.Enumerable.FirstOrDefault(offers, offer => offer.kind == kind);
+        if (existing != null) return existing;
+        // Mechanic fixtures select the service explicitly; seeded pairs are covered by CombatShopEconomyTests.
+        var added = new ShopOffer { kind = kind, basePrice = 5, price = 5 };
+        offers.Add(added);
+        return added;
+    }
 
     PathNode Shop(int id, int mapIndex, params int[] next) => new()
     {

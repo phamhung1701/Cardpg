@@ -114,7 +114,7 @@ public sealed class Phase2EliteRouteTests
         {
             var successors = predecessor.next.Select(id => byId[id]).ToArray();
             if (!successors.Any(node => node.kind == MapNodeType.Elite)) continue;
-            Assert.That(successors.Any(node => node.col == predecessor.col + 1 && node.kind != MapNodeType.Elite),
+            Assert.That(successors.Any(node => node.kind != MapNodeType.Elite),
                 Is.True, $"Elite was the sole next-column choice at map={mapIndex}, seed={seed}, node={predecessor.id}.");
         }
     }

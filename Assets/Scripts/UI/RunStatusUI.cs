@@ -104,7 +104,7 @@ public class RunStatusUI : MonoBehaviour
 
         int completedNodes = 0;
         foreach (var node in run.currentPath)
-            if (node.completed) completedNodes++;
+            if (node.completed && !node.isShopCheckpoint && node.kind != MapNodeType.Boss) completedNodes++;
 
         if (runProgressLabel)
         {
@@ -113,7 +113,7 @@ public class RunStatusUI : MonoBehaviour
                 : $"Map {Mathf.Clamp(run.CurrentCycle, 1, run.BossTotal)}/{run.BossTotal}";
             string routeProgress = run.IsRunCompleted
                 ? "Run Complete"
-                : $"{mapProgress}  •  Route {completedNodes}/{run.currentPath.Count}";
+                : $"{mapProgress}  •  Depth {completedNodes}/{RunMapGenerator.RouteColumnCount}";
             runProgressLabel.text = routeProgress;
             if (run.ActiveContract != null)
                 runProgressLabel.text += $"\n{FormatContractProgress(run.ActiveContract)}";

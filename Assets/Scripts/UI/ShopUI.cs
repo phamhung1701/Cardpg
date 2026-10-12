@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -18,6 +19,7 @@ public class ShopUI : MonoBehaviour
     Button _sellModeButton;
     TMP_Text _sellModeLabel;
     ScrollRect _offersScroll;
+    Transform _servicesContainer;
     RectTransform _selectedOfferRect;
     Vector2 _selectedOfferAnchorMax;
 
@@ -87,6 +89,7 @@ public class ShopUI : MonoBehaviour
         input.placeholder = CreateInputLabel(inputObject.transform, "Stake (Gold)", true);
         input.textComponent = CreateInputLabel(inputObject.transform, string.Empty, false);
         input.targetGraphic = inputObject.GetComponent<Image>();
+        inputObject.GetComponent<Image>().color = new Color(0.12f, 0.18f, 0.22f, 1f);
         inputObject.SetActive(false);
         _investmentStakeInput = input;
         input.onEndEdit.AddListener(HandleInvestmentStakeEdited);
@@ -207,11 +210,11 @@ public class ShopUI : MonoBehaviour
         var viewportObject = new GameObject("ShopOffersViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
         var viewport = viewportObject.GetComponent<RectTransform>();
         viewport.SetParent(parent, false);
-        viewport.anchorMin = content.anchorMin;
-        viewport.anchorMax = content.anchorMax;
+        viewport.anchorMin = new Vector2(0.04f, 0.28f);
+        viewport.anchorMax = new Vector2(0.50f, 0.80f);
         viewport.pivot = content.pivot;
-        viewport.anchoredPosition = content.anchoredPosition + Vector2.up * 38f;
-        viewport.sizeDelta = content.sizeDelta - new Vector2(0f, 76f);
+        viewport.anchoredPosition = Vector2.zero;
+        viewport.sizeDelta = Vector2.zero;
         var image = viewportObject.GetComponent<Image>();
         image.color = Color.clear;
         image.raycastTarget = true;
@@ -222,7 +225,7 @@ public class ShopUI : MonoBehaviour
         content.anchoredPosition = Vector2.zero;
         content.sizeDelta = Vector2.zero;
         var layout = content.GetComponent<VerticalLayoutGroup>();
-        if (layout != null) layout.childControlHeight = true;
+        if (layout != null) { layout.childControlHeight = true; layout.childControlWidth = true; layout.childForceExpandWidth = true; }
         var fitter = content.GetComponent<ContentSizeFitter>() ?? content.gameObject.AddComponent<ContentSizeFitter>();
         fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -232,6 +235,29 @@ public class ShopUI : MonoBehaviour
         _offersScroll.horizontal = false;
         _offersScroll.vertical = true;
         _offersScroll.movementType = ScrollRect.MovementType.Clamped;
+
+        var serviceViewport = new GameObject("ShopServicesViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+        var sr = serviceViewport.GetComponent<RectTransform>();
+        sr.SetParent(parent, false);
+        sr.anchorMin = new Vector2(0.53f, 0.28f);
+        sr.anchorMax = new Vector2(0.96f, 0.80f);
+        sr.offsetMin = sr.offsetMax = Vector2.zero;
+        serviceViewport.GetComponent<Image>().color = Color.clear;
+        var serviceContent = new GameObject("ShopServices", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        var cr = serviceContent.GetComponent<RectTransform>();
+        cr.SetParent(sr, false);
+        cr.anchorMin = new Vector2(0, 1); cr.anchorMax = Vector2.one; cr.pivot = new Vector2(0.5f, 1);
+        cr.sizeDelta = Vector2.zero;
+        var sl = serviceContent.GetComponent<VerticalLayoutGroup>();
+        sl.childControlWidth = sl.childControlHeight = true;
+        sl.childForceExpandWidth = true; sl.childForceExpandHeight = false; sl.spacing = 10;
+        serviceContent.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        var scroll = serviceViewport.GetComponent<ScrollRect>();
+        scroll.viewport = sr; scroll.content = cr; scroll.horizontal = false; scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        _servicesContainer = cr;
+        foreach (var text in parent.GetComponentsInChildren<TMP_Text>(true))
+            if (text.text == "ARTIFACT & ENHANCEMENT SHOP") text.text = "SHOP — GOODS & SERVICES";
     }
 
     static TMP_Text CreateInputLabel(Transform parent, string value, bool placeholder)
@@ -252,6 +278,18 @@ public class ShopUI : MonoBehaviour
 
     void HandleInvestmentStakeEdited(string value)
     {
+        var selected = FindOffer(_selectedOfferId);
+        if (selected != null && selected.kind == ShopOfferKind.Supply)
+        {
+            if (!int.TryParse(value, out int quantity) || !RunManager.Instance.SetSupplyQuantity(_selectedOfferId, quantity))
+            {
+                selected.supplyQuantity = 0;
+                UpdateSelectionDetails($"Choose 1–{RunManager.Instance.GetSupplyMaximumQuantity()} cards.");
+                if (buyButton) buyButton.interactable = false;
+            }
+            else UpdateSelectionDetails();
+            return;
+        }
         if (!int.TryParse(value, out int stake) || RunManager.Instance == null || string.IsNullOrEmpty(_selectedOfferId))
         {
             UpdateSelectionDetails("Enter a whole Gold amount from 1 to your current Gold.");
@@ -316,7 +354,7 @@ public class ShopUI : MonoBehaviour
         UpdateSelectionDetails();
         if (itemsContainer == null || itemButtonPrefab == null) return;
 
-        foreach (Transform child in itemsContainer)
+        foreach (Transform child in ShopRows())
         {
             child.gameObject.SetActive(false);
             if (Application.isPlaying) Destroy(child.gameObject);
@@ -338,13 +376,17 @@ public class ShopUI : MonoBehaviour
         var offers = RunManager.Instance != null
             ? RunManager.Instance.GetCurrentShopOffers()
             : System.Array.Empty<ShopOffer>();
-        foreach (var offer in offers)
+        AddSectionHeading("GOODS", itemsContainer);
+        AddGoodsRefreshButton();
+        AddSectionHeading("SERVICES — once per Shop", _servicesContainer ?? itemsContainer);
+        foreach (var offer in offers.OrderBy(offer => offer.IsService ? 1 : 0))
         {
             string unavailableReason = RunManager.Instance != null
                 ? RunManager.Instance.GetShopOfferUnavailableReason(offer.StableId)
                 : "Offer unavailable";
 
-            var btn = Instantiate(itemButtonPrefab, itemsContainer);
+            var container = offer.IsService ? _servicesContainer ?? itemsContainer : itemsContainer;
+            var btn = Instantiate(itemButtonPrefab, container);
             btn.name = $"ShopOffer_{offer.StableId.Replace(':', '_')}";
             var text = btn.GetComponentInChildren<TMP_Text>();
             if (text)
@@ -352,11 +394,11 @@ public class ShopUI : MonoBehaviour
                 string status = string.IsNullOrEmpty(unavailableReason) ? string.Empty : $"\n<color=#DFA0A0>{unavailableReason}</color>";
             string priceLabel = offer.kind == ShopOfferKind.Investment
                 ? (offer.investmentStake > 0 ? $"{offer.investmentStake}g stake" : "Set stake")
-                : $"{offer.price}g";
+                : offer.kind == ShopOfferKind.Supply ? "3g / card" : $"{offer.price}g";
                 text.text = $"{offer.Icon} {offer.DisplayName} - {priceLabel}\n{offer.Description(cm)}{status}";
                 text.overflowMode = TextOverflowModes.Overflow;
                 var row = btn.GetComponent<LayoutElement>() ?? btn.AddComponent<LayoutElement>();
-                float textWidth = Mathf.Max(1f, ((RectTransform)itemsContainer).rect.width - 32f);
+                float textWidth = Mathf.Max(1f, ((RectTransform)container).rect.width - 32f);
                 row.minHeight = Mathf.Max(58f, text.GetPreferredValues(text.text, textWidth, 0f).y + 16f);
                 row.preferredHeight = row.minHeight;
             }
@@ -374,6 +416,42 @@ public class ShopUI : MonoBehaviour
         {
             _offersScroll.velocity = Vector2.zero;
             _offersScroll.verticalNormalizedPosition = 1f;
+        }
+    }
+
+    System.Collections.Generic.IEnumerable<Transform> ShopRows() => itemsContainer.Cast<Transform>()
+        .Concat(_servicesContainer != null ? _servicesContainer.Cast<Transform>() : System.Array.Empty<Transform>()).ToArray();
+
+    void AddSectionHeading(string title, Transform container)
+    {
+        var go = new GameObject(title.StartsWith("GOODS") ? "GoodsHeading" : "ServicesHeading",
+            typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
+        go.transform.SetParent(container, false);
+        var text = go.GetComponent<TMP_Text>();
+        text.text = title;
+        text.fontSize = 18;
+        text.fontStyle = FontStyles.Bold;
+        text.raycastTarget = false;
+        var layout = go.GetComponent<LayoutElement>();
+        layout.minHeight = layout.preferredHeight = 36;
+    }
+
+    void AddGoodsRefreshButton()
+    {
+        var run = RunManager.Instance;
+        if (run == null) return;
+        var go = Instantiate(itemButtonPrefab, itemsContainer);
+        go.name = "RefreshGoods";
+        var label = go.GetComponentInChildren<TMP_Text>();
+        if (label) label.text = $"Refresh Goods — {run.GoodsRefreshPrice}g (Services unchanged)";
+        var layout = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
+        layout.minHeight = layout.preferredHeight = 42;
+        var button = go.GetComponent<Button>();
+        int expected = run.GoodsRefreshCount;
+        if (button)
+        {
+            button.interactable = run.CanRefreshGoods;
+            button.onClick.AddListener(() => { run.RefreshGoods(expected); });
         }
     }
 
@@ -421,13 +499,22 @@ public class ShopUI : MonoBehaviour
 
         _selectedOfferId = stableId;
         var selectedOffer = FindOffer(stableId);
+        bool supplySelected = selectedOffer != null && selectedOffer.kind == ShopOfferKind.Supply;
         bool investmentSelected = selectedOffer != null && selectedOffer.kind == ShopOfferKind.Investment;
         if (_investmentStakeInput)
         {
-            _investmentStakeInput.gameObject.SetActive(investmentSelected);
+            _investmentStakeInput.gameObject.SetActive(investmentSelected || supplySelected);
+            if (_investmentStakeInput.placeholder is TMP_Text placeholder)
+                placeholder.text = supplySelected ? "Card quantity" : "Stake (Gold)";
             if (_selectedOfferRect != null)
-                _selectedOfferRect.anchorMax = investmentSelected
+                _selectedOfferRect.anchorMax = investmentSelected || supplySelected
                     ? new Vector2(0.7f, _selectedOfferAnchorMax.y) : _selectedOfferAnchorMax;
+            if (supplySelected)
+            {
+                int quantity = Mathf.Clamp(selectedOffer.supplyQuantity, 1, Mathf.Max(1, RunManager.Instance.GetSupplyMaximumQuantity()));
+                RunManager.Instance.SetSupplyQuantity(stableId, quantity);
+                _investmentStakeInput.SetTextWithoutNotify(quantity.ToString());
+            }
             if (investmentSelected)
             {
                 if (selectedOffer.investmentStake <= 0 && CardManager.Instance != null && CardManager.Instance.gold > 0)
@@ -435,7 +522,7 @@ public class ShopUI : MonoBehaviour
                 _investmentStakeInput.SetTextWithoutNotify(selectedOffer.investmentStake > 0 ? selectedOffer.investmentStake.ToString() : string.Empty);
             }
         }
-        foreach (Transform child in itemsContainer)
+        foreach (Transform child in ShopRows())
         {
             var button = child.GetComponent<Button>();
             if (!button) continue;
@@ -461,7 +548,8 @@ public class ShopUI : MonoBehaviour
             foreach (var offer in offers)
                 if (offer.StableId == _selectedOfferId) { selected = offer; break; }
 
-        if (buyButton) buyButton.interactable = selected != null;
+        if (buyButton) buyButton.interactable = selected != null &&
+            (selected.kind != ShopOfferKind.Supply || RunManager.Instance.CanPurchaseShopOffer(selected.StableId));
         if (!selectedOfferText) return;
         if (!string.IsNullOrEmpty(failure))
         {
@@ -479,6 +567,7 @@ public class ShopUI : MonoBehaviour
         string status = string.IsNullOrEmpty(reason) ? "Ready to buy" : reason;
         string displayedPrice = selected.kind == ShopOfferKind.Investment
             ? (selected.investmentStake > 0 ? $"{selected.investmentStake}g stake" : "Stake not set")
+            : selected.kind == ShopOfferKind.Supply ? $"{selected.supplyQuantity} cards × 3g (max {RunManager.Instance.GetSupplyMaximumQuantity()})"
             : $"{selected.price}g";
         selectedOfferText.text = $"SELECTED: {selected.Icon} {selected.DisplayName} — {displayedPrice}\n" +
             $"{selected.Description(CardManager.Instance)}\n{status}";

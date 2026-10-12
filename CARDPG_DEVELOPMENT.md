@@ -614,6 +614,14 @@ Files: `Assets/Scenes/Game.unity`, `Assets/Scripts/UI/ActionButtonsUI.cs`, `Card
 
 Continue gradual content expansion from `CardPG_GameData_organized.xlsx`; inspect exact definitions and current repository support first. Completed incremental entries include `evt_006` Tavern, `evt_009` Noble Family, `rel_014` Ace Emblem, `rel_016` Retaliation Emblem, `rel_019` Chain Armor, `rel_028` Arsenal Emblem, `enh_007` Golden, and `enh_008` Auxiliary. No next content entry is selected. Favor content that fits current systems, add focused tests, then regress before proceeding. Stop/defer on regressions or unresolved semantics.
 
+## Combat & Shop Economy Rebalance — implemented; regression gate blocked
+
+- Perfect Parry tracks cumulative effective card Block across the whole enemy-response window (user-confirmed boundary), against positive incoming damage after the existing typed modifiers. Exact coverage awards at most one capacity-limited draw from cards present in the Draw Pile when that window began. Normal defense recycling is preserved, but cannot supply the reward; new strict draws never recycle discards or use overflow.
+- Five route depths remain. Mandatory, visible Shop checkpoints follow Depths 2 and 5; random route Shops are replaced with combat nodes. Checkpoints retain one-shot node-completion/Artifact hooks but are excluded from route-depth display. Boss stats, starting HP, authored prices and reward values are unchanged.
+- RunManager retains separate run-local inventory, purchases, Service usage and Refresh state per map/checkpoint. Two distinct seeded Services are offered from Guidance, Quest (existing Contract), Investment and Supply; at least one checkpoint per map includes Supply. Existing Quest prerequisites and other Service mechanics remain.
+- Supply is one purchase per Shop at 3g per successfully drawn existing card, bounded by Gold, deck count and hand capacity. Goods-only Refresh costs 3/5/8/12/17/23/...; purchased Goods cannot return, Service objects remain unchanged, and refresh-generation IDs reject stale requests. Default configurable Goods slot counts (Artifact/Enhancement/Consumable) are 2/2/1 mid-map and 1/1/3 pre-boss.
+- Shop UI presents separate Goods/Services columns, quantity entry and Refresh. Runtime compilation succeeded and the final Console check returned zero warnings/errors. Targeted runtime/scene checks passed; 18 focused EditMode cases were added, but **no automated tests ran** because Unity Test tools are disabled and the user cannot load the workspace settings to enable them. Independent final Luna review was also blocked by quota. Do not treat this phase as regression-accepted until EditMode/PlayMode suites run. Details: `Locus/knowledge/plan/combat-shop-economy-rebalance-report.md`.
+
 ## 10. Instructions for Future Locus Sessions
 
 1. Read `CARDPG_DEVELOPMENT.md` before beginning substantial project work.

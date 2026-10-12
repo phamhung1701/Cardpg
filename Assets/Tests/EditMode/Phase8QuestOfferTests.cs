@@ -47,6 +47,7 @@ public sealed class Phase8QuestOfferTests
         _run.currentPath.AddRange(new[] { shop, elite });
         SetPrivate(_run, "_activeNode", shop);
         InvokePrivate(_run, "PrepareShopOffers", 4);
+        SetQuestFixtureServices();
         var contract = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Contract);
         Assert.That(contract.price, Is.EqualTo(20));
         Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.EqualTo("Purchase another Shop item first"));
@@ -75,13 +76,22 @@ public sealed class Phase8QuestOfferTests
         _run.currentPath.Add(shop);
         SetPrivate(_run, "_activeNode", shop);
         InvokePrivate(_run, "PrepareShopOffers", 4);
+        SetQuestFixtureServices();
         var contract = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Contract);
         var investment = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Investment);
         Assert.That(_run.PurchaseShopOffer("missing-offer"), Is.False);
-        investment.price = 0;
-        Assert.That(_run.PurchaseShopOffer(investment.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(50));
-        Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.EqualTo("Purchase another Shop item first"));
+        var freeArtifact = ScriptableObject.CreateInstance<RelicData>();
+        try
+        {
+            freeArtifact.id = "quest-free-fixture";
+            _cards.relicCatalog.Add(freeArtifact);
+            var freeOffer = new ShopOffer { kind = ShopOfferKind.Artifact, artifact = freeArtifact, price = 0 };
+            ((List<ShopOffer>)_run.GetCurrentShopOffers()).Add(freeOffer);
+            Assert.That(_run.PurchaseShopOffer(freeOffer.StableId), Is.True);
+            Assert.That(_cards.gold, Is.EqualTo(50));
+            Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.EqualTo("Purchase another Shop item first"));
+        }
+        finally { Object.DestroyImmediate(freeArtifact); }
     }
 
     [Test]
@@ -92,6 +102,7 @@ public sealed class Phase8QuestOfferTests
         _run.currentPath.Add(shop);
         SetPrivate(_run, "_activeNode", shop);
         InvokePrivate(_run, "PrepareShopOffers", 4);
+        SetQuestFixtureServices();
         var investment = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Investment);
         var contract = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Contract);
         Assert.That(_run.PurchaseShopOffer(investment.StableId), Is.True);
@@ -121,6 +132,15 @@ public sealed class Phase8QuestOfferTests
         Assert.That(InvokePrivateResult<bool>(_run, "ShowContractSelection", 20), Is.True);
         Assert.That(_run.CanChooseEventOption(1), Is.False);
         Assert.That(_run.GetEventOptionUnavailableReason(1), Is.EqualTo("No reachable Elite remains on this map"));
+    }
+
+    void SetQuestFixtureServices()
+    {
+        // Quest mechanics do not depend on which seeded service pair was rolled.
+        var offers = (List<ShopOffer>)_run.GetCurrentShopOffers();
+        offers.RemoveAll(offer => offer.IsService);
+        offers.Add(new ShopOffer { kind = ShopOfferKind.Contract, basePrice = 20, price = 20 });
+        offers.Add(new ShopOffer { kind = ShopOfferKind.Investment, basePrice = 5, price = 5, investmentStake = 5 });
     }
 
     static void SetPrivate(object target, string field, object value) =>

@@ -230,7 +230,8 @@ public class PathScreenUI : MonoBehaviour
         Vector2 nodeSize = new Vector2(Mathf.Clamp(bounds.rect.width / 12f, 62f, 88f), 62f);
         float halfH = nodeSize.y * 0.5f;
         float usableWidth = Mathf.Max(0f, bounds.rect.width - nodeSize.x - 2f * horizontalInset);
-        float xStep = usableWidth / (RunMapGenerator.RouteColumnCount + 1);
+        var displayColumns = run.currentPath.Select(node => node.col).Distinct().OrderBy(value => value).ToList();
+        float xStep = usableWidth / displayColumns.Count;
         float laneGap = Mathf.Min(laneSpacing, Mathf.Max(0f, bounds.rect.height - 2f * (verticalInset + halfH)) * 0.5f);
         Vector2 center = bounds.rect.center;
 
@@ -242,9 +243,9 @@ public class PathScreenUI : MonoBehaviour
         }
 
         Vector2 startPosition = PositionFor(0, 1);
-        Vector2 bossPosition = PositionFor(RunMapGenerator.RouteColumnCount + 1, 1);
+        Vector2 bossPosition = PositionFor(displayColumns.Count, 1);
         foreach (var node in run.currentPath)
-            _nodePositions[node.id] = PositionFor(Mathf.Clamp(Mathf.RoundToInt(node.col), 0, RunMapGenerator.RouteColumnCount - 1) + 1,
+            _nodePositions[node.id] = PositionFor(displayColumns.IndexOf(node.col) + 1,
                 Mathf.Clamp(Mathf.RoundToInt(node.row), 0, RunMapGenerator.RowCount - 1));
 
         var routeEdges = new List<RouteEdge>();
@@ -253,7 +254,7 @@ public class PathScreenUI : MonoBehaviour
             foreach (int nextId in node.next)
             {
                 var next = run.currentPath.Find(candidate => candidate.id == nextId);
-                if (next == null || next.kind == MapNodeType.Boss || !Mathf.Approximately(next.col, node.col + 1f)) continue;
+                if (next == null || next.kind == MapNodeType.Boss) continue;
                 routeEdges.Add(ClipConnection(_nodePositions[node.id], _nodePositions[next.id], nodeSize,
                     node.id, next.id, Mathf.RoundToInt(node.row), Mathf.RoundToInt(next.row)));
             }

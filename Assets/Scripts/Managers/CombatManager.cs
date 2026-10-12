@@ -22,6 +22,11 @@ public class CombatManager : Singleton<CombatManager>
     readonly List<EnemyRuntime> _pendingAttackSources = new();
     readonly Queue<PlayerTurnGrant> _queuedPlayerTurnGrants = new();
     int _attackCountAtStart;
+    long _parryIncomingDamage;
+    long _parryEffectiveBlock;
+    bool _parryResolved;
+    bool _parryDamageLeaked;
+    readonly HashSet<int> _parryDrawCandidates = new();
     readonly Queue<CardView> _overflowAutoPlays = new();
     int _overflowBudgetRemaining;
     long _overflowRootActionId;
@@ -173,6 +178,8 @@ public class CombatManager : Singleton<CombatManager>
         _pendingAttacks.Clear();
         _pendingAttackSources.Clear();
         _attackCountAtStart = 0;
+        _parryResolved = true;
+        _parryDrawCandidates.Clear();
         _queuedPlayerTurnGrants.Clear();
         _completedPlayerTurnCount = 0;
         var uniqueEnemies = new HashSet<EnemyRuntime>();
@@ -862,7 +869,10 @@ public class CombatManager : Singleton<CombatManager>
         try
         {
             var cardManager = CardManager.Instance;
+            long effectiveBlock = 0;
+            foreach (var view in cards) effectiveBlock += CalculateCardDefense(view.data);
             if (cardManager == null || !cardManager.TryRecycleDefenseCards(cards)) return false;
+            _parryEffectiveBlock += effectiveBlock;
 
             assignments.Sort((left, right) =>
             {
@@ -904,11 +914,15 @@ public class CombatManager : Singleton<CombatManager>
                 ProcessReactions(CombatReactionPhase.HitResolved);
             if (_reactionFaulted) return true;
             if (!_encounterResolved && _enemies.Count == 0)
+            {
+                ResolvePerfectParry();
                 ResolveEncounter(EncounterResult.Victory);
+            }
             if (_encounterResolved) return true;
 
             if (pendingDamage <= 0)
             {
+                ResolvePerfectParry();
                 CompleteEnemyResponse();
                 BeginPlayerTurn();
                 Log("Defended! Your turn.");
@@ -950,9 +964,11 @@ public class CombatManager : Singleton<CombatManager>
                     null, player, remaining[i].amount, allowShield: true);
                 var result = ResolveDamage(request);
                 lost += result.ActualHpLost;
+                _parryDamageLeaked |= result.ModifiedDamage > 0;
                 if (!ProcessReactions(CombatReactionPhase.HitResolved) || _reactionFaulted) break;
                 if (player.IsDefeated) break;
             }
+            if (!_reactionFaulted && !player.IsDefeated) ResolvePerfectParry();
             Log($"Took {lost} damage. (HP: {player.currentHealth}/{player.maxHealth})");
             if (!_reactionFaulted && player.IsDefeated) ResolveEncounter(EncounterResult.Defeat);
         }
@@ -1012,6 +1028,7 @@ public class CombatManager : Singleton<CombatManager>
             }
         }
         _attackCountAtStart = _pendingAttacks.Count;
+        SnapshotPerfectParry();
         long total = 0;
         for (int i = 0; i < _pendingAttacks.Count; i++)
             total = Math.Min(int.MaxValue, total + _pendingAttacks[i]);
@@ -1028,6 +1045,45 @@ public class CombatManager : Singleton<CombatManager>
         string breakdown = string.Join(" + ", _enemies.ConvertAll(enemy =>
             $"{enemy.DisplayName} {enemy.PreparedResponseBudget}{(enemy.HasDoubleStrike ? " (2 hits at 60%)" : enemy.CurrentResponseIsCharged ? " (charged)" : "")}"));
         Log($"Surviving enemies attack for {pendingDamage} ({breakdown})! Discard to defend or take the remaining damage.");
+    }
+
+    void SnapshotPerfectParry()
+    {
+        _parryIncomingDamage = 0;
+        _parryEffectiveBlock = 0;
+        _parryResolved = false;
+        _parryDamageLeaked = false;
+        _parryDrawCandidates.Clear();
+        var cards = CardManager.Instance;
+        if (cards != null)
+            foreach (var card in cards.deck) _parryDrawCandidates.Add(card.Id);
+        var action = new CombatActionContext(0, CombatActionOrigin.EnemyRetaliation);
+        long ordinary = 0;
+        for (int i = 0; i < _pendingAttacks.Count; i++)
+        {
+            if (_pendingAttackSources[i] != null && _pendingAttackSources[i].HasDoubleStrike)
+                _parryIncomingDamage += PreviewParryDamage(action, _pendingAttacks[i]);
+            else ordinary = Math.Min(int.MaxValue, ordinary + _pendingAttacks[i]);
+        }
+        if (ordinary > 0) _parryIncomingDamage += PreviewParryDamage(action, (int)ordinary);
+    }
+
+    int PreviewParryDamage(CombatActionContext action, int damage)
+    {
+        if (HasInfiniteHealthForDev) return 0;
+        var request = new DamageRequest(action, 0, CombatDamageOrigin.EnemyAggregate, null, player, damage);
+        return GameplayEffectResolver.ModifyIncomingCombatDamage(
+            new IncomingDamageEffectContext(request, this, CardManager.Instance, damage));
+    }
+
+    void ResolvePerfectParry()
+    {
+        if (_parryResolved) return;
+        _parryResolved = true;
+        if (_parryDamageLeaked || _parryIncomingDamage <= 0 || _parryEffectiveBlock != _parryIncomingDamage) return;
+        int drawn = CardManager.Instance != null
+            ? CardManager.Instance.DrawExistingToHand(1, _parryDrawCandidates) : 0;
+        Log(drawn > 0 ? "Perfect Parry! Drew 1 card." : "Perfect Parry! No eligible card could be drawn.");
     }
 
     void CompleteEnemyResponse()
@@ -1456,6 +1512,8 @@ public class CombatManager : Singleton<CombatManager>
         _pendingAttacks.Clear();
         _pendingAttackSources.Clear();
         _attackCountAtStart = 0;
+        _parryResolved = true;
+        _parryDrawCandidates.Clear();
         _queuedPlayerTurnGrants.Clear();
         SetPendingDamage(0);
         player.ResetEncounterBlock();
@@ -1799,6 +1857,8 @@ public class CombatManager : Singleton<CombatManager>
         _pendingAttacks.Clear();
         _pendingAttackSources.Clear();
         _attackCountAtStart = 0;
+        _parryResolved = true;
+        _parryDrawCandidates.Clear();
         currentEnemy = null;
         _isEliteOrBossEncounter = false;
         _isBossEncounter = false;

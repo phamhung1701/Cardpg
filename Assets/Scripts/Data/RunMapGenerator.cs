@@ -28,9 +28,8 @@ public static class RunMapGenerator
             for (int row = 0; row < RowCount; row++)
             {
                 MapNodeType kind = kinds[row];
-                // Map 1 reserves its first two route depths for non-Shop encounters.
-                // Replace after the layout shuffle so link/layout RNG consumption stays unchanged.
-                if (mapIndex == 0 && col < 2 && kind == MapNodeType.Shop)
+                // Shops are mandatory zero-depth checkpoints, never random route nodes.
+                if (kind == MapNodeType.Shop)
                     kind = MapNodeType.Combat;
                 // The first two maps are the onboarding difficulty window and contain no Elites.
                 if (mapIndex < 2 && kind == MapNodeType.Elite)
@@ -89,8 +88,25 @@ public static class RunMapGenerator
         nodes.Add(boss);
 
         ApplyEliteRoutePolicy(randomContext, mapIndex, catalog, fallbackEnemies, columns);
+        InsertShopCheckpoint(nodes, columns[1], columns[2], mapIndex, boss.id + 1, 1.5f);
+        InsertShopCheckpoint(nodes, columns[4], new[] { boss }, mapIndex, boss.id + 2, 4.5f);
 
         return nodes;
+    }
+
+    static void InsertShopCheckpoint(List<PathNode> nodes, IEnumerable<PathNode> predecessors,
+        IEnumerable<PathNode> successors, int mapIndex, int id, float column)
+    {
+        var shop = new PathNode { id = id, kind = MapNodeType.Shop, type = "shop",
+            contentId = column < 2 ? "shop-mid" : "shop-preboss", mapIndex = mapIndex,
+            col = column, row = 1, revealed = true, isShopCheckpoint = true };
+        foreach (var next in successors) shop.next.Add(next.id);
+        foreach (var previous in predecessors)
+        {
+            previous.next.Clear();
+            previous.next.Add(id);
+        }
+        nodes.Add(shop);
     }
 
     static void ApplyEliteRoutePolicy(

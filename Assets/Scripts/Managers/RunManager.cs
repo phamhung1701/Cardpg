@@ -14,6 +14,7 @@ public class PathNode
     public float col, row;
     public List<int> next = new();
     public bool completed, accessible, revealed, hidden;
+    public bool isShopCheckpoint;
 }
 
 public class RunManager : Singleton<RunManager>
@@ -26,6 +27,10 @@ public class RunManager : Singleton<RunManager>
 
     [Header("Phase 4 Content")]
     public RunContentCatalog contentCatalog;
+
+    [Header("Shop Goods slots: Artifact / Enhancement / Consumable")]
+    public Vector3Int midShopGoods = new(2, 2, 1);
+    public Vector3Int preBossShopGoods = new(1, 1, 3);
 
     [Header("Runtime State")]
     [SerializeField] string runSeed;
@@ -53,10 +58,15 @@ public class RunManager : Singleton<RunManager>
 
     readonly List<EnemyTypeData> _generatedEnemyTypes = new();
     readonly List<EnemyAbility> _generatedEnemyAbilities = new();
-    readonly List<ShopOffer> _activeShopOffers = new();
+    List<ShopOffer> _activeShopOffers = new();
+    readonly Dictionary<(int map, int node), ShopCheckpointState> _shopStates = new();
+    ShopCheckpointState _activeShopState;
+    bool _shopTransaction;
+    public int GoodsRefreshPrice => _activeShopState?.RefreshPrice ?? 3;
+    public int GoodsRefreshCount => _activeShopState?.RefreshCount ?? 0;
     readonly List<ShopOffer> _activeUpgradeOffers = new();
-    readonly HashSet<ShopOfferKind> _usedSpecialShopOffers = new();
-    readonly HashSet<string> _purchasedConsumablesInShop = new(StringComparer.Ordinal);
+    HashSet<ShopOfferKind> _usedSpecialShopOffers = new();
+    HashSet<string> _purchasedConsumablesInShop = new(StringComparer.Ordinal);
     readonly HashSet<int> _consumableDropResolvedContexts = new();
     readonly Queue<ConsumableRewardOffer> _pendingConsumableRewards = new();
     readonly HashSet<string> _resolvedConsumableRewardContexts = new(StringComparer.Ordinal);
@@ -490,7 +500,6 @@ public class RunManager : Singleton<RunManager>
                 }
                 break;
             case MapNodeType.Shop:
-                ResolvePendingInvestments(node);
                 PrepareShopOffers();
                 OnShowShop?.Invoke();
                 break;
@@ -853,7 +862,7 @@ public class RunManager : Singleton<RunManager>
         return true;
     }
 
-    bool IsActiveShopForSale() => _activeNode != null && !_activeNode.completed &&
+    bool IsActiveShopForSale() => !_shopTransaction && _activeNode != null && !_activeNode.completed &&
         _activeNode.kind == MapNodeType.Shop && CardManager.Instance != null;
 
     public bool CanPurchaseShopOffer(string stableId) =>
@@ -861,6 +870,7 @@ public class RunManager : Singleton<RunManager>
 
     public string GetShopOfferUnavailableReason(string stableId)
     {
+        if (_shopTransaction) return "Shop transaction in progress";
         if (_activeNode == null || _activeNode.completed || _activeNode.kind != MapNodeType.Shop || string.IsNullOrEmpty(stableId))
             return "Offer unavailable";
 
@@ -868,6 +878,7 @@ public class RunManager : Singleton<RunManager>
         var cards = CardManager.Instance;
         if (offer == null || cards == null) return "Offer unavailable";
         if (offer.price < 0) return "Invalid price";
+        if (offer.purchased) return "Already purchased this Shop";
 
         if (offer.kind == ShopOfferKind.Artifact)
         {
@@ -896,6 +907,13 @@ public class RunManager : Singleton<RunManager>
                 !cards.consumableCatalog.Contains(offer.consumable)) return "Consumable unavailable";
             if (_purchasedConsumablesInShop.Contains(offer.consumable.id)) return "Already purchased this Shop visit";
             if (!cards.CanAddConsumable(offer.consumable)) return "Backpack Full";
+        }
+        else if (offer.kind == ShopOfferKind.Supply)
+        {
+            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased this Shop";
+            int maximum = GetSupplyMaximumQuantity();
+            if (maximum <= 0) return "Supply needs Gold, Draw Pile cards and free hand space";
+            if (offer.supplyQuantity <= 0 || offer.supplyQuantity > maximum) return $"Choose 1–{maximum} cards";
         }
         else if (offer.kind == ShopOfferKind.Investment || offer.kind == ShopOfferKind.Guidance)
         {
@@ -935,6 +953,34 @@ public class RunManager : Singleton<RunManager>
     {
         if (GameplayInputGate.IsBlocked || !CanPurchaseShopOffer(stableId)) return false;
         var offer = _activeShopOffers.First(candidate => candidate.StableId == stableId);
+        if (offer.kind == ShopOfferKind.Supply) return PurchaseSupply(stableId, offer.supplyQuantity);
+        _shopTransaction = true;
+        try
+        {
+            bool success = PurchaseShopOfferCore(offer);
+            if (success && offer.kind != ShopOfferKind.Contract) MarkShopPurchase(offer);
+            return success;
+        }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
+    }
+
+    void MarkShopPurchase(ShopOffer offer)
+    {
+        offer.purchased = true;
+        if (!offer.IsService) _activeShopState?.PurchasedGoods.Add(GoodsIdentity(offer));
+        if (_activeShopState != null) _activeShopState.MadePricedPurchase = _madeSuccessfulPurchaseInCurrentShop;
+    }
+
+    static string GoodsIdentity(ShopOffer offer) => offer.kind switch
+    {
+        ShopOfferKind.Artifact => "artifact:" + offer.artifact?.id,
+        ShopOfferKind.Enhancement => "enhancement:" + offer.enhancement?.id,
+        ShopOfferKind.Consumable => "consumable:" + offer.consumable?.id,
+        _ => string.Empty
+    };
+
+    bool PurchaseShopOfferCore(ShopOffer offer)
+    {
         var cards = CardManager.Instance;
         bool cashbackOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.CashbackToken);
         bool giftOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.MerchantsGift);
@@ -991,11 +1037,53 @@ public class RunManager : Singleton<RunManager>
         bool cashbackOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.CashbackToken);
         bool giftOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.MerchantsGift);
         int goldBefore = cards.gold;
-        if (!cards.BuyEnhancement(cardId, offer.enhancement, offer.price, replaceExisting)) return false;
-        CompletePaidItemPurchase(goldBefore - cards.gold, cashbackOwned, giftOwned);
-        if (offer.price > 0)
-            _madeSuccessfulPurchaseInCurrentShop = true;
+        _shopTransaction = true;
+        try
+        {
+            if (!cards.BuyEnhancement(cardId, offer.enhancement, offer.price, replaceExisting)) return false;
+            CompletePaidItemPurchase(goldBefore - cards.gold, cashbackOwned, giftOwned);
+            if (offer.price > 0) _madeSuccessfulPurchaseInCurrentShop = true;
+            MarkShopPurchase(offer);
+            return true;
+        }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
+    }
+
+    public int GetSupplyMaximumQuantity()
+    {
+        var cards = CardManager.Instance;
+        if (cards == null || !IsActiveShopForSale()) return 0;
+        return Math.Max(0, Math.Min(cards.gold / 3, Math.Min(cards.deck.Count, cards.HandCapacity - cards.HandCount)));
+    }
+
+    public bool SetSupplyQuantity(string stableId, int quantity)
+    {
+        if (GameplayInputGate.IsBlocked || _shopTransaction || !IsActiveShopForSale()) return false;
+        var offer = _activeShopOffers.FirstOrDefault(value => value.StableId == stableId);
+        if (offer == null || offer.kind != ShopOfferKind.Supply || offer.purchased ||
+            quantity <= 0 || quantity > GetSupplyMaximumQuantity()) return false;
+        offer.supplyQuantity = quantity;
         return true;
+    }
+
+    public bool PurchaseSupply(string stableId, int quantity)
+    {
+        if (GameplayInputGate.IsBlocked || _shopTransaction || !IsActiveShopForSale()) return false;
+        var offer = _activeShopOffers.FirstOrDefault(value => value.StableId == stableId);
+        if (offer == null || offer.kind != ShopOfferKind.Supply || offer.purchased ||
+            _usedSpecialShopOffers.Contains(ShopOfferKind.Supply) || quantity <= 0 || quantity > GetSupplyMaximumQuantity()) return false;
+        _shopTransaction = true;
+        try
+        {
+            // CardManager commits zones and payment before publishing either notification.
+            int drawn = CardManager.Instance.PurchaseExistingDraw(quantity, 3);
+            if (drawn <= 0) return false;
+            _usedSpecialShopOffers.Add(ShopOfferKind.Supply);
+            _madeSuccessfulPurchaseInCurrentShop = true;
+            MarkShopPurchase(offer);
+            return true;
+        }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
     }
 
     static bool IsEligiblePaidItem(ShopOfferKind kind) => kind is
@@ -1075,6 +1163,7 @@ public class RunManager : Singleton<RunManager>
 
     public bool SetInvestmentStake(string stableId, int stake)
     {
+        if (GameplayInputGate.IsBlocked || !IsActiveShopForSale()) return false;
         var offer = _activeShopOffers.FirstOrDefault(candidate => candidate != null && candidate.StableId == stableId);
         var cards = CardManager.Instance;
         if (offer == null || offer.kind != ShopOfferKind.Investment || cards == null || stake <= 0 || stake > cards.gold)
@@ -1108,101 +1197,105 @@ public class RunManager : Singleton<RunManager>
 
     void PrepareShopOffers(int maximumOffers = 4)
     {
-        _activeShopOffers.Clear();
-        _usedSpecialShopOffers.Clear();
-        _madeSuccessfulPurchaseInCurrentShop = false;
-        _purchasedConsumablesInShop.Clear();
         var cards = CardManager.Instance;
-        if (_activeNode == null || _activeNode.kind != MapNodeType.Shop || cards == null)
-            return;
+        if (_activeNode == null || _activeNode.kind != MapNodeType.Shop || cards == null) return;
+        if (_activeShopState != null) _activeShopState.MadePricedPurchase = _madeSuccessfulPurchaseInCurrentShop;
+        var key = (_activeNode.mapIndex, _activeNode.id);
+        bool cached = _shopStates.TryGetValue(key, out var state);
+        if (!cached) _shopStates.Add(key, state = new ShopCheckpointState());
+        _activeShopState = state;
+        _activeShopOffers = state.Offers;
+        _usedSpecialShopOffers = state.UsedServices;
+        _purchasedConsumablesInShop = state.PurchasedConsumables;
+        _madeSuccessfulPurchaseInCurrentShop = state.MadePricedPurchase;
+        if (cached) return;
+        ResolvePendingInvestments(_activeNode);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (DevModeRuntime.UnlimitedShopOffers)
         {
             PrepareAllDevShopOffers(cards);
+            AddSpecialShopOffers(unchecked(_activeNode.mapIndex * 397 ^ _activeNode.id));
             return;
         }
 #endif
-        if (maximumOffers <= 0) return;
-
         int context = unchecked(_activeNode.mapIndex * 397 ^ _activeNode.id);
-        var artifacts = cards.relicCatalog
-            .Where(artifact => artifact != null &&
-                string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(artifact)))
-            .OrderBy(artifact => artifact.id, StringComparer.Ordinal)
-            .ToList();
-        artifacts.Shuffle(_randomContext.CreateStream("shop-artifacts", context));
-
-        int artifactSlots = Mathf.Min(2, maximumOffers);
-        var artifactOffers = new List<RelicData>(artifactSlots);
-        var eligibleUpgrade = artifacts.FirstOrDefault(artifact => artifact.tier > 1);
-        if (eligibleUpgrade != null) artifactOffers.Add(eligibleUpgrade);
-        foreach (var artifact in artifacts)
-        {
-            if (artifactOffers.Count >= artifactSlots) break;
-            if (!artifactOffers.Contains(artifact)) artifactOffers.Add(artifact);
-        }
-        foreach (var artifact in artifactOffers)
-        {
-            _activeShopOffers.Add(new ShopOffer
-            {
-                kind = ShopOfferKind.Artifact,
-                artifact = artifact,
-                basePrice = artifact.price,
-                price = CalculateEffectiveShopPrice(ShopOfferKind.Artifact, artifact.price)
-            });
-        }
-
-        AddEnhancementOffers(
-            _activeShopOffers,
-            maximumOffers - _activeShopOffers.Count,
-            "shop-enhancement-cards",
-            "shop-enhancements",
-            context,
-            false);
-
-        foreach (var artifact in artifacts.Where(artifact => !artifactOffers.Contains(artifact)))
-        {
-            if (_activeShopOffers.Count >= maximumOffers) break;
-            _activeShopOffers.Add(new ShopOffer
-            {
-                kind = ShopOfferKind.Artifact,
-                artifact = artifact,
-                basePrice = artifact.price,
-                price = CalculateEffectiveShopPrice(ShopOfferKind.Artifact, artifact.price)
-            });
-        }
-        AddConsumableOffers(cards, context);
+        if (maximumOffers > 0) _activeShopOffers.AddRange(GenerateShopGoods(0));
         AddSpecialShopOffers(context);
     }
 
-    void AddConsumableOffers(CardManager cards, int context)
+    List<ShopOffer> GenerateShopGoods(int generation)
     {
-        var consumables = cards.consumableCatalog
-            .Where(value => value != null && value.shopAvailable)
-            .OrderBy(value => value.id, StringComparer.Ordinal)
-            .ToList();
-        if (consumables.Count == 0) return;
+        var cards = CardManager.Instance;
+        var result = new List<ShopOffer>();
+        int context = unchecked((_activeNode.mapIndex * 397 ^ _activeNode.id) + generation * 104729);
+        var slots = _activeNode.isShopCheckpoint && _activeNode.col > 4 ? preBossShopGoods : midShopGoods;
+        int artifactSlots = Mathf.Clamp(slots.x, 1, 20);
+        int enhancementSlots = Mathf.Clamp(slots.y, 1, 20);
+        int consumableSlots = Mathf.Clamp(slots.z, 1, 20);
+        bool WasBought(ShopOfferKind kind, string id) => _activeShopState != null &&
+            _activeShopState.PurchasedGoods.Contains(kind.ToString().ToLowerInvariant() + ":" + id);
+        var artifacts = cards.relicCatalog.Where(value => value != null &&
+            !WasBought(ShopOfferKind.Artifact, value.id) &&
+            string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(value)))
+            .OrderBy(value => value.id, StringComparer.Ordinal).ToList();
+        artifacts.Shuffle(_randomContext.CreateStream("shop-artifacts", context));
+        // Preserve the existing eligible-upgrade preference.
+        var upgrade = artifacts.FirstOrDefault(value => value.tier > 1);
+        if (upgrade != null) { artifacts.Remove(upgrade); artifacts.Insert(0, upgrade); }
+        foreach (var artifact in artifacts.Take(artifactSlots))
+            result.Add(new ShopOffer { kind = ShopOfferKind.Artifact, artifact = artifact,
+                basePrice = artifact.price, price = CalculateEffectiveShopPrice(ShopOfferKind.Artifact, artifact.price), generation = generation });
+        AddEnhancementOffers(result, enhancementSlots, "shop-enhancement-cards", "shop-enhancements", context, false,
+            enhancement => !WasBought(ShopOfferKind.Enhancement, enhancement.id));
+        foreach (var offer in result) offer.generation = generation;
+        var consumables = cards.consumableCatalog.Where(value => value != null && value.shopAvailable &&
+            !WasBought(ShopOfferKind.Consumable, value.id) && !_purchasedConsumablesInShop.Contains(value.id))
+            .OrderBy(value => value.id, StringComparer.Ordinal).ToList();
         consumables.Shuffle(_randomContext.CreateStream("shop-consumables", context));
-        var consumable = consumables[0];
-        _activeShopOffers.Add(new ShopOffer
+        foreach (var consumable in consumables.Take(consumableSlots))
+            result.Add(new ShopOffer { kind = ShopOfferKind.Consumable, consumable = consumable,
+                basePrice = consumable.price, price = CalculateEffectiveShopPrice(ShopOfferKind.Consumable, consumable.price), generation = generation });
+        return result;
+    }
+
+    public bool CanRefreshGoods => !GameplayInputGate.IsBlocked && !_shopTransaction && IsActiveShopForSale() &&
+        _activeShopState != null && CardManager.Instance != null && CardManager.Instance.CanAfford(GoodsRefreshPrice) &&
+        _activeShopState.RefreshCount < int.MaxValue;
+
+    public bool RefreshGoods(int expectedRefreshCount)
+    {
+        if (!CanRefreshGoods || expectedRefreshCount != GoodsRefreshCount) return false;
+        _shopTransaction = true;
+        try
         {
-            kind = ShopOfferKind.Consumable,
-            consumable = consumable,
-            basePrice = consumable.price,
-            price = CalculateEffectiveShopPrice(ShopOfferKind.Consumable, consumable.price)
-        });
+            int next = GoodsRefreshCount + 1;
+            var replacement = GenerateShopGoods(next);
+            if (!CardManager.Instance.SpendGold(GoodsRefreshPrice)) return false;
+            _activeShopState.RefreshCount = next;
+            _activeShopOffers.RemoveAll(offer => !offer.IsService);
+            _activeShopOffers.InsertRange(0, replacement);
+            return true;
+        }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
     }
 
     void AddSpecialShopOffers(int context)
     {
-        var investmentAvailability = _randomContext.CreateStream("shop-investment-availability", context);
-        var guidanceAvailability = _randomContext.CreateStream("shop-guidance-availability", context);
-        if (investmentAvailability.NextInt(0, 2) == 0)
-            _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Investment, basePrice = 5, price = 5 });
-        if (guidanceAvailability.NextInt(0, 2) == 0)
-            _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Guidance, basePrice = 5, price = 5 });
-        if (_activeContract == null)
-            _activeShopOffers.Add(new ShopOffer { kind = ShopOfferKind.Contract, basePrice = 20, price = 20 });
+        var services = new List<ShopOfferKind> { ShopOfferKind.Guidance, ShopOfferKind.Contract,
+            ShopOfferKind.Investment, ShopOfferKind.Supply };
+        services.Shuffle(_randomContext.CreateStream("shop-services", context));
+        bool supplyAtMid = _randomContext.CreateStream("shop-supply-checkpoint", _activeNode.mapIndex).NextInt(0, 2) == 0;
+        bool isMid = _activeNode.col < 2f;
+        if (_activeNode.isShopCheckpoint && supplyAtMid == isMid && services.IndexOf(ShopOfferKind.Supply) >= 2)
+        {
+            services.Remove(ShopOfferKind.Supply);
+            services.Insert(0, ShopOfferKind.Supply);
+        }
+        for (int i = 0; i < 2; i++)
+        {
+            int price = services[i] == ShopOfferKind.Contract ? 20 : services[i] == ShopOfferKind.Supply ? 3 : 5;
+            _activeShopOffers.Add(new ShopOffer { kind = services[i], basePrice = price, price = price });
+        }
     }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -1259,7 +1352,8 @@ public class RunManager : Singleton<RunManager>
         string cardStream,
         string enhancementStream,
         int context,
-        bool free)
+        bool free,
+        Func<CardEnhancementData, bool> eligible = null)
     {
         var cards = CardManager.Instance;
         if (cards == null || maximumOffers <= 0 || cards.enhancementCatalog.Count == 0) return;
@@ -1269,7 +1363,7 @@ public class RunManager : Singleton<RunManager>
             .OrderBy(card => card.Id)
             .ToList();
         var enhancements = cards.enhancementCatalog
-            .Where(enhancement => enhancement != null)
+            .Where(enhancement => enhancement != null && (eligible == null || eligible(enhancement)))
             .OrderBy(enhancement => enhancement.id, StringComparer.Ordinal)
             .ToList();
         if (targets.Count == 0 || enhancements.Count == 0) return;
@@ -1967,10 +2061,21 @@ public class RunManager : Singleton<RunManager>
     public void OnShopDone()
     {
         if (GameplayInputGate.IsBlocked) return;
-        if (_activeNode == null || _activeNode.kind != MapNodeType.Shop) return;
-        OnHideShop?.Invoke();
-        _activeShopOffers.Clear();
-        CompleteActiveNode();
+        if (_activeNode == null || _activeNode.completed || _activeNode.kind != MapNodeType.Shop || _shopTransaction) return;
+        _shopTransaction = true;
+        try
+        {
+            if (_activeShopState != null)
+            {
+                _activeShopState.MadePricedPurchase = _madeSuccessfulPurchaseInCurrentShop;
+                _activeShopState.Completed = true;
+            }
+            OnHideShop?.Invoke();
+            _activeShopOffers = new List<ShopOffer>();
+            _activeShopState = null;
+            CompleteActiveNode();
+        }
+        finally { _shopTransaction = false; }
         ShowPathAfterNode();
     }
 
@@ -2097,6 +2202,8 @@ public class RunManager : Singleton<RunManager>
         if (resolvedNode == null || resolvedNode.completed) return;
 
         resolvedNode.completed = true;
+        // Completion hooks count visited nodes, not route depths. Checkpoints retain
+        // existing Artifact visit/counter behavior; their fractional column consumes no depth.
         _completedNodeCount = IncrementToMaximum(_completedNodeCount);
         ApplyPhase7MapCompletionEffects(resolvedNode);
         foreach (var nextId in resolvedNode.next)
@@ -2196,7 +2303,12 @@ public class RunManager : Singleton<RunManager>
     {
         _activeNode = null;
         _activeEvent = null;
-        _activeShopOffers.Clear();
+        _shopStates.Clear();
+        _activeShopState = null;
+        _shopTransaction = false;
+        _activeShopOffers = new List<ShopOffer>();
+        _usedSpecialShopOffers = new HashSet<ShopOfferKind>();
+        _purchasedConsumablesInShop = new HashSet<string>();
         _activeUpgradeOffers.Clear();
         Timing.Reset();
         IsRunCompleted = false;
