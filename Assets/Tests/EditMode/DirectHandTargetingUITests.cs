@@ -74,7 +74,8 @@ public sealed class DirectHandTargetingUITests
         Assert.That(_cards.IsHandEnhancementTargeting, Is.False);
         Assert.That(_cards.ownedCards.Count, Is.EqualTo(oldOwnedCount + 1));
         Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
-        Assert.That(_cards.hand.Count, Is.EqualTo(oldHandCount));
+        Assert.That(_cards.hand.Count, Is.EqualTo(oldHandCount + 1));
+        Assert.That(_cards.hand.Contains(_cards.ownedCards.Last()), Is.True);
     }
 
     [Test]

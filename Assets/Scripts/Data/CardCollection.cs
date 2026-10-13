@@ -69,6 +69,8 @@ public sealed class CardCollection
 
     public bool AddOwnedToDeck(CardInstance card) => AddOwned(card, _deck);
 
+    public bool AddOwnedToHand(CardInstance card) => AddOwned(card, _hand);
+
     public bool AddOwnedToDiscard(CardInstance card) => AddOwned(card, _discardPile);
 
     bool AddOwned(CardInstance card, List<CardInstance> destination)

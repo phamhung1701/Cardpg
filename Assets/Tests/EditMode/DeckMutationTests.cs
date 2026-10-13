@@ -59,7 +59,7 @@ public sealed class DeckMutationTests
     }
 
     [Test]
-    public void Mirror_InCombat_RequiresHandAndPlacesCopyInDiscard()
+    public void Mirror_InCombat_RequiresHandAndAddsCopyToHand()
     {
         _cards.DrawToHand(1);
         var enemy = EnemyTypeData.Create("Mutation enemy", 100, 1, 0); _created.Add(enemy);
@@ -71,8 +71,30 @@ public sealed class DeckMutationTests
         Assert.That(_cards.UseDeckMutationConsumableAtSlot(0, new[] { _cards.hand[0].Id }), Is.True);
         var copy = _cards.ownedCards.Last();
         Assert.That(_cards.ownedCards.Count, Is.EqualTo(oldCount + 1));
-        Assert.That(_cards.discardPile.Contains(copy), Is.True);
-        Assert.That(_cards.hand.Contains(copy), Is.False);
+        Assert.That(_cards.hand.Contains(copy), Is.True);
+        Assert.That(_cards.discardPile.Contains(copy), Is.False);
+    }
+
+    [Test]
+    public void Mirror_InCombat_AddsCopyToHandEvenWhenHandIsFull()
+    {
+        _cards.DrawToHand(40);
+        var enemy = EnemyTypeData.Create("Full hand Mirror enemy", 100, 1, 0); _created.Add(enemy);
+        _combat.StartEnemy(new EnemyRuntime(enemy));
+        Assert.That(_cards.AddConsumable(_mirror), Is.True);
+        int capacity = _cards.HandCapacity;
+        Assert.That(_cards.hand.Count, Is.EqualTo(capacity));
+        var source = _cards.hand[0];
+        int oldOwnedCount = _cards.ownedCards.Count;
+
+        Assert.That(_cards.UseDeckMutationConsumableAtSlot(0, new[] { source.Id }), Is.True);
+
+        var copy = _cards.ownedCards.Last();
+        Assert.That(copy.Id, Is.Not.EqualTo(source.Id));
+        Assert.That(_cards.hand.Count, Is.EqualTo(capacity + 1));
+        Assert.That(_cards.hand.Contains(copy), Is.True);
+        Assert.That(_cards.deck.Count + _cards.hand.Count + _cards.discardPile.Count, Is.EqualTo(_cards.ownedCards.Count));
+        Assert.That(_cards.ownedCards.Count, Is.EqualTo(oldOwnedCount + 1));
     }
 
     [Test]

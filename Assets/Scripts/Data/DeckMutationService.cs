@@ -15,7 +15,7 @@ public static class DeckMutationService
     {
         if (newId <= 0 || !CanTarget(collection, target, inCombat)) return null;
         var copy = target.ClonePermanentState(newId);
-        return (inCombat ? collection.AddOwnedToDiscard(copy) : collection.AddOwnedToDeck(copy)) ? copy : null;
+        return (inCombat ? collection.AddOwnedToHand(copy) : collection.AddOwnedToDeck(copy)) ? copy : null;
     }
 
     public static bool CanDestroy(CardCollection collection, IReadOnlyList<CardInstance> targets, bool inCombat)
