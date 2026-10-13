@@ -1272,10 +1272,16 @@ public partial class RunManager : Singleton<RunManager>
         foreach (var artifact in artifacts.Take(artifactSlots))
             result.Add(new ShopOffer { kind = ShopOfferKind.Artifact, artifact = artifact,
                 basePrice = artifact.price, price = CalculateEffectiveShopPrice(ShopOfferKind.Artifact, artifact.price), generation = generation });
-        AddEnhancementOffers(result, enhancementSlots, "shop-enhancement-cards", "shop-enhancements", context, false,
-            enhancement => !WasBought(ShopOfferKind.Enhancement, enhancement.id));
-        foreach (var offer in result) offer.generation = generation;
+        var enhancementItems = cards.consumableCatalog.Where(value => value != null && value.shopAvailable &&
+            value.effectType == ConsumableEffectType.ApplyEnhancement && value.enhancementToApply != null &&
+            !WasBought(ShopOfferKind.Consumable, value.id) && !_purchasedConsumablesInShop.Contains(value.id))
+            .OrderBy(value => value.id, StringComparer.Ordinal).ToList();
+        enhancementItems.Shuffle(_randomContext.CreateStream("shop-enhancement-consumables", context));
+        foreach (var consumable in enhancementItems.Take(enhancementSlots))
+            result.Add(new ShopOffer { kind = ShopOfferKind.Consumable, consumable = consumable,
+                basePrice = consumable.price, price = CalculateEffectiveShopPrice(ShopOfferKind.Consumable, consumable.price), generation = generation });
         var consumables = cards.consumableCatalog.Where(value => value != null && value.shopAvailable &&
+            value.effectType != ConsumableEffectType.ApplyEnhancement &&
             !WasBought(ShopOfferKind.Consumable, value.id) && !_purchasedConsumablesInShop.Contains(value.id))
             .OrderBy(value => value.id, StringComparer.Ordinal).ToList();
         consumables.Shuffle(_randomContext.CreateStream("shop-consumables", context));
@@ -1342,18 +1348,16 @@ public partial class RunManager : Singleton<RunManager>
             });
         }
 
-        int slot = 0;
-        foreach (var enhancement in cards.enhancementCatalog
-            .Where(value => value != null)
+        foreach (var consumable in cards.consumableCatalog
+            .Where(value => value != null && value.shopAvailable)
             .OrderBy(value => value.id, StringComparer.Ordinal))
         {
             _activeShopOffers.Add(new ShopOffer
             {
-                kind = ShopOfferKind.Enhancement,
-                enhancement = enhancement,
-                slot = slot++,
-                basePrice = enhancement.price,
-                price = CalculateEffectiveShopPrice(ShopOfferKind.Enhancement, enhancement.price)
+                kind = ShopOfferKind.Consumable,
+                consumable = consumable,
+                basePrice = consumable.price,
+                price = CalculateEffectiveShopPrice(ShopOfferKind.Consumable, consumable.price)
             });
         }
     }

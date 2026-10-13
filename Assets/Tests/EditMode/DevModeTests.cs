@@ -22,8 +22,21 @@ public sealed class DevModeTests
         GameplayInputGate.Clear();
         _artifacts = Enumerable.Range(0, 6).Select(i => Artifact($"DEV-ART-{i:D2}", $"Dev Artifact {i}", 15 + i)).ToArray();
         _enhancements = Enumerable.Range(0, 2).Select(i => Enhancement($"DEV-ENH-{i:D2}", $"Dev Enhancement {i}", 10 + i)).ToArray();
+        var mappedConsumables = _enhancements.Select((enhancement, index) =>
+        {
+            var item = ScriptableObject.CreateInstance<ConsumableData>();
+            item.id = "DEV-PATCH-" + index;
+            item.canonicalId = "DEV-CON-" + index;
+            item.displayName = enhancement.displayName + " Patch";
+            item.price = enhancement.price;
+            item.effectType = ConsumableEffectType.ApplyEnhancement;
+            item.enhancementToApply = enhancement;
+            item.shopAvailable = true;
+            _assets.Add(item);
+            return item;
+        }).ToArray();
         _cards = Make<CardManager>("Dev Test Cards");
-        _cards.Configure(null, null, null, _artifacts, _enhancements);
+        _cards.Configure(null, null, null, _artifacts, _enhancements, mappedConsumables);
         _cards.ConfigureRandom(new DeterministicRandom(991));
         _combat = Make<CombatManager>("Dev Test Combat");
         _combat.ConfigurePlayer(30);
@@ -109,7 +122,9 @@ public sealed class DevModeTests
         CollectionAssert.AllItemsAreUnique(_run.GetCurrentShopOffers().Select(offer => offer.StableId).ToArray());
         Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Artifact),
             Is.EqualTo(_artifacts.Length));
-        Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Enhancement),
+        Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Enhancement), Is.Zero);
+        Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Consumable &&
+            offer.consumable != null && offer.consumable.effectType == ConsumableEffectType.ApplyEnhancement),
             Is.EqualTo(_enhancements.Length));
 
         var artifactOffers = _run.GetCurrentShopOffers().Where(offer => offer.kind == ShopOfferKind.Artifact).ToArray();
@@ -118,7 +133,7 @@ public sealed class DevModeTests
         Assert.That(_cards.ArtifactSlotsUsed, Is.EqualTo(5));
         Assert.That(_cards.ArtifactCapacity, Is.EqualTo(5));
         Assert.That(_run.GetShopOfferUnavailableReason(artifactOffers[5].StableId),
-            Is.EqualTo("Artifact Capacity Full"));
+            Is.EqualTo("Gear Capacity Full"));
         Assert.That(_run.PurchaseShopOffer(artifactOffers[5].StableId), Is.False,
             "Unlimited Shop offer generation does not lift the Persistent Artifact capacity rule.");
         Assert.That(_run.GetCurrentShopOffers(), Has.Count.EqualTo(expectedCount),

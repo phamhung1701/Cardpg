@@ -14,6 +14,7 @@ public sealed class Phase5BuildProgressionTests
     RunManager _run;
     RelicData[] _artifacts;
     CardEnhancementData[] _enhancements;
+    ConsumableData[] _enhancementConsumables;
 
     [SetUp]
     public void SetUp()
@@ -40,9 +41,12 @@ public sealed class Phase5BuildProgressionTests
             CreateEnhancement("mend", 7, heal: 2)
         };
 
+        _enhancementConsumables = _enhancements.Select((enhancement, index) =>
+            CreateEnhancementConsumable(enhancement, index)).ToArray();
+
         _cardObject = new GameObject("Phase5 CardManager");
         _cards = _cardObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, _artifacts, _enhancements);
+        _cards.Configure(null, null, null, _artifacts, _enhancements, _enhancementConsumables);
 
         _combatObject = new GameObject("Phase5 CombatManager");
         _combat = _combatObject.AddComponent<CombatManager>();
@@ -115,7 +119,9 @@ public sealed class Phase5BuildProgressionTests
         Assert.That(first, Is.Not.Empty);
         Assert.That(repeated, Is.EqualTo(first));
         Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Artifact), Is.True);
-        Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Enhancement), Is.True);
+        Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Enhancement), Is.False);
+        Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Consumable &&
+            offer.consumable != null && offer.consumable.effectType == ConsumableEffectType.ApplyEnhancement), Is.True);
     }
 
     [Test]
@@ -134,14 +140,15 @@ public sealed class Phase5BuildProgressionTests
         Assert.That(_cards.HasArtifact(artifactOffer.artifact), Is.True);
         Assert.That(_run.PurchaseShopOffer(artifactOffer.StableId), Is.False);
 
-        var enhancementOffer = _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Enhancement);
-        int beforeEnhancement = _cards.gold;
-        var chosenCard = _cards.hand.First(card => card.Enhancement == null);
-        Assert.That(_run.PurchaseShopOffer(enhancementOffer.StableId), Is.False, "A target is required");
-        Assert.That(_run.PurchaseShopEnhancement(enhancementOffer.StableId, chosenCard.Id), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(beforeEnhancement - enhancementOffer.price));
-        Assert.That(_cards.FindOwnedCard(chosenCard.Id).Enhancement, Is.SameAs(enhancementOffer.enhancement));
-        Assert.That(_run.PurchaseShopEnhancement(enhancementOffer.StableId, chosenCard.Id), Is.False);
+        var enhancementConsumableOffer = _run.GetCurrentShopOffers().First(offer =>
+            offer.kind == ShopOfferKind.Consumable && offer.consumable.effectType == ConsumableEffectType.ApplyEnhancement);
+        int beforeConsumable = _cards.gold;
+        Assert.That(_run.PurchaseShopOffer(enhancementConsumableOffer.StableId), Is.True);
+        Assert.That(_cards.gold, Is.EqualTo(beforeConsumable - enhancementConsumableOffer.price));
+        Assert.That(_cards.GetConsumableCount(enhancementConsumableOffer.consumable), Is.EqualTo(1));
+        Assert.That(_cards.hand.All(card => card.Enhancement == null), Is.True,
+            "Shop purchase adds the mapped Consumable; it does not apply its Enhancement immediately.");
+        Assert.That(_run.PurchaseShopOffer(enhancementConsumableOffer.StableId), Is.False);
     }
 
     [Test]
@@ -179,6 +186,22 @@ public sealed class Phase5BuildProgressionTests
         Assert.That(_cards.ownedCards.All(card => card.Enhancement == null), Is.True);
         Assert.That(_cards.ownedCards.Select(card => card.Id).Distinct().Count(), Is.EqualTo(40));
         Assert.That(_cards.deck.Count + _cards.hand.Count + _cards.discardPile.Count, Is.EqualTo(40));
+    }
+
+    ConsumableData CreateEnhancementConsumable(CardEnhancementData enhancement, int index)
+    {
+        var consumable = ScriptableObject.CreateInstance<ConsumableData>();
+        consumable.id = "patch_" + enhancement.id;
+        consumable.canonicalId = "phase5_con_" + index;
+        consumable.displayName = enhancement.displayName + " Patch";
+        consumable.description = "Apply " + enhancement.displayName + " to a card.";
+        consumable.price = enhancement.price;
+        consumable.uses = 1;
+        consumable.effectType = ConsumableEffectType.ApplyEnhancement;
+        consumable.enhancementToApply = enhancement;
+        consumable.shopAvailable = true;
+        _assets.Add(consumable);
+        return consumable;
     }
 
     RelicData CreateArtifact(string id, int price, System.Action<RelicData> configure)

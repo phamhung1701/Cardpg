@@ -11,6 +11,7 @@ public sealed class Phase7EArtifactCapacityTests
     RunManager _run;
     RelicData[] _artifacts;
     CardEnhancementData _enhancement;
+    ConsumableData _enhancementPatch;
 
     [SetUp]
     public void SetUp()
@@ -20,8 +21,15 @@ public sealed class Phase7EArtifactCapacityTests
         _enhancement.id = "sharpened";
         _enhancement.price = 9;
         _assets.Add(_enhancement);
+        _enhancementPatch = ScriptableObject.CreateInstance<ConsumableData>();
+        _enhancementPatch.id = "sharpened_patch";
+        _enhancementPatch.price = _enhancement.price;
+        _enhancementPatch.effectType = ConsumableEffectType.ApplyEnhancement;
+        _enhancementPatch.enhancementToApply = _enhancement;
+        _enhancementPatch.shopAvailable = true;
+        _assets.Add(_enhancementPatch);
         _cards = Make<CardManager>("Cards");
-        _cards.Configure(null, null, null, _artifacts, new[] { _enhancement });
+        _cards.Configure(null, null, null, _artifacts, new[] { _enhancement }, new[] { _enhancementPatch });
         var combat = Make<CombatManager>("Combat");
         combat.ConfigurePlayer(30);
         _run = Make<RunManager>("Run");
@@ -90,12 +98,13 @@ public sealed class Phase7EArtifactCapacityTests
     }
 
     [Test]
-    public void FullShop_KeepsCachedOfferAndPrice_BlocksArtifactButAllowsEnhancement()
+    public void FullShop_KeepsCachedOfferAndPrice_BlocksArtifactButAllowsMappedEnhancementConsumable()
     {
         _cards.AddGold(100);
         OpenShop();
         var shopArtifacts = _run.GetCurrentShopOffers().Where(o => o.kind == ShopOfferKind.Artifact).ToArray();
-        var shopEnhancement = _run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Enhancement);
+        var shopEnhancement = _run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Consumable &&
+            o.consumable == _enhancementPatch);
         Assert.That(shopArtifacts.Length, Is.EqualTo(2));
         foreach (var artifact in _artifacts.Where(a => shopArtifacts.All(o => o.artifact != a)).Take(5))
             Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
@@ -104,7 +113,7 @@ public sealed class Phase7EArtifactCapacityTests
         int price = offer.price;
         int gold = _cards.gold;
         Assert.That(_cards.ArtifactSlotsUsed, Is.EqualTo(5));
-        Assert.That(_run.GetShopOfferUnavailableReason(id), Is.EqualTo("Artifact Capacity Full"));
+        Assert.That(_run.GetShopOfferUnavailableReason(id), Is.EqualTo("Gear Capacity Full"));
         Assert.That(_run.CanPurchaseShopOffer(id), Is.False);
         Assert.That(_run.PurchaseShopOffer(id), Is.False);
         Assert.That(_cards.gold, Is.EqualTo(gold));
@@ -115,9 +124,11 @@ public sealed class Phase7EArtifactCapacityTests
 
         int cardId = _cards.hand.First(card => card.Enhancement == null).Id;
         Assert.That(_run.GetShopOfferUnavailableReason(shopEnhancement.StableId), Is.Empty);
-        Assert.That(_run.PurchaseShopEnhancement(shopEnhancement.StableId, cardId), Is.True);
+        Assert.That(_run.PurchaseShopOffer(shopEnhancement.StableId), Is.True);
         Assert.That(_cards.gold, Is.EqualTo(gold - shopEnhancement.price));
-        Assert.That(_cards.FindOwnedCard(cardId).Enhancement, Is.SameAs(shopEnhancement.enhancement));
+        Assert.That(_cards.FindOwnedCard(cardId).Enhancement, Is.Null,
+            "Buying the mapped Consumable does not immediately enhance a card.");
+        Assert.That(_cards.GetConsumableCount(_enhancementPatch), Is.EqualTo(1));
         Assert.That(_cards.ArtifactSlotsUsed, Is.EqualTo(5));
     }
 

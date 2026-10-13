@@ -27,6 +27,9 @@ public sealed class CombatShopEconomyTests
             a.id = "economy-a-" + i; a.price = 10; artifacts.Add(a);
             var e = ScriptableObject.CreateInstance<CardEnhancementData>(); created.Add(e);
             e.id = "economy-e-" + i; e.price = 8; enhancements.Add(e);
+            var mapped = ScriptableObject.CreateInstance<ConsumableData>(); created.Add(mapped);
+            mapped.id = "economy-map-" + i; mapped.price = e.price; mapped.shopAvailable = true;
+            mapped.effectType = ConsumableEffectType.ApplyEnhancement; mapped.enhancementToApply = e; consumables.Add(mapped);
             var c = ScriptableObject.CreateInstance<ConsumableData>(); created.Add(c);
             c.id = "economy-c-" + i; c.price = 5; c.shopAvailable = true; consumables.Add(c);
         }
@@ -137,21 +140,22 @@ public sealed class CombatShopEconomyTests
     {
         Open(0, false);
         var offer = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Artifact);
-        var stale = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Enhancement).StableId;
+        var stale = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Consumable &&
+            o.consumable.effectType == ConsumableEffectType.ApplyEnhancement).StableId;
         Assert.That(run.PurchaseShopOffer(offer.StableId), Is.True);
         Assert.That(run.PurchaseShopOffer(offer.StableId), Is.False);
         Assert.That(run.RefreshGoods(0), Is.True);
         Assert.That(run.GetCurrentShopOffers().Any(o => o.artifact == offer.artifact), Is.False);
-        Assert.That(run.PurchaseShopEnhancement(stale, cards.hand[0].Id), Is.False);
+        Assert.That(run.PurchaseShopOffer(stale), Is.False);
     }
 
     [Test]
     public void GoodsDistribution_ContainsEveryCategoryAndFavorsCheckpointPurpose()
     {
         Open(0, false);
-        Assert.That(Counts(), Is.EqualTo(new[] { 2, 2, 1 }));
+        Assert.That(Counts(), Is.EqualTo(new[] { 2, 0, 3 }));
         Open(0, true);
-        Assert.That(Counts(), Is.EqualTo(new[] { 1, 1, 3 }));
+        Assert.That(Counts(), Is.EqualTo(new[] { 1, 0, 4 }));
     }
 
     [Test]
