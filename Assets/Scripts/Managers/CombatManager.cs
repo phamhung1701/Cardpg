@@ -104,6 +104,7 @@ public partial class CombatManager : Singleton<CombatManager>
     public event Action<int, int> OnPlayerHealthChanged;
     public event Action<EncounterResult> OnEncounterResult;
     public event Action<DamageResult> OnDamageResolved;
+    public event Action<DefenseAttackResult> OnDefenseAttackResolved;
     public event Action<string> OnCombatLog;
 
     public bool IsResolvingAction => _isResolvingAction;
@@ -880,7 +881,10 @@ public partial class CombatManager : Singleton<CombatManager>
                 return comparison != 0 ? comparison : left.CardOrder.CompareTo(right.CardOrder);
             });
             int blockedDamage = 0;
-            var reductions = new int[_pendingAttacks.Count];
+            var incomingAttacks = _pendingAttacks.ToArray();
+            var attackSources = _pendingAttackSources.ToArray();
+            var reductions = new int[incomingAttacks.Length];
+            var effectiveBlocks = new int[incomingAttacks.Length];
             for (int blockOrder = 0; blockOrder < assignments.Count; blockOrder++)
             {
                 var assignment = assignments[blockOrder];
@@ -888,6 +892,7 @@ public partial class CombatManager : Singleton<CombatManager>
                 var attacker = _pendingAttackSources[attackIndex];
                 blockedDamage += assignment.BlockedDamage;
                 reductions[attackIndex] += assignment.BlockedDamage;
+                effectiveBlocks[attackIndex] += CalculateCardDefense(assignment.BlockingCard);
                 GameplayEffectResolver.EnqueueAttackBlocked(
                     new AttackBlockedEffectContext(_activeAction, assignment.BlockingCard, attacker,
                         assignment.AttackDamageBeforeBlock, blockOrder, this, cardManager), _reactions);
@@ -907,6 +912,13 @@ public partial class CombatManager : Singleton<CombatManager>
                 else _pendingAttacks[i] = remaining;
             }
             SetPendingDamage(pendingDamage - blockedDamage);
+            for (int i = 0; i < reductions.Length; i++)
+            {
+                if (reductions[i] <= 0) continue;
+                int remainingDamage = Mathf.Max(0, incomingAttacks[i] - reductions[i]);
+                OnDefenseAttackResolved?.Invoke(new DefenseAttackResult(
+                    attackSources[i], i, incomingAttacks[i], effectiveBlocks[i], reductions[i], remainingDamage));
+            }
             Log($"Defended with {string.Join(", ", names)}: blocked {blockedDamage} damage and fully covered {blockedAttacks} attack(s). Remaining: {pendingDamage}");
 
             bool reactionsCompleted = ProcessReactions(CombatReactionPhase.AttackBlocked);

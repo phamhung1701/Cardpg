@@ -239,6 +239,112 @@ public sealed class PerAttackerDefenseTests
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
     }
 
+    [TestCase(0, true)]
+    [TestCase(1, false)]
+    [TestCase(-1, false)]
+    public void DefenseAttackResult_OnlyExactPositiveCardBlockIsPerfect(int excessDamage, bool expectedPerfect)
+    {
+        var defense = HandViews().Skip(1).First(view => _combat.CalculateCardDefense(view.data) > 1);
+        int effectiveBlock = _combat.CalculateCardDefense(defense.data);
+        int incoming = effectiveBlock - excessDamage;
+        StartDefenseWindow(incoming);
+        var results = new List<DefenseAttackResult>();
+        _combat.OnDefenseAttackResolved += results.Add;
+
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].IncomingDamage, Is.EqualTo(incoming));
+        Assert.That(results[0].EffectiveBlock, Is.EqualTo(effectiveBlock));
+        Assert.That(results[0].RemainingDamage, Is.EqualTo(Mathf.Max(0, incoming - effectiveBlock)));
+        Assert.That(results[0].IsPerfectBlock, Is.EqualTo(expectedPerfect));
+        if (expectedPerfect)
+        {
+            Assert.That(results[0].Attacker, Is.SameAs(_combat.Enemies[0]));
+            Assert.That(results[0].BlockedDamage, Is.EqualTo(incoming));
+        }
+    }
+
+    [Test]
+    public void DefenseAttackResult_MultiCardMultiHitReportsOneResultPerFullyCoveredHit()
+    {
+        var pair = HandViews().Skip(1).Take(2).ToArray();
+        int[] values = pair.Select(view => _combat.CalculateCardDefense(view.data)).ToArray();
+        StartDefenseWindow(values);
+        var results = new List<DefenseAttackResult>();
+        _combat.OnDefenseAttackResolved += results.Add;
+
+        Assert.That(_combat.TryDefendWithCards(pair), Is.True);
+
+        Assert.That(results, Has.Count.EqualTo(2));
+        Assert.That(results.All(result => result.IsPerfectBlock), Is.True);
+        Assert.That(results.Select(result => result.AttackIndex).Distinct().Count(), Is.EqualTo(2));
+        Assert.That(results.Select(result => result.Attacker).Distinct().Count(), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void DefenseAttackResult_ZeroDamageDoesNotReportCardBlock()
+    {
+        var defense = HandViews()[0];
+        StartDefenseWindow(0);
+        var results = new List<DefenseAttackResult>();
+        _combat.OnDefenseAttackResolved += results.Add;
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.False);
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    public void DefenseAttackResult_RejectedDefenseDoesNotReportCardBlock()
+    {
+        var defense = HandViews()[0];
+        StartDefenseWindow(3);
+        var results = new List<DefenseAttackResult>();
+        _combat.OnDefenseAttackResolved += results.Add;
+        GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, true);
+        try { Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.False); }
+        finally { GameplayInputGate.Clear(); }
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    public void DefenseAttackResult_ShieldOnlyPreventionDoesNotReportCardBlock()
+    {
+        StartDefenseWindow(3);
+        var results = new List<DefenseAttackResult>();
+        _combat.OnDefenseAttackResolved += results.Add;
+        _combat.GrantPlayerShield(1);
+        _combat.TakeRemainingDamage();
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    public void EnemyDisplay_PerfectBlockCueUsesResultAndDoesNotBlockRaycasts()
+    {
+        var defense = HandViews().Skip(1).First(view => _combat.CalculateCardDefense(view.data) > 1);
+        int value = _combat.CalculateCardDefense(defense.data);
+        var enemies = StartDefenseWindow(value);
+        var displayObject = CreateGameObject("Perfect Block Enemy Display", typeof(RectTransform), typeof(Image), typeof(EnemyDisplayUI));
+        var display = displayObject.GetComponent<EnemyDisplayUI>();
+        display.portrait = displayObject.GetComponent<Image>();
+        display.Bind(enemies[0]);
+        typeof(EnemyDisplayUI).GetMethod("OnEnable", System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic).Invoke(display, null);
+        var results = new List<DefenseAttackResult>();
+        _combat.OnDefenseAttackResolved += results.Add;
+
+        Assert.That(display.isActiveAndEnabled, Is.True);
+        Assert.That(CombatManager.Instance, Is.SameAs(_combat));
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(display.DisplayedEnemy, Is.SameAs(results[0].Attacker));
+        Assert.That(display.IsPerfectBlockCueVisible, Is.True);
+        var cue = (TMPro.TMP_Text)typeof(EnemyDisplayUI).GetField("_perfectBlockCueText",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(display);
+        Assert.That(cue.text, Is.EqualTo("PERFECT BLOCK"));
+        Assert.That(cue.raycastTarget, Is.False);
+    }
+
     [TestCase(0, 1)]
     [TestCase(1, 0)]
     public void PerfectParry_ExactWindowDrawsOnce_OverblockDoesNot(int excess, int expectedDraw)
@@ -341,6 +447,8 @@ public sealed class PerAttackerDefenseTests
             Assert.That(_cards.ApplyEnhancement(view.data.Id, enhancement), Is.True);
         }
         AddDefenseBonus(2);
+        var results = new List<DefenseAttackResult>();
+        _combat.OnDefenseAttackResolved += results.Add;
         Assert.That(pair.All(view => _combat.CalculateCardDefense(view.data) == 12), Is.True);
         var type = EnemyTypeData.Create("Double Strike Parry", 1000, 20, 0);
         var ability = ScriptableObject.CreateInstance<EnemyAbility>();
@@ -351,10 +459,21 @@ public sealed class PerAttackerDefenseTests
         Assert.That(_combat.TryPlayCards(new[] { HandViews().First(view => !pair.Contains(view)) }, _combat.currentEnemy), Is.True);
         Assert.That(_combat.PendingAttackCount, Is.EqualTo(2));
         Assert.That(_combat.pendingDamage, Is.EqualTo(24));
+        var displayObject = CreateGameObject("Double Strike Perfect Block Display", typeof(RectTransform), typeof(Image), typeof(EnemyDisplayUI));
+        var display = displayObject.GetComponent<EnemyDisplayUI>();
+        display.portrait = displayObject.GetComponent<Image>();
+        display.Bind(_combat.currentEnemy);
+        typeof(EnemyDisplayUI).GetMethod("OnEnable", System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic).Invoke(display, null);
         int before = _cards.HandCount;
         Assert.That(_combat.TryDefendWithCards(pair), Is.True);
         Assert.That(_cards.HandCount, Is.EqualTo(before - 1));
         Assert.That(_combat.PendingAttackCount, Is.Zero);
+        Assert.That(results, Has.Count.EqualTo(2));
+        Assert.That(results.All(result => result.IsPerfectBlock), Is.True);
+        var cue = (TMPro.TMP_Text)typeof(EnemyDisplayUI).GetField("_perfectBlockCueText",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(display);
+        Assert.That(cue.text, Is.EqualTo("PERFECT BLOCK ×2"), "Two covered hits from one enemy coalesce without duplicating the presentation cue.");
         Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
     }
 

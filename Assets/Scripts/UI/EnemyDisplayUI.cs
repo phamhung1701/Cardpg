@@ -27,6 +27,10 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     Vector2 _portraitAnchoredPosition;
     Vector2 _portraitSizeDelta;
     Coroutine _defeatCue;
+    Coroutine _perfectBlockCue;
+    TMP_Text _perfectBlockCueText;
+    int _perfectBlockCueFrame = -1;
+    int _perfectBlockCueCount;
     Vector3 _preDefeatScale;
     Color _preDefeatPortraitColor;
     CanvasGroup _defeatCanvasGroup;
@@ -126,6 +130,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             CombatManager.Instance.OnEnemyHpChanged += RefreshHp;
             CombatManager.Instance.OnStateChanged += HandleStateChanged;
             CombatManager.Instance.OnPendingDamageChanged += HandlePendingDamageChanged;
+            CombatManager.Instance.OnDefenseAttackResolved += HandleDefenseAttackResolved;
         }
         RefreshDisplay();
         HandleStateChanged(CombatManager.Instance != null ? CombatManager.Instance.currentState : GameState.Idle);
@@ -140,10 +145,12 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             CombatManager.Instance.OnEnemyHpChanged -= RefreshHp;
             CombatManager.Instance.OnStateChanged -= HandleStateChanged;
             CombatManager.Instance.OnPendingDamageChanged -= HandlePendingDamageChanged;
+            CombatManager.Instance.OnDefenseAttackResolved -= HandleDefenseAttackResolved;
         }
     }
 
     public bool IsDefeatCuePlaying => _defeatCue != null;
+    public bool IsPerfectBlockCueVisible => _perfectBlockCueText != null && _perfectBlockCueText.gameObject.activeSelf;
 
     public void PlayDefeatCue()
     {
@@ -247,6 +254,68 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     void RefreshHp() => RefreshDisplay();
     void HandlePendingDamageChanged(int _) => RefreshStateGuidance();
+
+    void HandleDefenseAttackResolved(DefenseAttackResult result)
+    {
+        if (result.IsPerfectBlock && ReferenceEquals(result.Attacker, DisplayedEnemy))
+            ShowPerfectBlockCue();
+    }
+
+    void ShowPerfectBlockCue()
+    {
+        if (!isActiveAndEnabled) return;
+        EnsurePerfectBlockCue();
+        if (_perfectBlockCueText == null) return;
+        if (_perfectBlockCueFrame == Time.frameCount) _perfectBlockCueCount++;
+        else { _perfectBlockCueFrame = Time.frameCount; _perfectBlockCueCount = 1; }
+        _perfectBlockCueText.text = _perfectBlockCueCount > 1
+            ? $"PERFECT BLOCK ×{_perfectBlockCueCount}" : "PERFECT BLOCK";
+        _perfectBlockCueText.gameObject.SetActive(true);
+        if (_perfectBlockCue != null) StopCoroutine(_perfectBlockCue);
+        _perfectBlockCue = Application.isPlaying ? StartCoroutine(PerfectBlockCueRoutine()) : null;
+    }
+
+    void EnsurePerfectBlockCue()
+    {
+        if (_perfectBlockCueText != null) return;
+        var cue = new GameObject("Perfect Block Cue", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        cue.transform.SetParent(transform, false);
+        var rect = (RectTransform)cue.transform;
+        rect.anchorMin = new Vector2(0.28f, 0.25f);
+        rect.anchorMax = new Vector2(0.96f, 0.72f);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        _perfectBlockCueText = cue.GetComponent<TMP_Text>();
+        if (statusText != null) _perfectBlockCueText.font = statusText.font;
+        _perfectBlockCueText.fontSize = 25f;
+        _perfectBlockCueText.fontStyle = FontStyles.Bold;
+        _perfectBlockCueText.alignment = TextAlignmentOptions.Center;
+        _perfectBlockCueText.color = new Color(1f, 0.82f, 0.32f, 1f);
+        _perfectBlockCueText.raycastTarget = false;
+        var outline = cue.GetComponent<Outline>() ?? cue.AddComponent<Outline>();
+        outline.effectColor = new Color(0.12f, 0.08f, 0.02f, 1f);
+        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        outline.useGraphicAlpha = false;
+        cue.SetActive(false);
+    }
+
+    System.Collections.IEnumerator PerfectBlockCueRoutine()
+    {
+        var rect = _perfectBlockCueText.rectTransform;
+        Vector2 start = rect.anchoredPosition;
+        const float duration = 0.85f;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            _perfectBlockCueText.alpha = 1f - t;
+            rect.anchoredPosition = start + Vector2.up * (20f * t);
+            yield return null;
+        }
+        _perfectBlockCueText.gameObject.SetActive(false);
+        _perfectBlockCue = null;
+    }
 
     public void RefreshStateGuidance()
     {
