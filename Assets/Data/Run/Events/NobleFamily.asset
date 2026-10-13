@@ -14,14 +14,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: evt_009
   category: 3
-  title: Noble Family
-  description: A noble family invites you to entertain their arrogant child.
+  title: VIP Party
+  description: A VIP at a private party orders you to perform for their guests.
   choices:
-  - label: Refuse
-    description: Nothing happens.
+  - label: Walk Away
+    description: Nothing happens
     effects: []
-  - label: Accept
-    description: Gain 10 Gold.
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: Play Along
+    description: +10 Credits
     effects:
     - type: 0
       amount: 10
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0

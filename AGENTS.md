@@ -1,18 +1,20 @@
-# CardPG agent instructions
+# Dealbreak agent instructions
 
-Place this file at the root of the CardPG Unity repository. It applies to the whole repository. A task prompt defines the work for that task; this file supplies project context and safety rules. Do not treat a proposed phase as implemented without checking the current code.
+Place this file at the root of the Dealbreak Unity repository. It applies to the whole repository. A task prompt defines the work for that task; this file supplies project context and safety rules. Do not treat a proposed phase as implemented without checking the current code.
+
+**Terminology and content source of truth:** `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx` is authoritative for current player-facing names, terminology, descriptions, categories, and content identities. Use Dealbreak terms in UI and active docs (Credits, Gear, Mod, Trick, Black Market, Incident, District, Enforcer, Headliner, Perfect Block). Preserve legacy Unity classes, fields, serialized IDs, asset paths, and save identifiers unless a separately authorized migration is requested. Workbook Draft status is not implementation approval; compare behavior and IDs before editing content.
 
 ## Project at a glance
 
-CardPG is a Unity card combat roguelike. A run has 12 maps and progresses through four Jack bosses, four Queen bosses, then four King bosses. A defeated boss awards the exact face card associated with that boss. The starting deck has exactly 40 cards: A through 10 in four suits, with no face cards. Cards have runtime identity and authoritative deck, hand, and discard zones.
+Dealbreak is a Unity card combat roguelike. A run has 12 Districts and progresses through four J / Runner-tier Headliners, four Q / Operator-tier Headliners, then four K / Kingpin-tier Headliners. A defeated Headliner awards the exact face card associated with that identity. The starting deck has exactly 40 cards: A through 10 in four suits, with no face cards. Cards have runtime identity and authoritative deck, hand, and discard zones.
 
 Combat currently includes persistent player HP, optional defense by discarding cards, empty-hand Recover, multiple enemies with exact targeting, kill draws, secured rewards, and Thief fleeing. Runs use seeded random streams. Preserve existing mechanics and timing unless the task explicitly changes them.
 
 ## Where to look
 
 - Start with the files related to the requested change and their tests. Read broader documentation only when the task needs it.
-- `CARDPG_DEVELOPMENT.md` records milestones and history; verify its claims against the current repository.
-- `Cardpg_GameData.xlsx` contains planned content. It is not proof that an effect is implemented or approved for rollout. Do not silently replace working behavior with workbook wording.
+- `CARDPG_DEVELOPMENT.md` records historical implementation milestones and architecture; verify its claims against the current repository and use the confirmed Dealbreak GameData workbook for player-facing content names and terms.
+- `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx` is the current source of truth for canonical content names and terminology. Workbook statuses distinguish implemented content from drafts; the workbook’s legacy-ID crosswalk does not authorize changing Unity or save IDs.
 - Important areas to locate as needed: `Assets/Scripts/Managers/CombatManager.cs`, `RunManager.cs`, `CardManager.cs`; card/runtime models under `Assets/Scripts/Data/`; randomness under `Assets/Scripts/Randomness/`; tests under `Assets/Tests/`.
 - For current behavior, the code, authored assets, and passing tests are primary evidence. For intended changes, follow the explicit task prompt and record ambiguities instead of guessing.
 
@@ -29,10 +31,10 @@ Combat currently includes persistent player HP, optional defense by discarding c
 
 ## Combat invariants
 
-- Preserve the 40-card starting deck; J/Q/K progression and exact boss rewards; run/map/shop flow; current Artifact, Enhancement, enemy, defense, Recover, and presentation behavior unless explicitly changed.
+- Preserve the 40-card starting deck; J/Q/K progression and exact Headliner rewards; run/District/Black Market flow; current Gear, Mod, enemy, defense, Recover, and presentation behavior unless explicitly changed.
 - Ordinary surviving-enemy retaliation currently becomes one aggregate pending-damage instance. Do not split it into separate enemy attacks as a side effect of introducing hit resolution.
-- Current numeric card damage is `(base card value + Enhancement attack bonus) × Artifact multipliers + Artifact flat bonuses`. Preview and execution must share the calculation. The example `(4 + 3) × 2 + 3` yields `17`.
-- Preserve action timing where relevant: discard before on-play draw/recycling; Artifact side effects before Enhancement play effects; damage before a surviving target's post-card ability; kill draw before encounter progression; Thief timing per completed card action.
+- Current numeric card damage is `(base card value + Mod attack bonus) × Gear multipliers + Gear flat bonuses`. Preview and execution must share the calculation. The example `(4 + 3) × 2 + 3` yields `17`.
+- Preserve action timing where relevant: discard before on-play draw/recycling; Gear side effects before Mod play effects; damage before a surviving target's post-card ability; kill draw before encounter progression; Pickpocket timing per completed card action.
 - Fleeing is distinct from death and grants neither kill draw nor defeated-enemy gold. Death, reward, and terminal encounter results must each happen once. The final boss reward precedes run completion.
 - Event HP costs and explicit resource payments are separate from combat damage. They must not accidentally consume combat Shield or trigger combat reactions.
 

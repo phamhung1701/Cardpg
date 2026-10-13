@@ -13,10 +13,22 @@ MonoBehaviour:
   m_Name: RoyalFamilyHeirloom
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_100
-  displayName: Royal Family Heirloom
+  displayName: Five-Card Override
   icon: ROYAL
-  description: Play exactly the 10, Jack, Queen, King, and Ace of one effective suit
-    together to instantly defeat the selected enemy.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Attack Selection
+
+    Condition: Royal Flush: 10/J/Q/K/A
+    of one effective suit
+
+    Effect: Allow to play up to 5 cards. Play exactly
+    10, J, Q, K and A of the same effective suit together.
+
+    Value: Instantly
+    defeat the selected enemy
+
+    Limit: Exactly 5 distinct cards: 10/J/Q/K/A; same
+    effective suit'
   price: 50
   capacityCategory: 0
   canonicalId: rel_100

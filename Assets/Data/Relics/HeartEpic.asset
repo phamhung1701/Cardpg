@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: HeartEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_105
-  displayName: Heart Emblem
+  displayName: Heartbeat Chip
   icon: "\u2665+"
-  description: Keep Rare healing and Gold. Overhealing builds up to 10 Vitality at
-    1:1; the next Heart attack spends all Vitality for damage.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Condition: Suit = Hearts; overhealing
+
+    Effect:
+    Keep Rare healing/Credits; overhealing builds Vitality spent for bonus damage
+    on next Heart attack.
+
+    Value: Overheal becomes Vitality 1:1
+
+    Limit: Retains
+    Rare Heal 3 and conditional Credits 3; Heal Lock-prevented healing gives no Vitality'
   price: 30
   capacityCategory: 0
   canonicalId: rel_105

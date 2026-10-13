@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using UnityEngine;
 
-[CreateAssetMenu(menuName = "CardPG/Save Content Catalog")]
+[CreateAssetMenu(menuName = "Dealbreak/Save Content Catalog")]
 public sealed class SaveContentCatalog : ScriptableObject
 {
     public RelicData[] artifacts = Array.Empty<RelicData>();

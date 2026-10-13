@@ -17,8 +17,8 @@ public sealed class DevModeWindow : EditorWindow
     bool _infiniteMoney = true;
     bool _unlimitedShopOffers = true;
 
-    [MenuItem("CardPG/Development/Dev Mode")]
-    static void Open() => GetWindow<DevModeWindow>("CardPG Dev Mode");
+    [MenuItem("Dealbreak/Development/Dev Mode")]
+    static void Open() => GetWindow<DevModeWindow>("Dealbreak Dev Mode");
 
     void OnEnable()
     {
@@ -44,7 +44,7 @@ public sealed class DevModeWindow : EditorWindow
 
     void OnGUI()
     {
-        EditorGUILayout.LabelField("CardPG Developer Sandbox", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("Dealbreak Developer Sandbox", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
             "Editor-only controls. The dev mode runs the existing Game scene and is excluded from player builds.",
             MessageType.Info);
@@ -64,9 +64,9 @@ public sealed class DevModeWindow : EditorWindow
 
         EditorGUILayout.LabelField("ACTIVE OVERRIDES", EditorStyles.boldLabel);
         EditorGUILayout.LabelField("Health", DevModeRuntime.InfiniteHealth ? "Infinite" : "Normal");
-        EditorGUILayout.LabelField("Money", DevModeRuntime.InfiniteMoney ? "Infinite" : "Normal");
-        EditorGUILayout.LabelField("Shop offers", DevModeRuntime.UnlimitedShopOffers ? "All catalog items" : "Normal limit");
-        EditorGUILayout.HelpBox("Artifact capacity remains 5. Duplicate prevention and one Enhancement per card remain active.",
+        EditorGUILayout.LabelField("Credits", DevModeRuntime.InfiniteMoney ? "Infinite" : "Normal");
+        EditorGUILayout.LabelField("Black Market Goods", DevModeRuntime.UnlimitedShopOffers ? "All catalog items" : "Normal limit");
+        EditorGUILayout.HelpBox("Gear capacity remains 5. Duplicate prevention and one Mod per card remain active.",
             MessageType.None);
 
         using (new EditorGUI.DisabledScope(CombatManager.Instance == null ||
@@ -101,9 +101,9 @@ public sealed class DevModeWindow : EditorWindow
 
         EditorGUILayout.LabelField("Dev rules", EditorStyles.boldLabel);
         _infiniteHealth = EditorGUILayout.ToggleLeft("Infinite health (combat and event costs)", _infiniteHealth);
-        _infiniteMoney = EditorGUILayout.ToggleLeft("Infinite money (purchases and event costs)", _infiniteMoney);
-        _unlimitedShopOffers = EditorGUILayout.ToggleLeft("Show all catalog items at Shops", _unlimitedShopOffers);
-        EditorGUILayout.HelpBox("The normal five-Persistent-Artifact capacity and all purchase/target validation remain enabled.",
+        _infiniteMoney = EditorGUILayout.ToggleLeft("Infinite Credits (purchases and Incident costs)", _infiniteMoney);
+        _unlimitedShopOffers = EditorGUILayout.ToggleLeft("Show all catalog items at Black Markets", _unlimitedShopOffers);
+        EditorGUILayout.HelpBox("The normal five-Persistent-Gear capacity and all purchase/target validation remain enabled.",
             MessageType.None);
 
         if (GUILayout.Button("Start Dev Mode", GUILayout.Height(32)))
@@ -119,7 +119,7 @@ public sealed class DevModeWindow : EditorWindow
         var cards = CardManager.Instance;
         if (run == null || cards == null || run.ActiveNode == null || run.ActiveNode.kind != MapNodeType.Shop)
         {
-            EditorGUILayout.HelpBox("Enter a Shop node to browse all Artifact and Enhancement offers here.",
+            EditorGUILayout.HelpBox("Enter a Black Market node to browse all Gear and Mod offers here.",
                 MessageType.Info);
             return;
         }
@@ -169,7 +169,7 @@ public sealed class DevModeWindow : EditorWindow
 
         if (selected.kind == ShopOfferKind.Artifact)
         {
-            if (GUILayout.Button("Buy Selected Artifact"))
+            if (GUILayout.Button("Buy Selected Gear"))
             {
                 run.PurchaseShopOffer(selected.StableId);
                 Repaint();

@@ -13,10 +13,19 @@ MonoBehaviour:
   m_Name: ReinforcedSleeves
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: reinforced_sleeves
-  displayName: Reinforced Sleeves
+  displayName: Carbon Sleeves
   icon: BLOCK
+  iconSprite: {fileID: 0}
   description: Enhanced cards block +3 damage
   price: 22
+  capacityCategory: 0
+  canonicalId: 
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects: []
+  ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 1

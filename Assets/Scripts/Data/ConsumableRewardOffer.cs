@@ -15,7 +15,7 @@ public sealed class ConsumableRewardOffer
         ContextId = string.IsNullOrWhiteSpace(contextId)
             ? throw new ArgumentException("Reward context is required.", nameof(contextId))
             : contextId;
-        SourceLabel = string.IsNullOrWhiteSpace(sourceLabel) ? "Consumable Reward" : sourceLabel;
+        SourceLabel = string.IsNullOrWhiteSpace(sourceLabel) ? "Trick Reward" : sourceLabel;
         if (choices == null || choices.Count == 0)
             throw new ArgumentException("At least one reward choice is required.", nameof(choices));
         _choices = new ConsumableData[choices.Count];

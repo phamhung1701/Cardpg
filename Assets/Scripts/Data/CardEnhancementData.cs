@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "CardEnhancement", menuName = "Game/Card Enhancement")]
+[CreateAssetMenu(fileName = "CardEnhancement", menuName = "Game/Mod Data")]
 public sealed class CardEnhancementData : ScriptableObject
 {
     public string id;

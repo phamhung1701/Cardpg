@@ -13,10 +13,13 @@ MonoBehaviour:
   m_Name: MimicEmblem
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: mimic_emblem
-  displayName: Mimic Emblem
+  displayName: Echo Driver
   icon: MIMIC
-  description: When a card is played, retrigger the in-hand effects of every other
-    card still in hand.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Effect: Retrigger the in-hand effects
+    of every card in hand when a card is played.'
   price: 25
   capacityCategory: 0
   canonicalId: rel_017
@@ -29,6 +32,7 @@ MonoBehaviour:
     amount: 1
     conditions: []
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

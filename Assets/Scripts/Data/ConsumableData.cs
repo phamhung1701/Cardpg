@@ -10,7 +10,7 @@ public enum ConsumableEffectType
     ChangeSuit = 5
 }
 
-[CreateAssetMenu(fileName = "Consumable", menuName = "Game/Consumable")]
+[CreateAssetMenu(fileName = "Consumable", menuName = "Game/Trick")]
 public sealed class ConsumableData : ScriptableObject
 {
     public string id;

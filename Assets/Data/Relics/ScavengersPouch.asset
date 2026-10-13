@@ -13,9 +13,20 @@ MonoBehaviour:
   m_Name: ScavengersPouch
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_117
-  displayName: "Scavenger\u2019s Pouch"
+  displayName: Salvage Pouch
   icon: DRAW
-  description: The first successful consumable use each encounter draws 1 card.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Trick Use
+
+    Condition: First trick used this encounter
+
+    Effect:
+    First trick used each encounter draws 1.
+
+    Value: 1 card
+
+    Limit: First
+    per encounter'
   price: 20
   capacityCategory: 0
   canonicalId: rel_117

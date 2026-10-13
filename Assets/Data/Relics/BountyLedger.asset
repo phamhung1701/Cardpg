@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: BountyLedger
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_126
-  displayName: Bounty Ledger
+  displayName: Hit List
   icon: "\xA4"
-  description: Gain +50% base Gold from Elite victories and +25% base Gold from Boss
-    victories. Other victory bonuses are not multiplied.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Victory
+
+    Condition: Enforcer or Headliner defeated
+
+    Effect:
+    Enforcer victories +50% base Credits; Headliner victories +25% base Credits.
+
+    Value:
+    +50% / +25%
+
+    Limit: Rounding TBD; provisional'
   price: 20
   capacityCategory: 0
   canonicalId: rel_126

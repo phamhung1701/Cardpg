@@ -13,10 +13,22 @@ MonoBehaviour:
   m_Name: KingslayersMark
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_138
-  displayName: "Kingslayer\u2019s Mark"
+  displayName: Headliner Tag
   icon: KING
-  description: Against a Boss, manually play 3 different ranks to empower your next
-    attack by +1. Spend one charge per empowered attack.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Attack
+
+    Condition: Versus Headliner; 3 different
+    ranks played
+
+    Effect: Vs Headliner, play 3 different ranks to empower next
+    attack; consume charge and repeat.
+
+    Value: +1 damage to next attack
+
+    Limit:
+    Headliner only; 3 distinct manually played physical ranks; one charge per attack;
+    encounter reset'
   price: 20
   capacityCategory: 0
   canonicalId: rel_138

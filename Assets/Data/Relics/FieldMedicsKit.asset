@@ -13,9 +13,20 @@ MonoBehaviour:
   m_Name: FieldMedicsKit
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_122
-  displayName: "Field Medic\u2019s Kit"
+  displayName: First-Aid Kit
   icon: MEDIC
-  description: The first successful consumable use each encounter also heals 3 HP.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Trick Use
+
+    Condition: First trick used this encounter
+
+    Effect:
+    First trick per encounter also heals.
+
+    Value: 3 HP
+
+    Limit: First successful
+    trick use per encounter'
   price: 20
   capacityCategory: 0
   canonicalId: rel_122

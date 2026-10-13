@@ -14,10 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: diamond_rune
   canonicalId: con_019
-  displayName: Diamond Rune
+  displayName: Diamond Switch
   icon: "\u2666"
-  description: Change one card's suit to Diamonds per charge. Three charges; one
-    backpack slot until exhausted.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Change one card''s
+    effective suit to Diamond per charge; same-suit target spends no charge. Three
+    charges remain in one backpack slot until exhausted. Combat: hand target; outside
+    combat: any owned card.
+
+    Uses: 3'
   price: 5
   uses: 1
   effectType: 5

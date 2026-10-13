@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: SpadePower
   m_EditorClassIdentifier: Assembly-CSharp::RelicData
   id: spade_power
-  displayName: Spade Emblem
+  displayName: Spade Shield
   icon: "\u2660"
-  description: Spade cards block double after card Enhancement block bonuses
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Card Played\nCondition: Suit = Spades\nEffect: Multiply
+    this card's block value.\nValue: \xD72"
   price: 15
   capacityCategory: 0
   canonicalId: rel_004
@@ -29,8 +31,11 @@ MonoBehaviour:
     conditions:
     - kind: 0
       suit: 3
+      rank: 0
       expected: 0
+      value: 0
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 1
   affectedSuit: 3
   requiresEnhancedCard: 0

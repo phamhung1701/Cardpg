@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: Vampiric
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: vampiric
-  displayName: Vampiric
+  displayName: Overclocked
   icon: HP
-  description: Spend 5 HP when played to gain +5 attack damage.
+  description: 'Trigger: On Card Played
+
+    Effect: Spend 5 HP to deal additional
+    damage.'
   price: 15
   canonicalId: enh_010
   rarity: Common

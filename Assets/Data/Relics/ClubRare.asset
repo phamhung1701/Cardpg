@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: ClubRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_025
-  displayName: Club Emblem
+  displayName: Club Amplifier
   icon: "\u2663"
-  description: Club card attacks deal double damage after bonuses.
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Card Played\nCondition: Suit = Clubs\nEffect: Club card
+    attacks deal double final damage after flat bonuses, before enemy mitigation.\nValue:
+    \xD72"
   price: 30
   capacityCategory: 0
   canonicalId: rel_025

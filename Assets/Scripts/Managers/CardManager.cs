@@ -534,7 +534,7 @@ public partial class CardManager : Singleton<CardManager>
 
     public string GetArtifactAcquisitionUnavailableReason(RelicData artifact)
     {
-        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id)) return "Artifact unavailable";
+        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id)) return "Gear unavailable";
         if (artifact.tier > 1)
         {
             var predecessor = ownedArtifacts.FirstOrDefault(value => value != null &&
@@ -545,7 +545,7 @@ public partial class CardManager : Singleton<CardManager>
         }
         if (!string.IsNullOrEmpty(artifact.upgradeFromId)) return "Upgrade cannot be acquired standalone";
         return artifact.OccupiesCapacitySlot && ArtifactSlotsUsed >= ArtifactCapacity
-            ? "Artifact Capacity Full" : string.Empty;
+            ? "Gear Capacity Full" : string.Empty;
     }
 
     public bool BuyRelic(RelicData relic) => BuyArtifact(relic);

@@ -61,7 +61,7 @@ public enum ArtifactSpecialRule
     MasterThief = 50
 }
 
-[CreateAssetMenu(fileName = "Artifact", menuName = "Game/Artifact Data")]
+[CreateAssetMenu(fileName = "Artifact", menuName = "Game/Gear Data")]
 public class RelicData : ScriptableObject
 {
     public string id;

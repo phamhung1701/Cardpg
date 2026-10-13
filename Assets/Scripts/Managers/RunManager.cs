@@ -28,7 +28,7 @@ public partial class RunManager : Singleton<RunManager>
     [Header("Phase 4 Content")]
     public RunContentCatalog contentCatalog;
 
-    [Header("Shop Goods slots: Artifact / Enhancement / Consumable")]
+    [Header("Black Market Goods slots: Gear / Mod / Trick")]
     public Vector3Int midShopGoods = new(2, 2, 1);
     public Vector3Int preBossShopGoods = new(1, 1, 3);
 
@@ -238,7 +238,7 @@ public partial class RunManager : Singleton<RunManager>
             CardData.Rank.Queen => 15,
             _ => 20,
         };
-        var boss = EnemyTypeData.Create($"{card.RankName} of {card.SuitName}", 30, 6, gold);
+        var boss = EnemyTypeData.Create(GetCanonicalHeadlinerName(card), 30, 6, gold);
         boss.sourceCard = card;
         var random = _randomContext.CreateStream("boss-ability", (int)card.rank * 10 + (int)card.suit);
         EnemyAbility[] abilities;
@@ -276,6 +276,27 @@ public partial class RunManager : Singleton<RunManager>
         boss.abilities = abilities;
         _generatedEnemyTypes.Add(boss);
         return boss;
+    }
+
+    static string GetCanonicalHeadlinerName(CardData card)
+    {
+        if (card == null) return "Headliner";
+        return (card.rank, card.suit) switch
+        {
+            (CardData.Rank.Jack, CardData.Suit.Hearts) => "J♥ — The Charmer",
+            (CardData.Rank.Jack, CardData.Suit.Diamonds) => "J♦ — The Courier",
+            (CardData.Rank.Jack, CardData.Suit.Clubs) => "J♣ — The Hitter",
+            (CardData.Rank.Jack, CardData.Suit.Spades) => "J♠ — The Fixer",
+            (CardData.Rank.Queen, CardData.Suit.Hearts) => "Q♥ — The Influencer",
+            (CardData.Rank.Queen, CardData.Suit.Diamonds) => "Q♦ — The Broker",
+            (CardData.Rank.Queen, CardData.Suit.Clubs) => "Q♣ — The Foreman",
+            (CardData.Rank.Queen, CardData.Suit.Spades) => "Q♠ — The Handler",
+            (CardData.Rank.King, CardData.Suit.Hearts) => "K♥ — The Icon",
+            (CardData.Rank.King, CardData.Suit.Diamonds) => "K♦ — The Mogul",
+            (CardData.Rank.King, CardData.Suit.Clubs) => "K♣ — The Chairman",
+            (CardData.Rank.King, CardData.Suit.Spades) => "K♠ — The Director",
+            _ => "Headliner"
+        };
     }
 
     static T Choose<T>(IRandomSource random, params T[] options) => options[random.NextInt(0, options.Length)];
@@ -344,8 +365,8 @@ public partial class RunManager : Singleton<RunManager>
         GeneratePath(CurrentMapIndex);
         QueueAlchemistRewardForCurrentMap();
         OnCycleStarted?.Invoke(IsInfiniteMode
-            ? $"Map {CurrentCycle} / Infinite"
-            : $"Map {CurrentCycle} / {BossTotal}");
+            ? $"District {CurrentCycle} / Infinite"
+            : $"District {CurrentCycle} / {BossTotal}");
     }
 
     public IReadOnlyList<PathNode> GenerateMapForIndex(int mapIndex)
@@ -631,7 +652,7 @@ public partial class RunManager : Singleton<RunManager>
     {
         if (source == null) return null;
         var elite = EnemyTypeData.Create(
-            $"Elite {source.enemyName}",
+            $"Enforcer {source.enemyName}",
             Mathf.CeilToInt(source.maxHp * 1.5f),
             source.baseAttack + 2,
             source.goldReward * 2);
@@ -685,13 +706,13 @@ public partial class RunManager : Singleton<RunManager>
         if (node == null) return "Unknown";
         return node.kind switch
         {
-            MapNodeType.Combat => "Combat",
-            MapNodeType.Elite => "Elite",
-            MapNodeType.Shop => "Shop",
-            MapNodeType.Event => "Event",
+            MapNodeType.Combat => "Street Fight",
+            MapNodeType.Elite => "Enforcer Fight",
+            MapNodeType.Shop => "Black Market",
+            MapNodeType.Event => "Incident",
             MapNodeType.Upgrade => "Training",
             MapNodeType.Risk => "Risk / Reward",
-            MapNodeType.Boss => CurrentBoss != null ? $"Boss: {CurrentBoss.enemyName}" : "Boss",
+            MapNodeType.Boss => CurrentBoss != null ? $"Headliner Fight: {CurrentBoss.enemyName}" : "Headliner Fight",
             _ => "Unknown"
         };
     }
@@ -707,17 +728,17 @@ public partial class RunManager : Singleton<RunManager>
         {
             MapNodeType.Combat => showStats
                 ? GetNormalEncounterPreview(node, stats)
-                : "Normal encounter",
+                : "Street Fight",
             MapNodeType.Elite => showStats
                 ? GetElitePreviewDescription(node, stats)
-                : "Hard fight • better gold",
-            MapNodeType.Shop => "Spend gold on artifacts and card enhancements",
-            MapNodeType.Event => "A choice with immediate effects",
-            MapNodeType.Upgrade => "Choose a free card enhancement",
+                : "Hard fight • better Credits",
+            MapNodeType.Shop => "Spend Credits on Gear and card Mods",
+            MapNodeType.Event => "An Incident choice with immediate effects",
+            MapNodeType.Upgrade => "Choose a free card Mod",
             MapNodeType.Risk => "Trade safety for a stronger reward",
             MapNodeType.Boss => showStats
-                ? $"Major boss encounter • {stats.hp} HP / {stats.attack} ATK"
-                : "Major boss encounter",
+                ? $"Major Headliner fight • {stats.hp} HP / {stats.attack} ATK"
+                : "Major Headliner fight",
             _ => string.Empty
         };
     }
@@ -725,14 +746,14 @@ public partial class RunManager : Singleton<RunManager>
     string GetNormalEncounterPreview(PathNode node, (int hp, int attack) stats)
     {
         var enemy = FindEnemy(node.contentId);
-        if (enemy == null) return $"Normal encounter • {stats.hp} HP / {stats.attack} ATK";
+        if (enemy == null) return $"Street Fight • {stats.hp} HP / {stats.attack} ATK";
         string allyName = enemy.enemyName == "War Drummer" ? "2 Goblins" : null;
-        if (allyName == null) return $"Normal encounter • primary enemy {stats.hp} HP / {stats.attack} ATK";
+        if (allyName == null) return $"Street Fight • primary enemy {stats.hp} HP / {stats.attack} ATK";
         var ally = FindNormalEnemyExact(allyName);
-        if (ally == null) return $"Normal encounter • {enemy.enemyName} • {stats.hp} HP / {stats.attack} ATK";
+        if (ally == null) return $"Street Fight • {enemy.enemyName} • {stats.hp} HP / {stats.attack} ATK";
         int count = enemy.enemyName == "War Drummer" ? 2 : 1;
             var allyStats = ScaleEncounterStats(ally.maxHp, ally.baseAttack, node.mapIndex);
-        return $"Normal encounter • {enemy.enemyName} + {allyName} • {AddCappedStats(stats.hp, allyStats.hp, count)} HP / {AddCappedStats(stats.attack, allyStats.attack, count)} ATK total";
+        return $"Street Fight • {enemy.enemyName} + {allyName} • {AddCappedStats(stats.hp, allyStats.hp, count)} HP / {AddCappedStats(stats.attack, allyStats.attack, count)} ATK total";
     }
 
     string GetElitePreviewDescription(PathNode node, (int hp, int attack) stats)
@@ -744,12 +765,12 @@ public partial class RunManager : Singleton<RunManager>
             if (goblin != null)
             {
                 var ally = ScaleEncounterStats(goblin.maxHp, goblin.baseAttack, node.mapIndex);
-                return $"Elite • 3 enemies • {AddCappedStats(stats.hp, ally.hp, 2)} HP / {AddCappedStats(stats.attack, AddCappedStats(ally.attack, 1, 1), 2)} ATK total";
+                return $"Enforcer • 3 enemies • {AddCappedStats(stats.hp, ally.hp, 2)} HP / {AddCappedStats(stats.attack, AddCappedStats(ally.attack, 1, 1), 2)} ATK total";
             }
         }
         return authored != null
-            ? $"Elite • 1 enemy • {stats.hp} HP / {stats.attack} ATK"
-            : $"Hard fight • better gold • {stats.hp} HP / {stats.attack} ATK";
+            ? $"Enforcer • 1 enemy • {stats.hp} HP / {stats.attack} ATK"
+            : $"Hard fight • better Credits • {stats.hp} HP / {stats.attack} ATK";
     }
 
     static int AddCappedStats(int primary, int secondary, int secondaryCount)
@@ -876,7 +897,7 @@ public partial class RunManager : Singleton<RunManager>
 
     public string GetShopOfferUnavailableReason(string stableId)
     {
-        if (_shopTransaction) return "Shop transaction in progress";
+        if (_shopTransaction) return "Black Market transaction in progress";
         if (_activeNode == null || _activeNode.completed || _activeNode.kind != MapNodeType.Shop || string.IsNullOrEmpty(stableId))
             return "Offer unavailable";
 
@@ -884,7 +905,7 @@ public partial class RunManager : Singleton<RunManager>
         var cards = CardManager.Instance;
         if (offer == null || cards == null) return "Offer unavailable";
         if (offer.price < 0) return "Invalid price";
-        if (offer.purchased) return "Already purchased this Shop";
+        if (offer.purchased) return "Already purchased at this Black Market";
 
         if (offer.kind == ShopOfferKind.Artifact)
         {
@@ -899,33 +920,33 @@ public partial class RunManager : Singleton<RunManager>
         {
             if (_activeContract != null || _pendingContractSelectionEvent != null)
                 return "A Contract is already active";
-            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased this Shop visit";
-            if (!_madeSuccessfulPurchaseInCurrentShop) return "Purchase another Shop item first";
+            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased during this Black Market visit";
+            if (!_madeSuccessfulPurchaseInCurrentShop) return "Purchase another Black Market item first";
         }
         else if (offer.kind == ShopOfferKind.Enhancement)
         {
-            if (offer.enhancement == null) return "Enhancement unavailable";
+            if (offer.enhancement == null) return "Mod unavailable";
             if (cards.hand.Count == 0) return "No cards in hand to target";
         }
         else if (offer.kind == ShopOfferKind.Consumable)
         {
             if (offer.consumable == null || !offer.consumable.shopAvailable ||
-                !cards.consumableCatalog.Contains(offer.consumable)) return "Consumable unavailable";
-            if (_purchasedConsumablesInShop.Contains(offer.consumable.id)) return "Already purchased this Shop visit";
+                !cards.consumableCatalog.Contains(offer.consumable)) return "Trick unavailable";
+            if (_purchasedConsumablesInShop.Contains(offer.consumable.id)) return "Already purchased during this Black Market visit";
             if (!cards.CanAddConsumable(offer.consumable)) return "Backpack Full";
         }
         else if (offer.kind == ShopOfferKind.Supply)
         {
-            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased this Shop";
+            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased at this Black Market";
             int maximum = GetSupplyMaximumQuantity();
-            if (maximum <= 0) return "Supply needs Gold, Draw Pile cards and free hand space";
+            if (maximum <= 0) return "Supply needs Credits, Draw Pile cards and free Hand space";
             if (offer.supplyQuantity <= 0 || offer.supplyQuantity > maximum) return $"Choose 1–{maximum} cards";
         }
         else if (offer.kind == ShopOfferKind.Investment || offer.kind == ShopOfferKind.Guidance)
         {
-            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased this Shop visit";
+            if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased during this Black Market visit";
             if (offer.kind == ShopOfferKind.Investment && (offer.investmentStake <= 0 || offer.investmentStake > cards.gold))
-                return "Investment stake must be between 1g and your current Gold";
+                return "Stake must be between 1 and your current Credits";
             if (offer.kind == ShopOfferKind.Guidance && !CanRevealEligibleHiddenNode())
                 return "No eligible hidden node to reveal";
         }
@@ -934,7 +955,7 @@ public partial class RunManager : Singleton<RunManager>
         int requiredGold = offer.kind == ShopOfferKind.Investment ? offer.investmentStake : offer.price;
         return cards.CanAfford(requiredGold)
             ? string.Empty
-            : $"Need {requiredGold}g (have {cards.gold}g)";
+            : $"Need {requiredGold} Credits (have {cards.gold} Credits)";
     }
 
     public string GetEnhancementTargetUnavailableReason(int cardId)
@@ -951,7 +972,7 @@ public partial class RunManager : Singleton<RunManager>
         var card = cards != null ? cards.FindOwnedCard(cardId) : null;
         if (card == null || !cards.hand.Contains(card)) return "Target must be a card in your hand";
         return enhancement != null && ReferenceEquals(card.Enhancement, enhancement)
-            ? "Card already has this Enhancement" : string.Empty;
+            ? "Card already has this Mod" : string.Empty;
     }
 
     // Artifact purchases need no target. Enhancement purchases require an explicit card ID.
@@ -1198,7 +1219,7 @@ public partial class RunManager : Singleton<RunManager>
         _pendingInvestmentStakes.Clear();
         if (payout > 0) CardManager.Instance.AddGold((int)payout);
         OnInvestmentResult?.Invoke(
-            $"Investment results: {wins} success(es), {losses} loss(es); payout {payout}g, stakes at risk {totalStake}g.");
+            $"Stake results: {wins} success(es), {losses} loss(es); payout {payout} Credits, stakes at risk {totalStake} Credits.");
     }
 
     void PrepareShopOffers(int maximumOffers = 4)
@@ -1400,15 +1421,15 @@ public partial class RunManager : Singleton<RunManager>
         if (cards == null || combat == null) return "Ritual unavailable";
         if (choiceIndex == 0)
             return GetRitualArtifactCandidates("Legendary").Length > 0
-                ? string.Empty : "No eligible Legendary Artifact reward";
+                ? string.Empty : "No eligible Legendary Gear reward";
         if (choiceIndex == 1)
             return combat.player.currentHealth > 15 && GetRitualArtifactCandidates("Epic").Length > 0
                 ? string.Empty : combat.player.currentHealth <= 15
-                    ? "Requires more than 15 HP" : "No eligible Epic Artifact reward";
+                    ? "Requires more than 15 HP" : "No eligible Epic Gear reward";
         if (choiceIndex == 2)
             return combat.player.currentHealth > 5 && GetRitualUpgradeCandidates().Length > 0
                 ? string.Empty : combat.player.currentHealth <= 5
-                    ? "Requires more than 5 HP" : "No eligible Artifact upgrade";
+                    ? "Requires more than 5 HP" : "No eligible Gear upgrade";
         return "Choice unavailable";
     }
 
@@ -1483,8 +1504,8 @@ public partial class RunManager : Singleton<RunManager>
         _pendingBloodRitualEvent = ScriptableObject.CreateInstance<RunEventDefinition>();
         _pendingBloodRitualEvent.id = $"blood-ritual-replace:{_activeNode?.id ?? 0}";
         _pendingBloodRitualEvent.category = MapNodeType.Risk;
-        _pendingBloodRitualEvent.title = "BLOOD RITUAL — CLAIM YOUR REWARD";
-        _pendingBloodRitualEvent.description = $"Choose an Artifact to replace with {_pendingBloodRitualArtifact.displayName}, or cancel without paying the cost.";
+        _pendingBloodRitualEvent.title = "REDLINE DEAL — CLAIM YOUR REWARD";
+        _pendingBloodRitualEvent.description = $"Choose a Gear item to replace with {_pendingBloodRitualArtifact.displayName}, or cancel without paying the cost.";
         _pendingBloodRitualEvent.choices = _pendingBloodRitualReplacements
             .Select(item => new RunEventChoice
             {
@@ -1496,7 +1517,7 @@ public partial class RunManager : Singleton<RunManager>
             .Concat(new[] { new RunEventChoice
             {
                 label = "Cancel Ritual",
-                description = "Keep your Artifacts. The ritual cost is not paid.",
+                description = "Keep your Gear. The ritual cost is not paid.",
                 effects = Array.Empty<RunEffect>(),
                 interaction = RunEventChoiceInteraction.Immediate
             }}).ToArray();
@@ -1560,13 +1581,13 @@ public partial class RunManager : Singleton<RunManager>
         selection.id = $"quest-contract-select:{_activeNode.mapIndex}:{_activeNode.id}";
         selection.category = MapNodeType.Event;
         selection.title = "QUEST CONTRACT";
-        selection.description = "Choose one objective. The Contract occupies no Artifact slot; its 20 Gold fee is charged only when you confirm an objective. Cancel keeps your Gold.";
+        selection.description = "Choose one objective. The Contract occupies no Gear slot; its 20 Credits fee is charged only when you confirm an objective. Cancel keeps your Credits.";
         selection.choices = new[]
         {
-            new RunEventChoice { label = "Combat Contract", description = "Win 2 encounters within 12 maps. Reward: 6 Gold. Failure: lose 5 HP.", effects = Array.Empty<RunEffect>() },
-            new RunEventChoice { label = "Elite Contract", description = "Defeat a reachable Elite before leaving this map. Reward: a Rare Artifact, or heal 5 HP if none is eligible. Failure: lose 5 HP.", effects = Array.Empty<RunEffect>() },
-            new RunEventChoice { label = "Flawless Contract", description = "Win 1 encounter without losing HP. Reward: 10 Gold. Failure: lose 5 HP.", effects = Array.Empty<RunEffect>() },
-            new RunEventChoice { label = "Cancel", description = "Return to the Shop. The Contract fee is not charged.", effects = Array.Empty<RunEffect>() }
+            new RunEventChoice { label = "Combat Contract", description = "Win 2 encounters within 12 Districts. Reward: 6 Credits. Failure: lose 5 HP.", effects = Array.Empty<RunEffect>() },
+            new RunEventChoice { label = "Enforcer Contract", description = "Defeat a reachable Enforcer before leaving this District. Reward: a Rare Gear item, or heal 5 HP if none is eligible. Failure: lose 5 HP.", effects = Array.Empty<RunEffect>() },
+            new RunEventChoice { label = "Flawless Contract", description = "Win 1 encounter without losing HP. Reward: 10 Credits. Failure: lose 5 HP.", effects = Array.Empty<RunEffect>() },
+            new RunEventChoice { label = "Cancel", description = "Return to the Black Market. The Contract fee is not charged.", effects = Array.Empty<RunEffect>() }
         };
         _pendingContractPrice = Math.Max(0, pendingPrice);
         _pendingContractSelectionEvent = selection;
@@ -1629,7 +1650,7 @@ public partial class RunManager : Singleton<RunManager>
         _pendingContractPrice = 0;
         CompleteActiveNode();
         ShowPathAfterNode();
-        Debug.Log($"Quest Contract started: {_activeContract.ObjectiveDescription} Deadline: before Map {(long)_activeContract.deadlineMapExclusive + 1L}.", this);
+        Debug.Log($"Contract started: {_activeContract.ObjectiveDescription} Deadline: before District {(long)_activeContract.deadlineMapExclusive + 1L}.", this);
         return true;
     }
 
@@ -1690,19 +1711,19 @@ public partial class RunManager : Singleton<RunManager>
                     if (!cards.GrantArtifactReward(eligible[random.NextInt(0, eligible.Length)]))
                     {
                         combat?.HealPlayer(5);
-                        Debug.Log("Quest Contract reward could not be collected; healed 5 HP instead.", this);
+                        Debug.Log("Contract reward could not be collected; healed 5 HP instead.", this);
                     }
                 }
                 else
                 {
                     combat?.HealPlayer(5);
-                    Debug.Log("Quest Contract reward: no Rare Artifact slot was available; healed 5 HP instead.", this);
+                    Debug.Log("Contract reward: no Rare Gear slot was available; healed 5 HP instead.", this);
                 }
                 break;
             default:
                 break;
         }
-        Debug.Log($"Quest Contract completed: {contract.objective}.", this);
+        Debug.Log($"Contract completed: {contract.objective}.", this);
     }
 
     void SettleContractAtMapExit()
@@ -1718,7 +1739,7 @@ public partial class RunManager : Singleton<RunManager>
         int hp = combat != null ? combat.player.currentHealth : 0;
         int safeLoss = Math.Min(5, Math.Max(0, hp - 1));
         if (safeLoss > 0) combat.TakeRunDamage(safeLoss);
-        Debug.Log($"Quest Contract failed ({contract.objective}); applied {safeLoss} nonlethal HP loss.", this);
+        Debug.Log($"Contract failed ({contract.objective}); applied {safeLoss} nonlethal HP loss.", this);
     }
 
     public bool CanChooseEventOption(int choiceIndex)
@@ -1744,7 +1765,7 @@ public partial class RunManager : Singleton<RunManager>
             if (cards == null || !cards.CanAfford(_pendingContractPrice))
                 return $"Need {_pendingContractPrice}g to accept the Contract";
             return choiceIndex == (int)RunContractObjective.DefeatEliteThisMap && !CanReachEliteAfterActiveNode()
-                ? "No reachable Elite remains on this map" : string.Empty;
+                ? "No reachable Enforcer remains in this District" : string.Empty;
         }
         var choice = _activeEvent.choices[choiceIndex];
         if (choice == null) return "Choice unavailable";
@@ -1983,12 +2004,12 @@ public partial class RunManager : Singleton<RunManager>
         _pendingHammerEvent.title = "HAMMER";
         _pendingHammerEvent.category = MapNodeType.Upgrade;
         _pendingHammerEvent.description = hasTarget
-            ? "Choose one of three cached Common Enhancements, then target a card in your hand."
+            ? "Choose one of three cached Common Mods, then target a card in your hand."
             : "No card is in hand to target. Retry after another node, or decline this reward.";
         _pendingHammerEvent.choices = hasTarget
             ? new[]
             {
-                new RunEventChoice { label = "Choose Enhancement", description = "Select one of the three cached Common Enhancements, then click a card in your hand.", interaction = RunEventChoiceInteraction.ChooseEnhancementTarget }
+                new RunEventChoice { label = "Choose Mod", description = "Select one of the three cached Common Mods, then click a card in your hand.", interaction = RunEventChoiceInteraction.ChooseEnhancementTarget }
             }
             : new[]
             {

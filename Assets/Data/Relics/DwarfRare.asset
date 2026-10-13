@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: DwarfRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_112
-  displayName: Dwarf Emblem
+  displayName: Lowball Protocol
   icon: LOW+
-  description: Keep Common bonus action. Playing a rank below Five prepares +1 damage
-    for the next higher-rank attack.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: After a Played Turn
+
+    Condition: Played rank < 5
+
+    Effect:
+    Keep Common bonus action; rank <5 played strengthens next higher-rank attack.
+
+    Value:
+    +1 damage to next attack with rank higher than prepared source
+
+    Limit: After
+    manually played rank below Five; retains Common bonus action'
   price: 30
   capacityCategory: 0
   canonicalId: rel_112

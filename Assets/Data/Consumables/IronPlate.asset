@@ -14,15 +14,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: iron_plate
   canonicalId: con_007
-  displayName: Iron Plate
+  displayName: Armor Patch
   icon: DEF
-  description: Apply Hardened to one unenhanced card.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Apply Plated to a
+    card.
+
+    Uses: 1'
   price: 5
   uses: 1
   effectType: 2
   healAmount: 0
   damageAmount: 0
   enhancementToApply: {fileID: 11400000, guid: 6b373811d1407e5499cb6fed5706a76c, type: 2}
+  targetSuit: 0
   shopAvailable: 1
   dropAvailable: 0
   eventAvailable: 1

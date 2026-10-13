@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: MerchantsGift
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_131
-  displayName: "Merchant\u2019s Gift"
+  displayName: Loyalty Perk
   icon: GIFT
-  description: Every 3 paid Shop item purchases offers 1 random non-enhancement consumable
-    to claim, replace, or decline.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Item Purchases
+
+    Condition: Every 3 item purchases
+
+    Effect:
+    After 3 item purchases: random non-mod trick.
+
+    Value: 1
+
+    Limit: Free
+    rewards do not count; full tray replace/decline'
   price: 30
   capacityCategory: 0
   canonicalId: rel_131

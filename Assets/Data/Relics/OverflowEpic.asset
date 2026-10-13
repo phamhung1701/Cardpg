@@ -13,11 +13,21 @@ MonoBehaviour:
   m_Name: OverflowEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_110
-  displayName: Overflow Emblem
+  displayName: Overflow Script
   icon: "\u2197"
-  description: Keep Overflow Rare. Combat draws beyond a full hand auto-play for
-    bonus damage equal to the number of other cards in hand; up to 3 per root player
-    action, shared by nested draws.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On combat draw beyond full hand
+
+    Condition: Combat active
+
+    Effect:
+    Keep Rare; auto-play overflow cards for bonus damage equal to the current unplayed
+    hand count.
+
+    Value: Hand count
+
+    Limit: Up to 3 per root player action;
+    nested draws share budget'
   price: 30
   capacityCategory: 0
   canonicalId: rel_110

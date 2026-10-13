@@ -13,9 +13,14 @@ MonoBehaviour:
   m_Name: Reinforced
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: reinforced
-  displayName: Hardened
+  displayName: Plated
   icon: DEF
-  description: This card blocks +3 damage
+  description: 'Trigger: On Discard
+
+    Effect: This card provides additional block.
+
+    Value:
+    3'
   price: 12
   canonicalId: enh_002
   rarity: Common

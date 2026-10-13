@@ -130,7 +130,7 @@ public partial class RunManager
         // Presentation notifications only: deliberately no MapReady, NodeCompleted, encounter startup or purchases.
         OnRunStarted?.Invoke(runSeed);
         CardManager.Instance.PresentRestoredSave();
-        OnCycleStarted?.Invoke(IsInfiniteMode ? $"Map {CurrentCycle} / Infinite" : $"Map {CurrentCycle} / {BossTotal}");
+        OnCycleStarted?.Invoke(IsInfiniteMode ? $"District {CurrentCycle} / Infinite" : $"District {CurrentCycle} / {BossTotal}");
         if (_activeNode == null) OnShowPathScreen?.Invoke();
         else if (_activeNode.kind == MapNodeType.Shop) OnShowShop?.Invoke();
         else if (_activeNode.kind == MapNodeType.Upgrade) OnShowUpgrade?.Invoke();

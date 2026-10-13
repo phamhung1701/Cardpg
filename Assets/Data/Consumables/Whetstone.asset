@@ -14,15 +14,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: whetstone
   canonicalId: con_003
-  displayName: Whetstone
+  displayName: Power Patch
   icon: ATK
-  description: Apply Sharpened to one unenhanced card.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Apply Boosted to a
+    card.
+
+    Uses: 1'
   price: 5
   uses: 1
   effectType: 2
   healAmount: 0
   damageAmount: 0
   enhancementToApply: {fileID: 11400000, guid: df3c7ab7238098c479e6077dcb8fbee9, type: 2}
+  targetSuit: 0
   shopAvailable: 1
   dropAvailable: 0
   eventAvailable: 1

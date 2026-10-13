@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: AlchemistsKit
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_130
-  displayName: "Alchemist\u2019s Kit"
+  displayName: Mod Supply Kit
   icon: ALCH
-  description: At each new map, choose 1 of 3 cached enhancement consumables. Enhancement
-    consumables never enter enemy drops.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: New District
+
+    Condition: District start
+
+    Effect:
+    New district: choose 1 of 3 random mod tricks.
+
+    Value: 1 of 3
+
+    Limit:
+    Full tray replace/decline; not enemy drops'
   price: 30
   capacityCategory: 0
   canonicalId: rel_130

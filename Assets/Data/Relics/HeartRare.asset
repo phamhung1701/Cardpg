@@ -13,10 +13,18 @@ MonoBehaviour:
   m_Name: HeartRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_026
-  displayName: Heart Emblem
+  displayName: Heartbeat Chip
   icon: "\u2665"
-  description: Playing a Heart heals 3 HP. If HP was below half immediately before
-    healing, gain 3 Gold.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Condition: Suit = Hearts
+
+    Effect:
+    Playing a Heart heals 3 HP. If HP was below 50% immediately before the heal,
+    gain 3 Credits.
+
+    Value: +3 HP; +3 Credits below 50%'
   price: 30
   capacityCategory: 0
   canonicalId: rel_026

@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: AceRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_114
-  displayName: Ace Emblem
+  displayName: Ace Protocol
   icon: ACE+
-  description: Keep Common critical chance. Once per encounter, a critical Ace pair
-    returns one physical Ace to your hand.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Ace Pair Critical
+
+    Condition: Ace pair critically
+    strikes
+
+    Effect: Keep Common crit chance; critical Ace-pair returns Ace to
+    hand once per encounter.
+
+    Value: Return 1 physical Ace to hand
+
+    Limit:
+    Once per encounter after a critical Ace pair; skip if hand is at capacity'
   price: 30
   capacityCategory: 0
   canonicalId: rel_114

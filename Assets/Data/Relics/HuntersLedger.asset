@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: HuntersLedger
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_119
-  displayName: "Hunter\u2019s Ledger"
+  displayName: Takedown Log
   icon: HUNT
-  description: Each Elite kill permanently adds +1 damage to the first attack of
-    each encounter.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Enforcer Kill
+
+    Condition: Enforcer defeated
+
+    Effect:
+    Enforcer kill permanently strengthens first attack each encounter.
+
+    Value:
+    +1 opening-attack damage
+
+    Limit: Each actual Enforcer kill; applies to first
+    attack action of each encounter; run-local'
   price: 20
   capacityCategory: 0
   canonicalId: rel_119

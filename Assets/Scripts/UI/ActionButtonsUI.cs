@@ -650,8 +650,8 @@ public class ActionButtonsUI : MonoBehaviour
         _consumableContextText.alignment = TextAlignmentOptions.TopLeft;
         _consumableContextText.raycastTarget = false;
 
-        _consumableUseButton = CreateConsumableActionButton("Use Consumable", "USE", new Vector2(-62f, 10f));
-        _consumableSellButton = CreateConsumableActionButton("Sell Consumable", "SELL", new Vector2(62f, 10f));
+        _consumableUseButton = CreateConsumableActionButton("Use Trick", "USE", new Vector2(-62f, 10f));
+        _consumableSellButton = CreateConsumableActionButton("Sell Trick", "SELL", new Vector2(62f, 10f));
         _consumableUseButton.onClick.AddListener(UseSelectedConsumable);
         _consumableSellButton.onClick.AddListener(SellSelectedConsumable);
         _consumableContextPanel.SetActive(false);
@@ -709,7 +709,7 @@ public class ActionButtonsUI : MonoBehaviour
         if (_consumableContextText)
         {
             _consumableContextText.text = $"<size=115%><b>{definition.displayName}</b></size>\n{definition.description}" +
-                (run != null && run.CanSellItems ? string.Empty : "\n<size=85%><color=#B7C0C7>Sell in Shop</color></size>");
+                (run != null && run.CanSellItems ? string.Empty : "\n<size=85%><color=#B7C0C7>Sell in Black Market</color></size>");
             float availableWidth = Mathf.Max(80f, _consumableContextRect.rect.width - 24f);
             float textHeight = _consumableContextText.GetPreferredValues(_consumableContextText.text, availableWidth, 0f).y;
             _consumableContextRect.sizeDelta = new Vector2(270f, Mathf.Max(150f, Mathf.Ceil(textHeight + 74f)));

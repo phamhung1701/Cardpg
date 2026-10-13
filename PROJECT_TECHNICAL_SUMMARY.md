@@ -1,4 +1,6 @@
-# CardPG Technical Summary
+# Dealbreak Technical Summary
+
+> Historical technical snapshot. For current player-facing content names and terminology, use `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx`; the legacy symbols and values documented here remain implementation details and are not serialized-ID migration instructions.
 
 Repository review date: **September 18, 2026**  
 Unity version: **6000.3.24f1**  
@@ -8,9 +10,9 @@ Repository branch: **`main`**
 
 ## 1. Project Summary
 
-### What CardPG is
+### What Dealbreak is
 
-CardPG is a single-player card-based roguelike/RPG prototype. Its combat foundation is inspired by Regicide: ordinary cards are played as attacks, cards may be discarded to defend against incoming damage, and player health persists between encounters. Its run structure adds branching maps, seeded procedural content, shops, events, Artifacts, per-card Enhancements, bosses, and build progression.
+Dealbreak is a single-player card-based roguelike/RPG prototype. Its combat foundation is inspired by Regicide: ordinary cards are played as attacks, cards may be discarded to defend against incoming damage, and player health persists between encounters. Its run structure adds branching Districts, seeded procedural content, Black Markets, Incidents, Gear, per-card Mods, Headliners, and build progression.
 
 The baseline game is intentionally **not** poker-hand combat. Normal attacks use one card. Multi-card selection currently exists for defense, while broader combinations remain deferred.
 

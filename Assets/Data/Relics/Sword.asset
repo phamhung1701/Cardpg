@@ -13,9 +13,17 @@ MonoBehaviour:
   m_Name: Sword
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_023
-  displayName: Sword
+  displayName: Power Baton
   icon: SWORD
-  description: Played attacking cards with qualifying attack above 8 gain +10 damage
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Condition: Attack > 8
+
+    Effect: Gain
+    bonus damage.
+
+    Value: +10 damage'
   price: 25
   capacityCategory: 0
   canonicalId: rel_023
@@ -29,9 +37,11 @@ MonoBehaviour:
     conditions:
     - kind: 2
       suit: 0
+      rank: 0
       expected: 0
       value: 8
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

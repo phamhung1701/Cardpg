@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: ScavengersSatchel
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_129
-  displayName: "Scavenger\u2019s Satchel"
+  displayName: Salvage Bag
   icon: LOOT
-  description: Every 3 Combat, Elite, or Boss victories offers 1 random non-enhancement
-    consumable to claim, replace, or decline.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Combat Wins
+
+    Condition: Every 3 combat wins
+
+    Effect:
+    Every 3 combat wins: random non-mod trick.
+
+    Value: 1
+
+    Limit: Full claim
+    tray: replace or decline'
   price: 30
   capacityCategory: 0
   canonicalId: rel_129

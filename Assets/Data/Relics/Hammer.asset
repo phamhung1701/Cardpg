@@ -13,10 +13,17 @@ MonoBehaviour:
   m_Name: Hammer
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_009
-  displayName: Hammer
+  displayName: Mod Bench
   icon: HAMMER
-  description: After each third completed node, grant one random Common Enhancement
-    to a random eligible owned card
+  iconSprite: {fileID: 0}
+  description: 'Trigger: After Every 3 Nodes
+
+    Condition: At least 1 card in hand
+
+    Effect:
+    Apply a random Common Mod to a random card.
+
+    Value: 1'
   price: 20
   capacityCategory: 0
   canonicalId: rel_009

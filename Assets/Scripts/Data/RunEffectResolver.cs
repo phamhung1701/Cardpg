@@ -31,7 +31,7 @@ public static class RunEffectResolver
                     break;
                 case RunEffectType.LoseGold:
                     if (!infiniteGold && simulatedGold < effect.amount)
-                        return $"Need {effect.amount}g (have {simulatedGold}g)";
+                        return $"Need {effect.amount} Credits (have {simulatedGold} Credits)";
                     if (!infiniteGold) simulatedGold -= effect.amount;
                     break;
                 case RunEffectType.Heal:
@@ -55,7 +55,7 @@ public static class RunEffectResolver
                     break;
                 case RunEffectType.GainConsumable:
                     var consumable = cards.FindConsumable(effect.consumableId);
-                    if (consumable == null || !consumable.eventAvailable) return "Consumable unavailable";
+                    if (consumable == null || !consumable.eventAvailable) return "Trick unavailable";
                     int slotCount = Math.Max(1, effect.amount);
                     if (!cards.CanAddConsumable(consumable, slotCount))
                         return "Backpack Full";

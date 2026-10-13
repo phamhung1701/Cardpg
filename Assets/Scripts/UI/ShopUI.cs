@@ -86,7 +86,7 @@ public class ShopUI : MonoBehaviour
         rect.sizeDelta = new Vector2(150f, 32f);
         var input = inputObject.GetComponent<TMP_InputField>();
         input.contentType = TMP_InputField.ContentType.IntegerNumber;
-        input.placeholder = CreateInputLabel(inputObject.transform, "Stake (Gold)", true);
+        input.placeholder = CreateInputLabel(inputObject.transform, "Stake (Credits)", true);
         input.textComponent = CreateInputLabel(inputObject.transform, string.Empty, false);
         input.targetGraphic = inputObject.GetComponent<Image>();
         inputObject.GetComponent<Image>().color = new Color(0.12f, 0.18f, 0.22f, 1f);
@@ -292,11 +292,11 @@ public class ShopUI : MonoBehaviour
         }
         if (!int.TryParse(value, out int stake) || RunManager.Instance == null || string.IsNullOrEmpty(_selectedOfferId))
         {
-            UpdateSelectionDetails("Enter a whole Gold amount from 1 to your current Gold.");
+            UpdateSelectionDetails("Enter a whole Credits amount from 1 to your current Credits.");
             return;
         }
         if (!RunManager.Instance.SetInvestmentStake(_selectedOfferId, stake))
-            UpdateSelectionDetails("Investment stake must be between 1g and your current Gold.");
+            UpdateSelectionDetails("Stake must be between 1 and your current Credits.");
         else UpdateSelectionDetails();
     }
 
@@ -309,9 +309,9 @@ public class ShopUI : MonoBehaviour
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (goldText) goldText.text = CardManager.Instance != null && CardManager.Instance.HasInfiniteMoney
-            ? "∞ Gold" : $"{gold}g";
+            ? "∞ Credits" : $"{gold} Credits";
 #else
-        if (goldText) goldText.text = $"{gold}g";
+        if (goldText) goldText.text = $"{gold} Credits";
 #endif
         if (panel != null && panel.activeSelf) RefreshItems();
     }
@@ -378,7 +378,7 @@ public class ShopUI : MonoBehaviour
             : System.Array.Empty<ShopOffer>();
         AddSectionHeading("GOODS", itemsContainer);
         AddGoodsRefreshButton();
-        AddSectionHeading("SERVICES — once per Shop", _servicesContainer ?? itemsContainer);
+        AddSectionHeading("SERVICES — once per Black Market", _servicesContainer ?? itemsContainer);
         foreach (var offer in offers.OrderBy(offer => offer.IsService ? 1 : 0))
         {
             string unavailableReason = RunManager.Instance != null
@@ -467,8 +467,8 @@ public class ShopUI : MonoBehaviour
         }
         if (itemsContainer.childCount == 0 && selectedOfferText)
             selectedOfferText.text = cards.BackpackSlotsUsed > 0
-                ? "No Artifacts to sell. Select a Consumable in your backpack to use or sell it here."
-                : "No owned Artifacts or Consumables to sell.";
+                ? "No Gear to sell. Select a Trick in your backpack to use or sell it here."
+                : "No owned Gear or Tricks to sell.";
     }
 
     void AddSellRow(string rowName, string icon, string itemName, int payout, UnityEngine.Events.UnityAction onClick)
@@ -505,7 +505,7 @@ public class ShopUI : MonoBehaviour
         {
             _investmentStakeInput.gameObject.SetActive(investmentSelected || supplySelected);
             if (_investmentStakeInput.placeholder is TMP_Text placeholder)
-                placeholder.text = supplySelected ? "Card quantity" : "Stake (Gold)";
+                placeholder.text = supplySelected ? "Card quantity" : "Stake (Credits)";
             if (_selectedOfferRect != null)
                 _selectedOfferRect.anchorMax = investmentSelected || supplySelected
                     ? new Vector2(0.7f, _selectedOfferAnchorMax.y) : _selectedOfferAnchorMax;
@@ -559,7 +559,7 @@ public class ShopUI : MonoBehaviour
         if (selected == null)
         {
             selectedOfferText.text = _sellingMode
-                ? "Select an Artifact to sell, or select a backpack Consumable to use or sell it."
+                ? "Select a Gear item to sell, or select a backpack Trick to use or sell it."
                 : "Select an offer to inspect before buying.";
             return;
         }

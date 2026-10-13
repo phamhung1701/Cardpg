@@ -13,9 +13,10 @@ MonoBehaviour:
   m_Name: Lethal
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: lethal
-  displayName: Lethal
+  displayName: Deadeye
   icon: CRIT
-  description: 25% chance for this card to deal double damage.
+  description: "Trigger: On Card Played\nCondition: 25% chance\nEffect: This card
+    can critically strike.\nValue: \xD72"
   price: 15
   canonicalId: enh_006
   rarity: Common

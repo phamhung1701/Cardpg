@@ -13,10 +13,14 @@ MonoBehaviour:
   m_Name: BalancersScale
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_118
-  displayName: "Balancer\u2019s Scale"
+  displayName: Flip Switch
   icon: SCALE
-  description: Alternate manually played low-rank and Face cards. Each correct alternation
-    adds +1 damage; repeating a group resets the bonus.
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Card Played\nCondition: Manually played card rank is
+    low or Face\nEffect: Alternate manually playing low-rank and Face cards to empower
+    attacks; repeating group resets bonus.\nValue: +1 damage to next attack on manual
+    Low\u2194Face alternation\nLimit: Low is rank below Five; Face is Jack/Queen/King;
+    consume once; repeating category clears before attack"
   price: 20
   capacityCategory: 0
   canonicalId: rel_118

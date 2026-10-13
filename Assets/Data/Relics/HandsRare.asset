@@ -13,9 +13,13 @@ MonoBehaviour:
   m_Name: HandsRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_020
-  displayName: Hands Emblem
+  displayName: Combo Driver
   icon: RANK
-  description: Play up to three matching-rank cards together as one attack action.
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Attack Selection\nCondition: Matching rank\nEffect: Play
+    two or three distinct cards of the same rank together as one attack action; resolve
+    each card\u2019s on-play effects in selection order.\nValue: One ordinary player
+    action\nLimit: 2\u20133 cards; matching rank"
   price: 30
   capacityCategory: 0
   canonicalId: rel_020
@@ -29,6 +33,7 @@ MonoBehaviour:
     extraTurn:
       trigger: 0
       oncePerEncounter: 0
+      cannotTriggerFromBonusAction: 0
       requireAllPlayedCardsBelowRank: 0
       exclusiveRank: 0
     sameRankMultiCard:

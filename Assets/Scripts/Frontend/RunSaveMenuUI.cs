@@ -45,7 +45,7 @@ public sealed class RunSaveMenuUI : MonoBehaviour
         bool valid = SaveGameService.TryRead(out var data, out var error);
         ContinueButton.interactable = valid;
         if (_status) _status.text = valid
-            ? $"Saved run • Map {data.bossIndex + 1} • {data.cards.gold} Gold" + (SaveGameService.Store.RecoveredFromBackup ? "\nRecovered from backup" : string.Empty)
+            ? $"Saved run • District {data.bossIndex + 1} • {data.cards.gold} Credits" + (SaveGameService.Store.RecoveredFromBackup ? "\nRecovered from backup" : string.Empty)
             : error;
     }
 }

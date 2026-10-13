@@ -13,9 +13,13 @@ MonoBehaviour:
   m_Name: Quickdraw
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: quickdraw
-  displayName: Quickdraw
+  displayName: Quickload
   icon: DRAW
-  description: Draw 1 card when played
+  description: 'Trigger: On Card Played
+
+    Effect: Draw a card.
+
+    Value: 1'
   price: 18
   canonicalId: enh_004
   rarity: Common

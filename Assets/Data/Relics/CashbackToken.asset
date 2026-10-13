@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: CashbackToken
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_125
-  displayName: Cashback Token
+  displayName: Cashback Card
   icon: 15%
-  description: "Refund 15% of actual Gold spent on paid Shop items, rounded to nearest
-    with ties up. Free purchases and this Token\u2019s own purchase grant no refund."
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Purchase
+
+    Condition: Actual Credits spent
+
+    Effect:
+    Refund 15% actual Credits spent; free purchases no cashback, refund never exceeds
+    cost, no retroactive benefit.
+
+    Value: 15%
+
+    Limit: Actual spend only;
+    provisional'
   price: 20
   capacityCategory: 0
   canonicalId: rel_125

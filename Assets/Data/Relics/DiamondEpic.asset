@@ -13,10 +13,22 @@ MonoBehaviour:
   m_Name: DiamondEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_108
-  displayName: Diamond Emblem
+  displayName: Diamond Driver
   icon: "\u2666+"
-  description: Keep Rare draw 2. Every third manually played Diamond lets you choose
-    one discard card to draw.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Condition: Suit = Diamonds; every third
+    manually played Diamond
+
+    Effect: Keep Rare draw 2; every third manually played
+    Diamond choose a card from discard to draw.
+
+    Value: Choose 1 physical discard
+    card to return to hand
+
+    Limit: Every third manually played Diamond; strict
+    hand capacity; empty discard/full hand skips with log; cancel skips draw'
   price: 30
   capacityCategory: 0
   canonicalId: rel_108

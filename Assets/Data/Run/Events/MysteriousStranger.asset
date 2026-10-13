@@ -14,15 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: evt_008
   category: 3
-  title: Mysterious Stranger
-  description: A mysterious stranger offers you a questionable trade.
+  title: Anonymous Contact
+  description: An anonymous contact offers an off-the-books trade.
   choices:
-  - label: Accept
-    description: Discard 2 cards; a random Enhancement will be applied to a random
-      eligible owned card.
+  - label: Take the Deal
+    description: Discard 2 cards; gain a random Mod
     effects: []
     interaction: 2
-  - label: Refuse
-    description: Nothing happens.
+    requiredDiscardValue: 0
+  - label: Walk Away
+    description: Nothing happens
     effects: []
     interaction: 0
+    requiredDiscardValue: 0

@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: ClubPower
   m_EditorClassIdentifier: Assembly-CSharp::RelicData
   id: club_power
-  displayName: Club Emblem
+  displayName: Club Amplifier
   icon: "\u2663"
-  description: Club cards deal double damage
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Card Played\nCondition: Suit = Clubs\nEffect: Multiply
+    this card's damage.\nValue: \xD72"
   price: 15
   capacityCategory: 0
   canonicalId: rel_001
@@ -29,8 +31,11 @@ MonoBehaviour:
     conditions:
     - kind: 0
       suit: 2
+      rank: 0
       expected: 0
+      value: 0
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 1
   affectedSuit: 2
   requiresEnhancedCard: 0

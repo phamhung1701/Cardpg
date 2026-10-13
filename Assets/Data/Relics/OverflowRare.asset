@@ -13,10 +13,23 @@ MonoBehaviour:
   m_Name: OverflowRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_021
-  displayName: Overflow Emblem
+  displayName: Overflow Script
   icon: AUTO+
-  description: During combat, up to 3 cards drawn beyond a full hand are automatically
-    played per player action.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On combat draw beyond full hand
+
+    Condition: Combat active;
+    Rare Overflow owned; root player action has remaining budget
+
+    Effect: Automatically
+    play each overflow card as a normal single-card action; target current valid
+    selected enemy, otherwise first living enemy in encounter order. Outside combat,
+    draw normally.
+
+    Value: No extra action cost
+
+    Limit: Up to 3 per root
+    player action; nested draws share budget'
   price: 30
   capacityCategory: 0
   canonicalId: rel_021

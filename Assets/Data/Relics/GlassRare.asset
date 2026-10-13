@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: GlassRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_032
-  displayName: Glass Emblem
+  displayName: Glass Mode
   icon: GLASS
-  description: "Card attacks and incoming attacks deal 2\xD7 damage."
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Card Played\nEffect: Card attacks and incoming attacks
+    deal 2\xD7 damage. Replaces Common Glass; does not inherit +5 vulnerability.\nValue:
+    \xD72 / \xD72"
   price: 30
   capacityCategory: 0
   canonicalId: rel_032

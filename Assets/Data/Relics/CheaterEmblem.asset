@@ -13,9 +13,15 @@ MonoBehaviour:
   m_Name: CheaterEmblem
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_011
-  displayName: Cheater Emblem
+  displayName: Extra Move
   icon: TURN
-  description: After the first completed player turn, gain one extra player turn
+  iconSprite: {fileID: 0}
+  description: 'Trigger: After First Turn
+
+    Effect: Gain an additional turn.
+
+    Value:
+    1'
   price: 20
   capacityCategory: 0
   canonicalId: rel_011

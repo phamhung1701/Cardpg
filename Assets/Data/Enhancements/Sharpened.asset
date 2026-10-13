@@ -13,9 +13,14 @@ MonoBehaviour:
   m_Name: Sharpened
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: sharpened
-  displayName: Sharpened
+  displayName: Boosted
   icon: ATK
-  description: This card deals +3 attack damage
+  description: 'Trigger: On Card Played
+
+    Effect: This card deals additional flat
+    damage.
+
+    Value: 3'
   price: 12
   canonicalId: enh_001
   rarity: Common

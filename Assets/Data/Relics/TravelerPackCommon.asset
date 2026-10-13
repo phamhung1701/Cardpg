@@ -13,9 +13,20 @@ MonoBehaviour:
   m_Name: TravelerPackCommon
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_120
-  displayName: "Traveler\u2019s Pack"
+  displayName: Carry Rig
   icon: PACK
-  description: Increase backpack capacity from 3 slots to 5. Consumables remain non-stacking.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Passive
+
+    Condition: Backpack capacity
+
+    Effect: Add
+    2 backpack slots (3 to 5).
+
+    Value: +2 slots
+
+    Limit: Tricks remain non-stacking
+    at Common tier; Rare enables stacks of up to 3 identical items.'
   price: 20
   capacityCategory: 0
   canonicalId: rel_120

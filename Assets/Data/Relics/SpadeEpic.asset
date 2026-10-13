@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: SpadeEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_107
-  displayName: Spade Emblem
+  displayName: Spade Shield
   icon: "\u2660++"
-  description: Keep Rare behavior. Unused Spade Block adds +1 damage to your next
-    attack.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Condition: Suit = Spades; Spade block
+    unused
+
+    Effect: Keep Rare; unused Spade block adds damage to next attack.
+
+    Value:
+    +1 damage per unused Spade Block to next attack
+
+    Limit: Retains Rare draw/doubled
+    Block; encounter-local charge consumed by next attack'
   price: 30
   capacityCategory: 0
   canonicalId: rel_107

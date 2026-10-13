@@ -14,16 +14,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: training_grounds
   category: 4
-  title: Training Grounds
-  description: A quiet camp provides time to prepare for the next battles.
+  title: Test Lab
+  description: 
   choices:
   - label: Build endurance
     description: Gain 5 maximum HP and heal the increase.
     effects:
     - type: 4
       amount: 5
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0
   - label: Recover
     description: Heal 12 HP.
     effects:
     - type: 2
       amount: 12
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0

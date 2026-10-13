@@ -42,8 +42,8 @@ public sealed class DevModePanelUI : MonoBehaviour
         AddText(_setupPanel.transform, "DEV MODE", new Vector2(0, 180), 34, TextAlignmentOptions.Center);
         _seed = MakeInput(_setupPanel.transform, "Optional seed (blank = random)", new Vector2(0, 115));
         _health = MakeToggle(_setupPanel.transform, "Infinite Health", new Vector2(0, 55), true);
-        _money = MakeToggle(_setupPanel.transform, "Infinite Money", new Vector2(0, 5), true);
-        _offers = MakeToggle(_setupPanel.transform, "All Eligible Shop Offers", new Vector2(0, -45), true);
+        _money = MakeToggle(_setupPanel.transform, "Infinite Credits", new Vector2(0, 5), true);
+        _offers = MakeToggle(_setupPanel.transform, "All Eligible Black Market Goods", new Vector2(0, -45), true);
         MakeButton(_setupPanel.transform, "Start Dev Run", new Vector2(0, -120), StartDevRun);
         MakeButton(_setupPanel.transform, "Back", new Vector2(0, -180), CloseSetup);
         _setupPanel.SetActive(false);
@@ -97,7 +97,7 @@ public sealed class DevModePanelUI : MonoBehaviour
     void OpenActive()
     {
         if (!DevModeRuntime.Enabled || _coordinator == null || _coordinator.HasBlockingMenu || _activePanel == null) return;
-        if (_status) _status.text = $"Health: {(DevModeRuntime.InfiniteHealth ? "Infinite" : "Normal")}  |  Money: {(DevModeRuntime.InfiniteMoney ? "Infinite" : "Normal")}\nShop offers: {(DevModeRuntime.UnlimitedShopOffers ? "All eligible" : "Normal limit")}";
+        if (_status) _status.text = $"Health: {(DevModeRuntime.InfiniteHealth ? "Infinite" : "Normal")}  |  Credits: {(DevModeRuntime.InfiniteMoney ? "Infinite" : "Normal")}\nBlack Market Goods: {(DevModeRuntime.UnlimitedShopOffers ? "All eligible" : "Normal limit")}";
         _coordinator.Push(this, _activePanel, null);
     }
     void CloseActive() { if (_coordinator && _coordinator.IsTop(this)) _coordinator.Pop(this); }

@@ -13,10 +13,13 @@ MonoBehaviour:
   m_Name: HandsEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_109
-  displayName: Hands Emblem
+  displayName: Combo Driver
   icon: HANDS+
-  description: "Keep Rare behavior. Allow four matching ranks; each selected card\u2019s
-    authored on-play effects trigger twice, without replaying attacks or actions."
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Attack Selection\nCondition: Four cards of matching rank\nEffect:
+    Keep Rare; allow four matching ranks; each card on-play effect triggers twice.\nValue:
+    Allow 4 same-rank cards; each card\u2019s Mod on-play effect triggers twice\nLimit:
+    Retains Rare same-rank rule; no extra attack"
   price: 30
   capacityCategory: 0
   canonicalId: rel_109

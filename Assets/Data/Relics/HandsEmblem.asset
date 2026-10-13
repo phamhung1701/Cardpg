@@ -13,10 +13,18 @@ MonoBehaviour:
   m_Name: HandsEmblem
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_012
-  displayName: Hands Emblem
+  displayName: Combo Driver
   icon: RANK
-  description: Play up to three same-rank cards; total action damage is capped at
-    10
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Attack Selection
+
+    Condition: Matching rank
+
+    Effect:
+    Allow multiple same-rank cards to be played together.
+
+    Limit: Up to 3 cards;
+    total damage cannot exceed 10.'
   price: 20
   capacityCategory: 0
   canonicalId: rel_012
@@ -30,6 +38,7 @@ MonoBehaviour:
     conditions:
     - kind: 4
       suit: 0
+      rank: 0
       expected: 1
       value: 0
   ruleModifiers:
@@ -38,11 +47,13 @@ MonoBehaviour:
     extraTurn:
       trigger: 0
       oncePerEncounter: 0
+      cannotTriggerFromBonusAction: 0
       requireAllPlayedCardsBelowRank: 0
       exclusiveRank: 0
     sameRankMultiCard:
       requireMatchingRank: 1
       maximumCards: 3
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

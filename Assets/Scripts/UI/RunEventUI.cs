@@ -76,7 +76,7 @@ public class RunEventUI : MonoBehaviour
             string unavailableReason = RunManager.Instance.GetEventOptionUnavailableReason(choiceIndex);
             if (string.IsNullOrEmpty(unavailableReason) && !HasRequiredInteractionUI(choice.interaction))
                 unavailableReason = choice.interaction == RunEventChoiceInteraction.ChooseEnhancementTarget
-                    ? "Enhancement selection UI unavailable"
+                    ? "Mod selection UI unavailable"
                     : "Card selection UI unavailable";
             bool available = string.IsNullOrEmpty(unavailableReason);
             var label = buttonObject.GetComponentInChildren<TMP_Text>();

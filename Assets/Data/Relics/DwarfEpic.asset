@@ -13,10 +13,22 @@ MonoBehaviour:
   m_Name: DwarfEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_113
-  displayName: Dwarf Emblem
+  displayName: Lowball Protocol
   icon: LOW++
-  description: Keep Rare behavior. Killing with the prepared higher-rank attack permanently
-    gives its low-rank source card +1 attack.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Kill
+
+    Condition: Prepared higher-rank attack kills
+    enemy
+
+    Effect: Keep Rare; prepared higher-rank attack kill permanently strengthens
+    low-rank source.
+
+    Value: +1 permanent attack to low-rank source card
+
+    Limit:
+    Prepared higher-rank attack must kill; source physical card must remain owned;
+    run-local'
   price: 30
   capacityCategory: 0
   canonicalId: rel_113

@@ -13,9 +13,15 @@ MonoBehaviour:
   m_Name: Lantern
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_008
-  displayName: Lantern
+  displayName: Scanner
   icon: LANTERN
-  description: Reveal one normally hidden reachable Event or Risk node per map
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On District
+
+    Effect: Reveal an additional node.
+
+    Value:
+    1'
   price: 18
   capacityCategory: 0
   canonicalId: rel_008
@@ -28,6 +34,7 @@ MonoBehaviour:
     amount: 1
     conditions: []
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

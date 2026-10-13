@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: Explosive
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: explosive
-  displayName: Explosive
+  displayName: Volatile
   icon: AOE
-  description: When played, deal its full modified attack damage to all other enemies.
+  description: 'Trigger: On Card Played
+
+    Effect: Deal area-of-effect damage.'
   price: 15
   canonicalId: enh_009
   rarity: Common

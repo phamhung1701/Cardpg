@@ -14,10 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: heart_rune
   canonicalId: con_017
-  displayName: Heart Rune
+  displayName: Heart Switch
   icon: "\u2665"
-  description: Change one card's suit to Hearts per charge. Three charges; one backpack
-    slot until exhausted.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Change one card''s
+    effective suit to Heart per charge; same-suit target spends no charge. Three
+    charges remain in one backpack slot until exhausted. Combat: hand target; outside
+    combat: any owned card.
+
+    Uses: 3'
   price: 5
   uses: 1
   effectType: 5

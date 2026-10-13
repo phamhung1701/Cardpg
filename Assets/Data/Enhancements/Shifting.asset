@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: Shifting
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: shifting
-  displayName: Shifting
+  displayName: Wildcard
   icon: SUIT
-  description: This card counts as any suit for suit-based effects.
+  description: 'Trigger: On Card Played
+
+    Effect: This card counts as any suit.'
   price: 15
   canonicalId: enh_011
   rarity: Common

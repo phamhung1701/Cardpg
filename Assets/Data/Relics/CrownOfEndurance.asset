@@ -13,10 +13,22 @@ MonoBehaviour:
   m_Name: CrownOfEndurance
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_139
-  displayName: Crown of Endurance
+  displayName: Survivor's Badge
   icon: CROWN
-  description: Boss kills permanently grant +3 max HP; grant +3 additional max HP
-    if you lost no HP during that encounter.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Headliner Defeated
+
+    Condition: Headliner defeated
+
+    Effect:
+    Headliner kill permanently increases max HP; additional if encounter has zero-HP
+    loss.
+
+    Value: +3 Max HP; +3 additional on zero actual HP lost
+
+    Limit:
+    Once per Headliner kill; shield/block do not count as HP loss; max-HP gain does
+    not heal'
   price: 20
   capacityCategory: 0
   canonicalId: rel_139

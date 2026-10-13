@@ -8,7 +8,7 @@ public sealed class CreditsUI : MonoBehaviour
     public TMP_Text bodyLabel;
     public Button backButton;
     [TextArea(6, 14)] public string creditsText =
-        "CARDPG\n\nPrototype design and development\n\nBuilt with Unity\n\nInspired by card-based roguelikes and tabletop card combat.";
+        "DEALBREAK\n\nPrototype design and development\n\nBuilt with Unity\n\nInspired by card-based roguelikes and tabletop card combat.";
 
     void OnEnable()
     {

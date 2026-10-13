@@ -187,11 +187,11 @@ public class RunResultUI : MonoBehaviour
         {
             resultBodyLabel.text =
                 $"Seed  {seed}\n" +
-                $"Progress  Map {mapReached}/{totalBosses}\n" +
-                $"Bosses Defeated  {bossesDefeated}/{totalBosses}\n" +
-                $"Gold  {goldDisplay}\n" +
-                $"Artifacts  {artifacts}\n" +
-                $"Enhanced Cards  {enhanced}{rewardLine}\n\n" +
+                $"Progress  District {mapReached}/{totalBosses}\n" +
+                $"Headliners Defeated  {bossesDefeated}/{totalBosses}\n" +
+                $"Credits  {goldDisplay}\n" +
+                $"Gear  {artifacts}\n" +
+                $"Cards with Mods  {enhanced}{rewardLine}\n\n" +
                 timingSummary;
         }
 
@@ -213,7 +213,7 @@ public class RunResultUI : MonoBehaviour
         {
             var split = timing.CompletedSplits[i];
             summary.Append(i % 2 == 0 ? "\n" : "    ")
-                .Append("Map ")
+                .Append("District ")
                 .Append(split.MapNumber)
                 .Append("  ")
                 .Append(RunDurationFormatter.Format(split.ElapsedSeconds));
@@ -222,7 +222,7 @@ public class RunResultUI : MonoBehaviour
         if (!victory)
         {
             var incomplete = timing.CurrentIncompleteSplit;
-            summary.Append("\nMap ")
+            summary.Append("\nDistrict ")
                 .Append(incomplete.MapNumber)
                 .Append("  ")
                 .Append(RunDurationFormatter.Format(incomplete.ElapsedSeconds))

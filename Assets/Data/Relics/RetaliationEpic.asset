@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: RetaliationEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_111
-  displayName: Retaliation Emblem
+  displayName: Payback Chip
   icon: RETAL+
-  description: Keep Rare counterattacks. A counterattack kill permanently adds +1
-    counterattack damage.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Counterattack Kill
+
+    Condition: Counterattack defeats
+    enemy
+
+    Effect: Keep Rare; counterattack kill permanently increases counterattack
+    damage.
+
+    Value: +1 counterattack damage
+
+    Limit: Each lethal counterattack
+    kill; run-local; new-run reset'
   price: 30
   capacityCategory: 0
   canonicalId: rel_111

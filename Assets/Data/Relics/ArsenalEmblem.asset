@@ -13,9 +13,14 @@ MonoBehaviour:
   m_Name: ArsenalEmblem
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_028
-  displayName: Arsenal Emblem
+  displayName: Extra Slots
   icon: HAND
-  description: Increase maximum hand size by 1
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Passive
+
+    Effect: Increase hand size.
+
+    Value: 1'
   price: 20
   capacityCategory: 0
   canonicalId: rel_028
@@ -28,6 +33,7 @@ MonoBehaviour:
     amount: 1
     conditions: []
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

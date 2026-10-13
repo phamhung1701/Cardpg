@@ -13,9 +13,15 @@ MonoBehaviour:
   m_Name: GlassCommon
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_031
-  displayName: Glass Emblem
+  displayName: Glass Mode
   icon: GLASS
-  description: Card attacks deal +5 damage; incoming attacks deal +5 damage.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Effect: Card attacks deal +5 damage;
+    incoming attacks deal +5 damage.
+
+    Value: +5 / +5'
   price: 30
   capacityCategory: 0
   canonicalId: rel_031

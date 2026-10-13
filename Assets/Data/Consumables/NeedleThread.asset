@@ -14,15 +14,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: needle_thread
   canonicalId: con_008
-  displayName: Needle & Thread
+  displayName: Repair Patch
   icon: HP
-  description: Apply Mending to one unenhanced card.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Apply Regenerative
+    to a card.
+
+    Uses: 1'
   price: 5
   uses: 1
   effectType: 2
   healAmount: 0
   damageAmount: 0
   enhancementToApply: {fileID: 11400000, guid: 5f2d505e6a2512f429ed2a97008ba12a, type: 2}
+  targetSuit: 0
   shopAvailable: 1
   dropAvailable: 0
   eventAvailable: 1

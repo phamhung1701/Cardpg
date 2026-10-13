@@ -13,10 +13,19 @@ MonoBehaviour:
   m_Name: VictoryDraught
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: victory_draught
-  displayName: Victory Draught
+  displayName: Recovery Can
   icon: HEAL
+  iconSprite: {fileID: 0}
   description: Heal 3 HP after each victory
   price: 24
+  capacityCategory: 0
+  canonicalId: 
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects: []
+  ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

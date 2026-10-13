@@ -74,7 +74,7 @@ public class RunStatusUI : MonoBehaviour
         var run = RunManager.Instance;
 
         if (goldLabel)
-            goldLabel.text = cards == null ? "GOLD —" : cards.HasInfiniteMoney ? "GOLD ∞" : $"GOLD {cards.gold}";
+            goldLabel.text = cards == null ? "CREDITS —" : cards.HasInfiniteMoney ? "CREDITS ∞" : $"CREDITS {cards.gold}";
 
         RefreshArtifacts(cards);
         RefreshBackpack(cards);
@@ -91,14 +91,14 @@ public class RunStatusUI : MonoBehaviour
                 foreach (var card in cards.ownedCards)
                     if (card.Enhancement != null) enhancedCount++;
                 pileSummaryLabel.text =
-                    $"HAND {cards.HandCount}/{cards.HandCapacity}  ·  DRAW {cards.deck.Count}  ·  ENH {enhancedCount}";
+                    $"HAND {cards.HandCount}/{cards.HandCapacity}  ·  DRAW PILE {cards.deck.Count}  ·  MOD {enhancedCount}";
             }
         }
 
         if (run == null)
         {
             if (runProgressLabel) runProgressLabel.text = "Run —";
-            if (bossProgressLabel) bossProgressLabel.text = "Boss —";
+            if (bossProgressLabel) bossProgressLabel.text = "Headliner —";
             return;
         }
 
@@ -109,8 +109,8 @@ public class RunStatusUI : MonoBehaviour
         if (runProgressLabel)
         {
             string mapProgress = run.IsInfiniteMode
-                ? $"Map {run.CurrentCycle}/∞"
-                : $"Map {Mathf.Clamp(run.CurrentCycle, 1, run.BossTotal)}/{run.BossTotal}";
+                ? $"District {run.CurrentCycle}/∞"
+                : $"District {Mathf.Clamp(run.CurrentCycle, 1, run.BossTotal)}/{run.BossTotal}";
             string routeProgress = run.IsRunCompleted
                 ? "Run Complete"
                 : $"{mapProgress}  •  Depth {completedNodes}/{RunMapGenerator.RouteColumnCount}";
@@ -123,8 +123,8 @@ public class RunStatusUI : MonoBehaviour
         {
             string bossName = run.CurrentBoss != null ? run.CurrentBoss.enemyName : "Complete";
             bossProgressLabel.text = run.IsInfiniteMode
-                ? $"Map {run.CurrentCycle} Boss  •  {bossName}"
-                : $"Boss {Mathf.Min(run.bossIndex + 1, run.BossTotal)}/{run.BossTotal}  •  {bossName}";
+                ? $"District {run.CurrentCycle} Headliner  •  {bossName}"
+                : $"Headliner {Mathf.Min(run.bossIndex + 1, run.BossTotal)}/{run.BossTotal}  •  {bossName}";
         }
 
         RefreshTiming();
@@ -136,11 +136,11 @@ public class RunStatusUI : MonoBehaviour
         return contract.objective switch
         {
             RunContractObjective.WinTwoEncounters =>
-                $"Contract • Encounters {contract.encounterWins}/2 • due before Map {lastMap}",
+                $"Contract • Encounters {contract.encounterWins}/2 • due before District {lastMap}",
             RunContractObjective.DefeatEliteThisMap =>
-                $"Contract • Elite 0/1 • Map {(long)contract.startedAtMapIndex + 1L}",
+                $"Contract • Enforcer 0/1 • District {(long)contract.startedAtMapIndex + 1L}",
             RunContractObjective.WinCombatWithoutHpLoss =>
-                $"Contract • Flawless 0/1 • due before Map {lastMap}",
+                $"Contract • Flawless 0/1 • due before District {lastMap}",
             _ => "Contract active"
         };
     }
@@ -201,6 +201,6 @@ public class RunStatusUI : MonoBehaviour
         var timing = RunManager.Instance?.Timing;
         timingLabel.text = timing == null
             ? "RUN —"
-            : $"RUN {RunDurationFormatter.Format(timing.TotalElapsedSeconds)}  ·  MAP {RunDurationFormatter.Format(timing.CurrentMapElapsedSeconds)}";
+            : $"RUN {RunDurationFormatter.Format(timing.TotalElapsedSeconds)}  ·  DISTRICT {RunDurationFormatter.Format(timing.CurrentMapElapsedSeconds)}";
     }
 }

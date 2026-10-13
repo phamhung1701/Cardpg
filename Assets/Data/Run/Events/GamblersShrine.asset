@@ -14,18 +14,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: gamblers_shrine
   category: 5
-  title: Gambler's Shrine
-  description: The shrine promises wealth in exchange for blood.
+  title: Rigged Machine
+  description: An old arcade machine promises a suspiciously generous payout.
   choices:
-  - label: Pay in blood
-    description: Lose 5 HP and gain 18 gold.
+  - label: Bet Your Health
+    description: -7 HP, +18 Credits
     effects:
     - type: 3
       amount: 5
+      consumableId: 
     - type: 0
       amount: 18
-  - label: Leave an offering
-    description: Gain 2 gold.
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: Cash Out Early
+    description: +2 Credits
     effects:
     - type: 0
       amount: 2
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0

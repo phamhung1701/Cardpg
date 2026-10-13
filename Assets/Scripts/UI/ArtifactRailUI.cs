@@ -195,11 +195,11 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (!controlsRoot) return;
 
         if (!mergeModeButton)
-            mergeModeButton = CreateMergeButton(controlsRoot, "Merge Artifacts", "Merge", new Vector2(0f, -72f), new Vector2(176f, 40f), 20f, 16f);
+            mergeModeButton = CreateMergeButton(controlsRoot, "Merge Gear", "Merge", new Vector2(0f, -72f), new Vector2(176f, 40f), 20f, 16f);
         if (!mergeConfirmButton)
-            mergeConfirmButton = CreateMergeButton(controlsRoot, "Confirm Artifact Merge", "Confirm", new Vector2(-48f, -120f), new Vector2(108f, 40f), 20f, 16f);
+            mergeConfirmButton = CreateMergeButton(controlsRoot, "Confirm Gear Merge", "Confirm", new Vector2(-48f, -120f), new Vector2(108f, 40f), 20f, 16f);
         if (!mergeCancelButton)
-            mergeCancelButton = CreateMergeButton(controlsRoot, "Cancel Artifact Merge", "Cancel", new Vector2(66f, -120f), new Vector2(84f, 40f), 20f, 16f);
+            mergeCancelButton = CreateMergeButton(controlsRoot, "Cancel Gear Merge", "Cancel", new Vector2(66f, -120f), new Vector2(84f, 40f), 20f, 16f);
         if (!mergeStatusText)
         {
             var statusObject = new GameObject("Artifact Merge Status", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));

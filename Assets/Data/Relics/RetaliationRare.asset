@@ -13,10 +13,13 @@ MonoBehaviour:
   m_Name: RetaliationRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_022
-  displayName: Retaliation Emblem
+  displayName: Payback Chip
   icon: BLOCK
-  description: After blocking, return damage actually blocked; double it when committed
-    block exceeds 150% of the attack.
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Block\nEffect: After blocking, retaliate against the
+    attacker for damage actually blocked. If committed block is strictly greater
+    than 150% of incoming attack, deal double the blocked damage.\nValue: Blocked
+    damage; \xD72 above 150%"
   price: 30
   capacityCategory: 0
   canonicalId: rel_022

@@ -13,10 +13,12 @@ MonoBehaviour:
   m_Name: ClubEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_034
-  displayName: Club Emblem
+  displayName: Club Amplifier
   icon: "\u2663"
-  description: "Club attacks are multiplied by \xD71.25 for each other Club card
-    in hand."
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Card Played\nCondition: Suit = Clubs\nEffect: Club attack
+    damage is multiplied by \xD71.25 for each other Club card in hand; committed
+    cards are excluded. Apply all factors and floor once.\nValue: \xD71.25 each"
   price: 30
   capacityCategory: 0
   canonicalId: rel_034

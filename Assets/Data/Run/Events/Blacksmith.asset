@@ -14,27 +14,30 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: evt_005
   category: 3
-  title: Blacksmith
-  description: You save a blacksmith from a monster, and he offers to repay you.
+  title: Street Mechanic
+  description: You help a street mechanic get rid of a hostile debt collector.
   choices:
-  - label: Accept His Work
-    description: Choose one Enhancement and an owned card to receive it.
+  - label: Accept a Free Mod
+    description: Gain 1 Mod for a card
     effects: []
     interaction: 1
-  - label: Ask for Supplies
-    description: Draw 2 cards.
+    requiredDiscardValue: 0
+  - label: Grab Supplies
+    description: Draw 2 cards
     effects:
     - type: 5
       amount: 2
       consumableId: 
     interaction: 0
-  - label: Ask for Gold
-    description: Gain 10 Gold.
+    requiredDiscardValue: 0
+  - label: Take Credits
+    description: +10 Credits
     effects:
     - type: 0
       amount: 10
       consumableId: 
     interaction: 0
+    requiredDiscardValue: 0
   - label: Take a Whetstone
     description: Gain one Whetstone consumable.
     effects:
@@ -42,3 +45,4 @@ MonoBehaviour:
       amount: 1
       consumableId: whetstone
     interaction: 0
+    requiredDiscardValue: 0

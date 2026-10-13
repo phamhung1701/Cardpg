@@ -14,10 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: spade_rune
   canonicalId: con_016
-  displayName: Spade Rune
+  displayName: Spade Switch
   icon: "\u2660"
-  description: Change one card's suit to Spades per charge. Three charges; one backpack
-    slot until exhausted.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Change one card''s
+    effective suit to Spade per charge; same-suit target spends no charge. Three
+    charges remain in one backpack slot until exhausted. Combat: hand target; outside
+    combat: any owned card.
+
+    Uses: 3'
   price: 5
   uses: 1
   effectType: 5

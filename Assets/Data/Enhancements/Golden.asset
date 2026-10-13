@@ -13,9 +13,14 @@ MonoBehaviour:
   m_Name: Golden
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: enh_007
-  displayName: Golden
+  displayName: Profitable
   icon: GOLD
-  description: While this card is in hand, gain 2 Gold whenever an attack is made
+  description: 'Trigger: While in Hand
+
+    Effect: Gain Credits whenever an attack
+    is made.
+
+    Value: 2'
   price: 20
   canonicalId: enh_007
   rarity: Rare

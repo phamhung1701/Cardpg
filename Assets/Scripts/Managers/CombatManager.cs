@@ -311,7 +311,7 @@ public partial class CombatManager : Singleton<CombatManager>
 
             ProcessReactions(CombatReactionPhase.HitResolved);
             if (_reactionFaulted) return true;
-            Log($"Consumable dealt {result.ActualHpLost} damage to {target.DisplayName}.");
+            Log($"Trick dealt {result.ActualHpLost} damage to {target.DisplayName}.");
             if (player.IsDefeated)
                 ResolveEncounter(EncounterResult.Defeat);
             else if (_enemies.Count == 0 && currentState == GameState.PlayerTurn)
@@ -1083,7 +1083,7 @@ public partial class CombatManager : Singleton<CombatManager>
         if (_parryDamageLeaked || _parryIncomingDamage <= 0 || _parryEffectiveBlock != _parryIncomingDamage) return;
         int drawn = CardManager.Instance != null
             ? CardManager.Instance.DrawExistingToHand(1, _parryDrawCandidates) : 0;
-        Log(drawn > 0 ? "Perfect Parry! Drew 1 card." : "Perfect Parry! No eligible card could be drawn.");
+        Log(drawn > 0 ? "Perfect Block! Drew 1 card." : "Perfect Block! No eligible card could be drawn.");
     }
 
     void CompleteEnemyResponse()
@@ -1104,7 +1104,7 @@ public partial class CombatManager : Singleton<CombatManager>
         int stolen = cards != null ? Math.Min(8, Math.Max(0, cards.gold)) : 0;
         if (stolen > 0) cards.SpendGold(stolen);
         thief.SetStolenGold(stolen);
-        Log($"{thief.DisplayName} stole {stolen} Gold and will flee after 4 player actions unless defeated!");
+        Log($"{thief.DisplayName} stole {stolen} Credits and will flee after 4 player actions unless defeated!");
     }
 
     void CompletePlayerTurnForEnemies()
@@ -1130,7 +1130,7 @@ public partial class CombatManager : Singleton<CombatManager>
         if (returnedGold > 0) CardManager.Instance.AddGold(returnedGold);
         RemoveEnemy(enemy);
         int drawn = CardManager.Instance.DrawToHand(1);
-        Log($"{enemy.DisplayName} defeated! {enemy.GoldReward}g secured.{(returnedGold > 0 ? $" Returned {returnedGold} stolen Gold." : string.Empty)}{(drawn > 0 ? " Drew 1 card." : string.Empty)}");
+        Log($"{enemy.DisplayName} defeated! {enemy.GoldReward} Credits secured.{(returnedGold > 0 ? $" Returned {returnedGold} stolen Credits." : string.Empty)}{(drawn > 0 ? " Drew 1 card." : string.Empty)}");
     }
 
     void AwardDevouringKillBonus(IReadOnlyList<CardInstance> committedCards)
@@ -1539,7 +1539,7 @@ public partial class CombatManager : Singleton<CombatManager>
             if (victoryHeal > 0)
             {
                 int healed = HealPlayer(victoryHeal);
-                if (healed > 0) Log($"Artifacts restored {healed} HP after victory.");
+                if (healed > 0) Log($"Gear restored {healed} HP after victory.");
             }
             SetState(GameState.GameWon);
             Log($"Encounter cleared! +{reward}g");

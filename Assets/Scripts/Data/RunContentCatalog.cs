@@ -9,7 +9,7 @@ public class RunContentCatalog : ScriptableObject
     public EnemyTypeData[] eliteEnemies;
     public EnemyAbility eliteAbility;
 
-    [Header("Boss Suit Abilities")]
+    [Header("Headliner Suit Abilities")]
     public EnemyAbility clubsBossAbility;
     public EnemyAbility diamondsBossAbility;
     public EnemyAbility heartsBossAbility;

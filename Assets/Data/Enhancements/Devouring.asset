@@ -13,9 +13,16 @@ MonoBehaviour:
   m_Name: Devouring
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: devouring
-  displayName: Devouring
+  displayName: Predatory
   icon: ATK
-  description: When this card defeats an enemy, it permanently gains +1 attack.
+  description: 'Trigger: On Card Played
+
+    Condition: Defeats an enemy
+
+    Effect:
+    This card permanently gains flat damage.
+
+    Value: 1'
   price: 15
   canonicalId: enh_005
   rarity: Common

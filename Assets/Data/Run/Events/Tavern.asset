@@ -14,18 +14,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: evt_006
   category: 3
-  title: Tavern
-  description: You come across a roadside tavern.
+  title: Late-Night Diner
+  description: A late-night diner offers a quiet booth and a few useful rumors.
   choices:
-  - label: Ask for Guidance
-    description: Reveal 1 hidden node.
+  - label: Buy a Tip
+    description: Reveal 1 hidden node
     effects:
     - type: 6
       amount: 1
-  - label: Rest
-    description: Lose 2 Gold and heal 5 HP.
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: Pay for a Break
+    description: -2 Credits, +5 HP
     effects:
     - type: 1
       amount: 2
+      consumableId: 
     - type: 2
       amount: 5
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0

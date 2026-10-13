@@ -13,9 +13,15 @@ MonoBehaviour:
   m_Name: RetaliationEmblem
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_016
-  displayName: Retaliation Emblem
+  displayName: Payback Chip
   icon: BLOCK
-  description: Counterattack the enemy for 5 damage after blocking its attack
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Block
+
+    Effect: Counterattack after blocking.
+
+    Value:
+    5 damage'
   price: 20
   capacityCategory: 0
   canonicalId: rel_016
@@ -28,6 +34,7 @@ MonoBehaviour:
     amount: 5
     conditions: []
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

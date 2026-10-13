@@ -14,10 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: torch
   canonicalId: con_005
-  displayName: Torch
+  displayName: Shredder
   icon: TORCH
-  description: Permanently destroy one or two different cards. Choose hand cards
-    in combat, or any owned cards outside combat. At least one card must survive.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Permanently destroy
+    one or two distinct cards; at least one deck card must survive. Combat targets
+    must be in hand; outside combat targets may be any owned cards. Cancel without
+    consuming.
+
+    Uses: 1'
   price: 5
   uses: 1
   effectType: 4

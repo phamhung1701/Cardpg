@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: GildedBlade
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_128
-  displayName: Gilded Blade
+  displayName: Cash Cutter
   icon: "\u2694"
-  description: Your opening attack each combat gains +1 damage for every 10 Gold
-    held.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Opening Attack
+
+    Condition: Credits held
+
+    Effect:
+    Opening attack gains +1 damage per 10 Credits held (whole tens only).
+
+    Value:
+    +1/10 Credits
+
+    Limit: Rounding TBD; provisional'
   price: 20
   capacityCategory: 0
   canonicalId: rel_128

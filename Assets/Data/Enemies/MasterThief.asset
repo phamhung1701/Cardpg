@@ -12,12 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3a8520671e93fea439ddbf46323e52b2, type: 3}
   m_Name: MasterThief
   m_EditorClassIdentifier: CardPG.Runtime::EnemyTypeData
-  enemyName: Master Thief
+  enemyName: Ghost
   maxHp: 24
   baseAttack: 4
   goldReward: 20
   encounterCount: 1
   fleeAfterPlayerTurns: 4
   sourceCard: {fileID: 0}
+  portraitSprite: {fileID: 0}
   abilities:
   - {fileID: 11400000, guid: c2ca12b531905dc41b063d99259154a0, type: 2}

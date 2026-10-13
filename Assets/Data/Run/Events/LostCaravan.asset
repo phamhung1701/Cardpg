@@ -14,16 +14,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: lost_caravan
   category: 3
-  title: Lost Caravan
-  description: A stranded merchant offers a small reward for help.
+  title: Abandoned Delivery
+  description: A delivery drone has crashed in an empty alley. Its cargo is still
+    locked.
   choices:
-  - label: Accept payment
-    description: Gain 6 gold.
+  - label: Report the Crash
+    description: +6 Credits
     effects:
     - type: 0
       amount: 6
-  - label: Search the crates
-    description: Draw up to 1 card.
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: Check the Cargo
+    description: Draw 1 card
     effects:
     - type: 5
       amount: 1
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0

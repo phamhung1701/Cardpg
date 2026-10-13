@@ -13,10 +13,12 @@ MonoBehaviour:
   m_Name: GlassEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_033
-  displayName: Glass Emblem
+  displayName: Glass Mode
   icon: GLASS
-  description: "At exactly 1 HP, card attacks deal 3\xD7 damage. Otherwise card attacks
-    deal normal damage."
+  iconSprite: {fileID: 0}
+  description: "Trigger: On Card Played\nCondition: HP = 1\nEffect: At exactly 1
+    HP, card attacks deal 3\xD7 damage; otherwise card attacks deal normal damage.
+    Replaces Rare Glass and has no inherited vulnerability.\nValue: \xD73 at 1 HP"
   price: 30
   capacityCategory: 0
   canonicalId: rel_033

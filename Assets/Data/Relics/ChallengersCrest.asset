@@ -13,9 +13,20 @@ MonoBehaviour:
   m_Name: ChallengersCrest
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_136
-  displayName: "Challenger\u2019s Crest"
+  displayName: Challenger Patch
   icon: "\u76FE"
-  description: Start Elite and Boss combats with 1 Shield.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Combat Start
+
+    Condition: Enforcer or Headliner combat
+
+    Effect:
+    Start Enforcer and Headliner combats with 1 Shield.
+
+    Value: 1 Shield
+
+    Limit:
+    TBD'
   price: 20
   capacityCategory: 0
   canonicalId: rel_136

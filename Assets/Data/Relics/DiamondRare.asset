@@ -13,9 +13,17 @@ MonoBehaviour:
   m_Name: DiamondRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_027
-  displayName: Diamond Emblem
+  displayName: Diamond Driver
   icon: "\u2666"
-  description: Playing a Diamond draws 2 cards.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Condition: Suit = Diamonds
+
+    Effect:
+    Playing a Diamond draws 2 cards through the normal draw path.
+
+    Value: 2 cards'
   price: 30
   capacityCategory: 0
   canonicalId: rel_027

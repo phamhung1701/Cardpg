@@ -6,7 +6,7 @@ public static class ArtifactUpgradeResolver
 {
     public static string ValidateCatalog(IReadOnlyList<RelicData> catalog)
     {
-        if (catalog == null) return "Artifact catalog is missing";
+        if (catalog == null) return "Gear catalog is missing";
         var byCanonical = new Dictionary<string, RelicData>(StringComparer.Ordinal);
         foreach (var item in catalog)
         {
@@ -15,7 +15,7 @@ public static class ArtifactUpgradeResolver
         }
         foreach (var item in byCanonical.Values)
         {
-            if (item.tier < 1) return $"Artifact tier must be positive: {item.canonicalId}";
+            if (item.tier < 1) return $"Gear tier must be positive: {item.canonicalId}";
             if (string.IsNullOrEmpty(item.upgradeFromId)) continue;
             if (!byCanonical.TryGetValue(item.upgradeFromId, out var parent)) return $"Missing artifact parent {item.upgradeFromId} for {item.canonicalId}";
             if (parent.canonicalId == item.canonicalId || parent.tier + 1 != item.tier) return $"Invalid artifact tier link: {item.canonicalId}";
@@ -26,7 +26,7 @@ public static class ArtifactUpgradeResolver
             var current = item;
             while (current != null && !string.IsNullOrEmpty(current.upgradeFromId))
             {
-                if (!seen.Add(current.canonicalId)) return $"Artifact upgrade cycle at {item.canonicalId}";
+                if (!seen.Add(current.canonicalId)) return $"Gear upgrade cycle at {item.canonicalId}";
                 byCanonical.TryGetValue(current.upgradeFromId, out current);
             }
         }
@@ -38,12 +38,12 @@ public static class ArtifactUpgradeResolver
     {
         reason = ValidateCatalog(catalog);
         if (!string.IsNullOrEmpty(reason)) return false;
-        if (predecessor == null || replacement == null || owned == null) { reason = "Artifact unavailable"; return false; }
+        if (predecessor == null || replacement == null || owned == null) { reason = "Gear unavailable"; return false; }
         if (predecessor.canonicalId != replacement.upgradeFromId || replacement.tier <= predecessor.tier)
         { reason = "Not an immediate artifact upgrade"; return false; }
         if (!owned.Contains(predecessor)) { reason = "Predecessor not owned"; return false; }
         if (owned.Any(x => x != null && x.canonicalId == replacement.canonicalId))
-        { reason = "Artifact upgrade already owned"; return false; }
+        { reason = "Gear upgrade already owned"; return false; }
         reason = string.Empty;
         return true;
     }

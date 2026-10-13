@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: GoldenVault
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_127
-  displayName: Golden Vault
+  displayName: Savings Account
   icon: VAULT
-  description: After Boss Gold rewards settle, gain 10% of the resulting unspent
-    Gold, rounded to nearest with ties up.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Headliner Defeated
+
+    Condition: Unspent Credits
+
+    Effect:
+    Headliner defeat grants 10% of unspent Credits.
+
+    Value: 10%
+
+    Limit: Savings
+    accumulate; provisional'
   price: 30
   capacityCategory: 0
   canonicalId: rel_127

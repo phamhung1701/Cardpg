@@ -14,11 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: evt_010
   category: 5
-  title: Swamp
-  description: You spot something valuable in the middle of a dangerous swamp.
+  title: Toxic Runoff
+  description: Something valuable glints beyond a pool of toxic runoff.
   choices:
-  - label: Cross the Swamp
-    description: Lose 5 HP; equal odds to find an Artifact, an Enhancement, or nothing.
+  - label: Cross the Runoff
+    description: -5 HP; 33% Gear / 33% Mod / 33% nothing
     effects:
     - type: 3
       amount: 5
@@ -28,8 +28,8 @@ MonoBehaviour:
       consumableId: 
     interaction: 0
     requiredDiscardValue: 0
-  - label: Take Another Route
-    description: Nothing happens.
+  - label: Find Another Way
+    description: Nothing happens
     effects: []
     interaction: 0
     requiredDiscardValue: 0

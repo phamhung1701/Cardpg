@@ -13,10 +13,22 @@ MonoBehaviour:
   m_Name: MimicEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_116
-  displayName: Mimic Emblem
+  displayName: Echo Driver
   icon: MIMIC+
-  description: Keep base behavior. Held cards with matching ranks trigger their in-hand
-    effects one additional time.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: While in Hand
+
+    Condition: Held cards share matching
+    rank
+
+    Effect: Keep base; held matching-rank cards trigger in-hand effects
+    one additional time.
+
+    Value: Matching-rank held effects trigger +1 additional
+    time
+
+    Limit: Retains base all-held retrigger once; extra applies only to
+    matching rank and eligible in-hand effects'
   price: 30
   capacityCategory: 0
   canonicalId: rel_116

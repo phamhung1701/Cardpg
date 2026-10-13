@@ -42,7 +42,7 @@ public class RunEventChoice
     [Min(0)] public int requiredDiscardValue;
 }
 
-[CreateAssetMenu(fileName = "RunEvent", menuName = "Game/Run Event")]
+[CreateAssetMenu(fileName = "RunEvent", menuName = "Game/Incident")]
 public class RunEventDefinition : ScriptableObject
 {
     public string id;

@@ -14,11 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: mirror
   canonicalId: con_004
-  displayName: Mirror
+  displayName: Copycat
   icon: MIRROR
-  description: Copy one card's suit, rank, enhancement and permanent attack bonus.
-    Choose a hand card in combat (copy goes to discard), or any card outside combat
-    (copy joins the deck).
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Copy one card''s effective
+    suit, rank, mod and permanent attack bonus into a new card ID. Combat: select
+    a hand card; copy enters discard. Outside combat: select any owned card; copy
+    enters the next encounter deck.
+
+    Uses: 1'
   price: 5
   uses: 1
   effectType: 3

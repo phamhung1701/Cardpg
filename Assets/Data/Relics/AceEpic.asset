@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: AceEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_115
-  displayName: Ace Emblem
+  displayName: Ace Protocol
   icon: ACE++
-  description: Keep Rare behavior. An Ace paired with a Face card is guaranteed to
-    critically strike.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Ace Pair
+
+    Condition: Ace paired with a Face card
+
+    Effect:
+    Keep Rare; pairing Ace with Face guarantees crit.
+
+    Value: Guaranteed critical
+    hit
+
+    Limit: Ace paired with J (Jack)'
   price: 30
   capacityCategory: 0
   canonicalId: rel_115

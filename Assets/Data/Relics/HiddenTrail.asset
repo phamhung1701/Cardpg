@@ -13,10 +13,22 @@ MonoBehaviour:
   m_Name: HiddenTrail
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_135
-  displayName: Hidden Trail
+  displayName: Side Door
   icon: TRAIL
-  description: Once per map before entry, reroll one reachable hidden node to a different
-    hidden type. Never changes Bosses, nodes, or routes.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Before Node Entry
+
+    Condition: Once per district; reachable
+    hidden node
+
+    Effect: Once/district reroll reachable hidden node to different
+    hidden type before entry.
+
+    Value: 1 hidden-node reroll
+
+    Limit: Once per
+    district; first reachable hidden Incident/Risk changes to the opposite type;
+    deterministic; no Headliner/connectivity change'
   price: 20
   capacityCategory: 0
   canonicalId: rel_135

@@ -1443,7 +1443,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: CARDPG
+  m_text: DEALBREAK
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -3650,7 +3650,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: CARDPG
+  m_text: DEALBREAK
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -4995,17 +4995,17 @@ MonoBehaviour:
   navigator: {fileID: 1243943784}
   bodyLabel: {fileID: 1698594191}
   backButton: {fileID: 1313731849}
-  creditsText: 'CARDPG
+  creditsText: 'DEALBREAK
 
 
     Prototype design and development
 
 
-    Built with Unity
+    Built with
+    Unity
 
 
-    Inspired
-    by card-based roguelikes and tabletop card combat.'
+    Inspired by card-based roguelikes and tabletop card combat.'
 --- !u!114 &1287286029
 MonoBehaviour:
   m_ObjectHideFlags: 0

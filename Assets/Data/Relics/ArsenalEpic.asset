@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: ArsenalEpic
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_030
-  displayName: Arsenal Emblem
+  displayName: Extra Slots
   icon: ARSENAL+
-  description: "Face cards in hand grant diminishing hand capacity: floor(1 + 1/2
-    + \u2026 + 1/n). Does not inherit earlier tiers."
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Passive
+
+    Condition: Face Cards in hand
+
+    Effect:
+    Increase hand size based on the number of Face Cards in hand, with diminishing
+    returns.
+
+    Value: Hand capacity += floor(1 + 1/2 + ... + 1/n)
+
+    Limit:
+    n is Face cards in hand; no inherited lower-tier effects; no forced discard'
   price: 30
   capacityCategory: 0
   canonicalId: rel_030

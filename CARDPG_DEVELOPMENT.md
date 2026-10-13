@@ -1,4 +1,6 @@
-# CardPG Development Handoff
+# Dealbreak Development Handoff
+
+> Historical implementation and architecture notes. The confirmed Dealbreak GameData workbook is authoritative for player-facing content names and terms; identifiers and mechanics below reflect the documented implementation snapshot and are not automatically migrated by workbook renames.
 
 Current implementation baseline when this handoff was created: branch `main`, commit `3c1e643` (`feat: complete phase 3 boss progression`). Unity project: Unity 6000.3.24f1, URP, New Input System.
 

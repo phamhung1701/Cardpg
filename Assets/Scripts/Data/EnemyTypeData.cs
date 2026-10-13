@@ -10,7 +10,7 @@ public class EnemyTypeData : ScriptableObject
     [Min(1)] public int encounterCount = 1;
     [Min(0)] public int fleeAfterPlayerTurns;
     public CardData sourceCard;
-    [Tooltip("Optional authored portrait. Boss face-card identity continues to use sourceCard.")]
+    [Tooltip("Optional authored portrait. Headliner face-card identity continues to use sourceCard.")]
     public Sprite portraitSprite;
     public EnemyAbility[] abilities;
 

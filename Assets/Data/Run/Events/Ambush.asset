@@ -14,16 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: evt_007
   category: 5
-  title: Ambush
-  description: You walk straight into an enemy ambush.
+  title: Back-Alley Trap
+  description: A rival crew blocks the street and demands a quick decision.
   choices:
-  - label: Block the Attack
-    description: Discard cards with a total value of exactly 6.
+  - label: Brace for Impact
+    description: Discard cards with a total value exactly equal to 6
     effects: []
     interaction: 3
     requiredDiscardValue: 6
-  - label: Flee
-    description: Lose 3 HP and 5 Gold.
+  - label: Make a Run for It
+    description: -3 HP, -5 Credits
     effects:
     - type: 3
       amount: 3

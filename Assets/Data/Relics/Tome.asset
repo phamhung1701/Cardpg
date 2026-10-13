@@ -13,9 +13,17 @@ MonoBehaviour:
   m_Name: Tome
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_007
-  displayName: Tome
+  displayName: Pocket Guide
   icon: TOME
-  description: Draw 1 additional card after the baseline encounter draw
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Combat Start
+
+    Condition: Enough free hand space
+
+    Effect:
+    Draw cards.
+
+    Value: 1'
   price: 18
   capacityCategory: 0
   canonicalId: rel_007
@@ -28,6 +36,7 @@ MonoBehaviour:
     amount: 1
     conditions: []
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

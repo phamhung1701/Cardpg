@@ -13,10 +13,20 @@ MonoBehaviour:
   m_Name: MerchantsBadge
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_124
-  displayName: "Merchant\u2019s Badge"
+  displayName: Loyalty Card
   icon: SALE
-  description: Paid Artifact, Enhancement, and Consumable Shop items cost 20% less,
-    rounded to nearest with ties up.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Purchase
+
+    Condition: Eligible item purchase
+
+    Effect:
+    20% purchase discount.
+
+    Value: 20%
+
+    Limit: Discount before cashback;
+    provisional'
   price: 20
   capacityCategory: 0
   canonicalId: rel_124

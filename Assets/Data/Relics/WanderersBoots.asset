@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: WanderersBoots
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_133
-  displayName: "Wanderer\u2019s Boots"
+  displayName: City Sneakers
   icon: BOOTS
-  description: After visiting 3 distinct node types on a map, heal 3 HP and gain
-    3 Gold once per map.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Node Visit
+
+    Condition: 3 different node types visited
+    this district
+
+    Effect: Visit 3 different node types in district: heal and
+    gain Credits once/district.
+
+    Value: Heal 3 HP and gain 3 Credits
+
+    Limit:
+    Once per district after 3 distinct node types visited'
   price: 20
   capacityCategory: 0
   canonicalId: rel_133

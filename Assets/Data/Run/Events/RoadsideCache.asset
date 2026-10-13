@@ -14,16 +14,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: roadside_cache
   category: 3
-  title: Roadside Cache
-  description: An abandoned supply cart still holds something useful.
+  title: Dead Drop
+  description: You find a sealed stash behind a deserted station locker.
   choices:
-  - label: Take the coin
-    description: Gain 8 gold.
+  - label: Take the Cash
+    description: +8 Credits
     effects:
     - type: 0
       amount: 8
-  - label: Use the medicine
-    description: Heal 6 HP.
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: Catch Your Breath
+    description: +6 HP
     effects:
     - type: 2
       amount: 6
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0

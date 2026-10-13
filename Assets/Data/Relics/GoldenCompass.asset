@@ -13,10 +13,19 @@ MonoBehaviour:
   m_Name: GoldenCompass
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: golden_compass
-  displayName: Golden Compass
+  displayName: Payout Tracker
   icon: GOLD
+  iconSprite: {fileID: 0}
   description: Gain +4 gold after each victory
   price: 20
+  capacityCategory: 0
+  canonicalId: 
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects: []
+  ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

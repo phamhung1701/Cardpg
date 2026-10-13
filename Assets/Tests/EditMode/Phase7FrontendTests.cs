@@ -263,11 +263,11 @@ public sealed class Phase7FrontendTests
         Assert.That(panel.activeSelf, Is.True);
         Assert.That(title.text, Is.EqualTo("RUN DEFEAT"));
         Assert.That(body.text, Does.StartWith($"Seed  {run.RunSeed}\n"));
-        Assert.That(body.text, Does.Contain("Gold  27"));
-        Assert.That(body.text, Does.Contain("Bosses Defeated"));
+        Assert.That(body.text, Does.Contain("Credits  27"));
+        Assert.That(body.text, Does.Contain("Headliners Defeated"));
         Assert.That(body.text, Does.Contain("Total Run Time  01:08"));
-        Assert.That(body.text, Does.Contain("Map 1  01:02"));
-        Assert.That(body.text, Does.Contain("Map 2  00:05 (incomplete)"));
+        Assert.That(body.text, Does.Contain("District 1  01:02"));
+        Assert.That(body.text, Does.Contain("District 2  00:05 (incomplete)"));
 
         result.RetrySameSeed();
         Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));

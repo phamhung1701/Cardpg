@@ -14,20 +14,28 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: dangerous_shortcut
   category: 5
-  title: Dangerous Shortcut
-  description: A hazardous path may lead to valuable supplies.
+  title: Service Tunnel
+  description: An unmarked maintenance tunnel cuts across the district.
   choices:
-  - label: Take the shortcut
-    description: Lose 4 HP, gain 10 gold, and draw 1 card.
+  - label: Take the Tunnel (60% chance)
+    description: -5 HP, +7 Credits, draw 2 cards
     effects:
     - type: 3
       amount: 4
+      consumableId: 
     - type: 0
       amount: 10
+      consumableId: 
     - type: 5
       amount: 1
-  - label: Stay safe
-    description: Heal 3 HP.
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0
+  - label: Play It Safe
+    description: +5 HP
     effects:
     - type: 2
       amount: 3
+      consumableId: 
+    interaction: 0
+    requiredDiscardValue: 0

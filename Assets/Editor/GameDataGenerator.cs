@@ -20,7 +20,7 @@ public static class GameDataGenerator
         Debug.Log("Game data assets generated.");
     }
 
-    [MenuItem("Game/Generate Artifact Assets")]
+    [MenuItem("Dealbreak/Content/Generate Gear Assets")]
     public static void GenerateArtifacts()
     {
         EnsureFolder(ArtifactDir);
@@ -187,7 +187,7 @@ public static class GameDataGenerator
         Debug.Log("Artifact assets created or updated.");
     }
 
-    [MenuItem("Game/Generate Enhancement Assets")]
+    [MenuItem("Dealbreak/Content/Generate Mod Assets")]
     public static void GenerateEnhancements()
     {
         EnsureFolder(EnhancementDir);

@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: CheaterRare
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_024
-  displayName: Cheater Emblem
+  displayName: Extra Move
   icon: TURN+
-  description: After each normal player action, take one bonus action before enemies
-    respond. Bonus actions cannot generate another bonus.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: After each normal player card action
+
+    Condition: Action
+    is not itself a bonus action
+
+    Effect: Gain exactly one bonus action before
+    the enemy response; the bonus action cannot generate another bonus action.
+
+    Value:
+    1
+
+    Limit: One bonus action per normal action'
   price: 30
   capacityCategory: 0
   canonicalId: rel_024

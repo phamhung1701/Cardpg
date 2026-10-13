@@ -14,15 +14,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: bread
   canonicalId: con_001
-  displayName: Bread
+  displayName: Energy Bar
   icon: HP
-  description: Heal 5 HP. One use.
+  description: 'Target: Self
+
+    Timing: Anytime
+
+    Effect: Heal HP.
+
+    Value:
+    5
+
+    Uses: 1'
   price: 5
   uses: 1
   effectType: 0
   healAmount: 5
   damageAmount: 0
   enhancementToApply: {fileID: 0}
+  targetSuit: 0
   shopAvailable: 1
   dropAvailable: 1
   eventAvailable: 0

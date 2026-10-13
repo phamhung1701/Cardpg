@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: TrophyRack
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_137
-  displayName: Trophy Rack
+  displayName: Victory Wall
   icon: TROPHY
-  description: Each Elite kill permanently adds +1 damage to your opening attack
-    against Bosses.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Enforcer Kill
+
+    Condition: Enforcer defeated
+
+    Effect:
+    Enforcer kill permanently strengthens opening attack vs Headliner.
+
+    Value:
+    +1 opening-attack damage versus Headliner
+
+    Limit: Each actual Enforcer kill;
+    run-local; applies to first attack action of each Headliner encounter'
   price: 20
   capacityCategory: 0
   canonicalId: rel_137

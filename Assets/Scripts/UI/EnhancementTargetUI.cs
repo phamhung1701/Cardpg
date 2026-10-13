@@ -256,7 +256,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         var candidates = run != null ? run.GetEventEnhancementsForChoice(_eventChoiceIndex) : null;
         if (!panel || !cardsContainer || !cardButtonPrefab || candidates == null) return;
         if (titleLabel) titleLabel.text = "CHOOSE AN ENHANCEMENT";
-        if (feedbackLabel) feedbackLabel.text = "Choose one Enhancement, then click a card in your hand to receive it.";
+        if (feedbackLabel) feedbackLabel.text = "Choose one Mod, then click a card in your hand to receive it.";
         if (confirmButton) confirmButton.interactable = false;
         ClearTargetCards();
         foreach (var enhancement in candidates)
@@ -297,7 +297,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             _eventChoiceIndex >= 0 || _upgradeIndex >= 0 ? FindFirstObjectByType<RunEventUI>()?.panel : null;
         if (_originPanel) _originPanel.SetActive(false);
         if (titleLabel) titleLabel.text = $"{offer.Icon} {offer.DisplayName}";
-        if (feedbackLabel) feedbackLabel.text = "Click a card in your hand to target this Enhancement.";
+        if (feedbackLabel) feedbackLabel.text = "Click a card in your hand to target this Mod.";
         if (confirmButton) confirmButton.interactable = false;
         SaveAndCompactPanel();
         if (panel) { panel.SetActive(true); panel.transform.SetAsLastSibling(); }
@@ -313,7 +313,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         var run = RunManager.Instance;
         string unavailableReason = run != null
             ? run.GetEnhancementAcquisitionTargetUnavailableReason(id, _acquisitionEnhancement)
-            : "Enhancement unavailable";
+            : "Mod unavailable";
         if (!string.IsNullOrEmpty(unavailableReason))
         {
             if (_targetedHandView) _targetedHandView.SetSelected(false);
@@ -575,7 +575,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             return;
         }
         string reason = failure ?? (_selectedCardId == 0 ?
-            (_acquisitionTargetMode ? "Click a card in your hand to target this Enhancement." : "Select an owned card, then confirm.") :
+            (_acquisitionTargetMode ? "Click a card in your hand to target this Mod." : "Select an owned card, then confirm.") :
             _acquisitionTargetMode ? RunManager.Instance.GetEnhancementAcquisitionTargetUnavailableReason(_selectedCardId, _acquisitionEnhancement) :
                 RunManager.Instance.GetEnhancementTargetUnavailableReason(_selectedCardId));
         var selectedCard = CardManager.Instance != null ? CardManager.Instance.FindOwnedCard(_selectedCardId) : null;
@@ -608,7 +608,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             }
             finally { _resolving = false; }
             if (consumed) Hide();
-            else { ValidateTargeting(); UpdateFeedback("Consumable or target unavailable"); }
+            else { ValidateTargeting(); UpdateFeedback("Trick or target unavailable"); }
             return;
         }
         if (_selectedCardId == 0) return;
@@ -639,7 +639,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
         {
             _replacementConfirmed = false;
             _replacementToConfirm = null;
-            UpdateFeedback("The existing Enhancement changed. Review the replacement again.");
+            UpdateFeedback("The existing Mod changed. Review the replacement again.");
             return;
         }
         bool replaceExisting = isAcquisition && target != null && target.Enhancement != null;
@@ -661,9 +661,9 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             ? run.GetEnhancementAcquisitionTargetUnavailableReason(targetId, _acquisitionEnhancement)
             : run.GetEnhancementTargetUnavailableReason(targetId);
         if (string.IsNullOrEmpty(reason))
-            reason = _consumableSlotIndex >= 0 ? "Consumable or target unavailable" :
-                _eventChoiceIndex >= 0 ? "Event enhancement unavailable" :
+            reason = _consumableSlotIndex >= 0 ? "Trick or target unavailable" :
+                _eventChoiceIndex >= 0 ? "Incident Mod unavailable" :
                 offerId != null ? run.GetShopOfferUnavailableReason(offerId) : "Upgrade unavailable";
-        UpdateFeedback(string.IsNullOrEmpty(reason) ? "Enhancement unavailable" : reason);
+        UpdateFeedback(string.IsNullOrEmpty(reason) ? "Mod unavailable" : reason);
     }
 }

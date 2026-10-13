@@ -65,7 +65,7 @@ public sealed class ArtifactContentBatch1Tests
     {
         var assets = new[] { _leather, _dagger, _tome, _sword };
         var ids = new[] { "rel_005", "rel_006", "rel_007", "rel_023" };
-        var names = new[] { "Leather Armor", "Dagger", "Tome", "Sword" };
+        var names = new[] { "Street Jacket", "Box Cutter", "Pocket Guide", "Power Baton" };
         var snapshots = assets.Select(JsonUtility.ToJson).ToArray();
         for (int i = 0; i < assets.Length; i++)
         {

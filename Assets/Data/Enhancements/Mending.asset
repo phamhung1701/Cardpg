@@ -13,9 +13,13 @@ MonoBehaviour:
   m_Name: Mending
   m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
   id: mending
-  displayName: Mending
+  displayName: Regenerative
   icon: HP
-  description: Heal 2 HP at each player-turn start while this card is in hand
+  description: 'Trigger: While in Hand
+
+    Effect: Heal HP.
+
+    Value: 2'
   price: 15
   canonicalId: enh_003
   rarity: Common

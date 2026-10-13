@@ -13,9 +13,15 @@ MonoBehaviour:
   m_Name: LeatherArmor
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_005
-  displayName: Leather Armor
+  displayName: Street Jacket
   icon: ARMOR
-  description: Reduce each incoming combat damage instance by 3
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Taking Damage
+
+    Effect: Reduce incoming damage.
+
+    Value:
+    -3 damage'
   price: 15
   capacityCategory: 0
   canonicalId: rel_005
@@ -28,6 +34,7 @@ MonoBehaviour:
     amount: 3
     conditions: []
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: WarpathBanner
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_134
-  displayName: Warpath Banner
+  displayName: Win-Streak Patch
   icon: WARPATH
-  description: Consecutive Combat/Elite/Boss wins add +2 starting Block to the next
-    combat, capped at 6. Noncombat nodes reset the streak.
+  iconSprite: {fileID: 0}
+  description: 'Trigger: Combat Start
+
+    Condition: Consecutive combat wins
+
+    Effect:
+    Consecutive combat wins increase starting block next combat.
+
+    Value: +2 encounter
+    Block per consecutive Combat/Enforcer/Headliner victory
+
+    Limit: Cap 6; reset
+    by a completed noncombat node; consumed before Shield; expires at encounter end'
   price: 20
   capacityCategory: 0
   canonicalId: rel_134

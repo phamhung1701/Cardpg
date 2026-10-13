@@ -14,15 +14,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::ConsumableData
   id: blood_vial
   canonicalId: con_014
-  displayName: Blood Vial
+  displayName: Overclock Patch
   icon: HP
-  description: Apply Vampiric to one unenhanced card.
+  description: 'Target: Card
+
+    Timing: Anytime
+
+    Effect: Apply Overclocked
+    to a card.
+
+    Uses: 1'
   price: 5
   uses: 1
   effectType: 2
   healAmount: 0
   damageAmount: 0
   enhancementToApply: {fileID: 11400000, guid: dbf29c99350534b4abe5fdf2d8dcd931, type: 2}
+  targetSuit: 0
   shopAvailable: 1
   dropAvailable: 0
   eventAvailable: 1

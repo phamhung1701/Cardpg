@@ -42,12 +42,12 @@ public sealed class ShopOffer
 
     public string DisplayName => kind switch
     {
-        ShopOfferKind.Artifact => artifact != null ? artifact.displayName : "Unknown Artifact",
-        ShopOfferKind.Enhancement => enhancement != null ? enhancement.displayName : "Unknown Enhancement",
-        ShopOfferKind.Investment => "Investment",
-        ShopOfferKind.Guidance => "Guidance",
-        ShopOfferKind.Consumable => consumable != null ? consumable.displayName : "Unknown Consumable",
-        ShopOfferKind.Contract => "Quest",
+        ShopOfferKind.Artifact => artifact != null ? artifact.displayName : "Unknown Gear",
+        ShopOfferKind.Enhancement => enhancement != null ? enhancement.displayName : "Unknown Mod",
+        ShopOfferKind.Investment => "Stake",
+        ShopOfferKind.Guidance => "Intel",
+        ShopOfferKind.Consumable => consumable != null ? consumable.displayName : "Unknown Trick",
+        ShopOfferKind.Contract => "Contract",
         ShopOfferKind.Supply => "Supply",
         _ => "Unknown Offer"
     };
@@ -74,13 +74,13 @@ public sealed class ShopOffer
         if (kind == ShopOfferKind.Consumable)
             return consumable != null ? consumable.description : string.Empty;
         if (kind == ShopOfferKind.Investment)
-            return $"Invest a positive amount of Gold (up to your current Gold). At the next Shop, a seeded 50% chance pays 3× your stake; otherwise you lose the stake.";
+            return "Invest Credits now; at the next Black Market, the investment may return more Credits or return nothing.";
         if (kind == ShopOfferKind.Guidance)
-            return "Reveal one reachable hidden Event or Risk node on the current map.";
+            return "Reveal 1 random hidden node on the current district.";
         if (kind == ShopOfferKind.Supply)
-            return "Draw cards from the existing Draw Pile for 3 Gold each, up to your hand limit. Once per Shop; no recycling.";
+            return "Draw cards from the existing Draw Pile for 3 Credits each, up to your hand limit. Once per Black Market; no recycling.";
         if (kind == ShopOfferKind.Contract)
-            return "Pay 20 Gold, then choose one run-local objective. Complete it for a reward; failure costs 5 HP.";
+            return "Choose: win 2 encounters within 12 districts for 6 Credits; defeat a reachable Enforcer before leaving this district for an eligible Rare Gear or heal 5 HP if none is collectible; or win an encounter with zero actual HP loss for 10 Credits. Contract is run-local and uses no Gear slot. One active Contract maximum; failure settles once for up to 5 HP, never below 1.";
         return string.Empty;
     }
 }

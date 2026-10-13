@@ -13,10 +13,17 @@ MonoBehaviour:
   m_Name: Dagger
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: rel_006
-  displayName: Dagger
+  displayName: Box Cutter
   icon: DAGGER
-  description: Attacks gain +3 damage, then total action damage is capped at 10 before
-    criticals
+  iconSprite: {fileID: 0}
+  description: 'Trigger: On Card Played
+
+    Effect: Add flat damage.
+
+    Value:
+    +3 damage
+
+    Limit: Total damage cannot exceed 10.'
   price: 15
   capacityCategory: 0
   canonicalId: rel_006
@@ -33,6 +40,7 @@ MonoBehaviour:
     amount: 10
     conditions: []
   ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 0

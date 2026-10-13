@@ -14,24 +14,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: CardPG.Runtime::RunEventDefinition
   id: evt_100
   category: 5
-  title: Blood Ritual
-  description: A forbidden ritual offers power at a severe cost. Choose only if you
-    can bear the price.
+  title: Redline Deal
+  description: A black-market broker offers an extreme upgrade with an equally extreme
+    price; appears on a 1-in-20 eligible Risk roll.
   choices:
-  - label: Everything
-    description: Set maximum HP to 5 (current HP is clamped, never healed) and gain
-      a Legendary Artifact.
+  - label: Go All In
+    description: Set max HP to 5; clamp current HP without healing; gain an eligible
+      Legendary Gear. If slots are full, choose replacement or cancel before the
+      effect.
     effects: []
     interaction: 0
     requiredDiscardValue: 0
-  - label: A Pool
-    description: Pay 15 current HP (must remain alive) and gain an Epic Artifact.
+  - label: Take the Big Cut
+    description: Pay 15 current HP (must remain alive); gain an eligible Epic Gear.
+      Replacement/cancel is resolved before payment.
     effects: []
     interaction: 0
     requiredDiscardValue: 0
-  - label: A Drop
-    description: Pay 5 current HP (must remain alive) and upgrade a random eligible
-      Artifact by one tier.
+  - label: Take the Small Cut
+    description: Pay 5 current HP (must remain alive); upgrade a random owned Gear
+      by exactly one tier.
     effects: []
     interaction: 0
     requiredDiscardValue: 0

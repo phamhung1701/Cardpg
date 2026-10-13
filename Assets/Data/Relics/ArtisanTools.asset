@@ -13,10 +13,19 @@ MonoBehaviour:
   m_Name: ArtisanTools
   m_EditorClassIdentifier: CardPG.Runtime::RelicData
   id: artisan_tools
-  displayName: Artisan Tools
+  displayName: Modder's Kit
   icon: ENH
+  iconSprite: {fileID: 0}
   description: Enhanced cards deal +3 damage
   price: 25
+  capacityCategory: 0
+  canonicalId: 
+  rarity: Common
+  tier: 1
+  upgradeFromId: 
+  effects: []
+  ruleModifiers: []
+  specialRule: 0
   restrictToSuit: 0
   affectedSuit: 0
   requiresEnhancedCard: 1
