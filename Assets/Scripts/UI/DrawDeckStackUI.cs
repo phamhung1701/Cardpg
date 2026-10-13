@@ -73,6 +73,7 @@ public sealed class DrawDeckStackUI : MonoBehaviour
             if (image == null) continue;
             image.sprite = sprite;
             image.type = Image.Type.Simple;
+            image.preserveAspect = true;
             // Keep a faint card outline when the draw pile is exhausted.
             image.gameObject.SetActive(i < DisplayedDepth || (count == 0 && i == 0));
             image.color = count == 0

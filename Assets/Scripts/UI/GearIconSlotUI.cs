@@ -52,6 +52,7 @@ public sealed class GearIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPoint
 
     public void BindEmpty()
     {
+        if (TryGetComponent<Selectable>(out var selectable)) selectable.interactable = false;
         _gear = null;
         _hover = null;
         _leave = null;
@@ -75,6 +76,7 @@ public sealed class GearIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPoint
         Action<GearData> select, long instanceId, Action<long, GearData> mergeSelect, bool mergeSelected,
         bool mergeMode = false, bool mergeEligible = true, bool detailSelected = false)
     {
+        if (TryGetComponent<Selectable>(out var selectable)) selectable.interactable = true;
         _gear = gear;
         _hover = hover;
         _leave = leave;
@@ -135,6 +137,14 @@ public sealed class GearIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPoint
     {
         var image = GetComponent<Image>();
         if (image == null) return;
+        if (CombatDetailPanelUI.IsCombatActive)
+        {
+            image.sprite = null;
+            image.type = Image.Type.Simple;
+            image.color = _detailSelected || _mergeSelected ? new Color(0.49f, 0.37f, 0.19f)
+                : _gear == null ? new Color(0.09f, 0.13f, 0.16f) : new Color(0.19f, 0.25f, 0.29f);
+            return;
+        }
         var sprite = _gear == null ? _emptySlotSprite
             : (_mergeSelected || _detailSelected) && _selectedSlotSprite != null ? _selectedSlotSprite : _occupiedSlotSprite;
         if (sprite != null)
