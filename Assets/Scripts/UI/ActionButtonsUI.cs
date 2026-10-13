@@ -41,6 +41,8 @@ public class ActionButtonsUI : MonoBehaviour
     TMP_Text _consumableContextText;
     Button _consumableUseButton;
     Button _consumableSellButton;
+    Button _consumableDiscardButton;
+    bool _discardConfirmationArmed;
     RectTransform _consumableContextRect;
     EnemyGroupUI _enemyGroup;
     readonly Vector3[] _consumableSlotCorners = new Vector3[4];
@@ -605,6 +607,7 @@ public class ActionButtonsUI : MonoBehaviour
             ClearSelectedConsumable();
         else
         {
+            _discardConfirmationArmed = false;
             _selectedConsumableSlot = slotIndex;
             _selectedConsumable = item;
             RefreshSelectedConsumableContext();
@@ -650,10 +653,12 @@ public class ActionButtonsUI : MonoBehaviour
         _consumableContextText.alignment = TextAlignmentOptions.TopLeft;
         _consumableContextText.raycastTarget = false;
 
-        _consumableUseButton = CreateConsumableActionButton("Use Trick", "USE", new Vector2(-62f, 10f));
-        _consumableSellButton = CreateConsumableActionButton("Sell Trick", "SELL", new Vector2(62f, 10f));
+        _consumableUseButton = CreateConsumableActionButton("Use Trick", "USE", new Vector2(-88f, 10f));
+        _consumableSellButton = CreateConsumableActionButton("Sell Trick", "SELL", Vector2.zero);
+        _consumableDiscardButton = CreateConsumableActionButton("Discard Trick", "DISCARD", new Vector2(88f, 10f));
         _consumableUseButton.onClick.AddListener(UseSelectedConsumable);
-        _consumableSellButton.onClick.AddListener(SellSelectedConsumable);
+        _consumableSellButton.onClick.AddListener(SellOrCancelSelectedConsumable);
+        _consumableDiscardButton.onClick.AddListener(DiscardSelectedConsumable);
         _consumableContextPanel.SetActive(false);
     }
 
@@ -665,7 +670,7 @@ public class ActionButtonsUI : MonoBehaviour
         rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0f);
         rect.pivot = new Vector2(0.5f, 0f);
         rect.anchoredPosition = position;
-        rect.sizeDelta = new Vector2(112f, 44f);
+        rect.sizeDelta = new Vector2(82f, 44f);
         var image = go.GetComponent<Image>();
         image.color = new Color(0.22f, 0.43f, 0.34f, 1f);
         var button = go.GetComponent<Button>();
@@ -683,10 +688,16 @@ public class ActionButtonsUI : MonoBehaviour
         var text = labelObject.GetComponent<TMP_Text>();
         text.font = _consumableContextText.font;
         text.text = label;
-        text.fontSize = 22f;
+        text.fontSize = 16f;
         text.alignment = TextAlignmentOptions.Center;
         text.raycastTarget = false;
         return button;
+    }
+
+    static void SetConsumableActionLabel(Button button, string value)
+    {
+        if (button != null && button.GetComponentInChildren<TMP_Text>(true) is TMP_Text label)
+            label.text = value;
     }
 
     void RefreshSelectedConsumableContext()
@@ -700,6 +711,7 @@ public class ActionButtonsUI : MonoBehaviour
         {
             _selectedConsumableSlot = -1;
             _selectedConsumable = null;
+            _discardConfirmationArmed = false;
             if (_consumableContextPanel) _consumableContextPanel.SetActive(false);
             return;
         }
@@ -708,14 +720,27 @@ public class ActionButtonsUI : MonoBehaviour
         var definition = _selectedConsumable.Definition;
         if (_consumableContextText)
         {
-            _consumableContextText.text = $"<size=115%><b>{definition.displayName}</b></size>\n{definition.description}" +
-                (run != null && run.CanSellItems ? string.Empty : "\n<size=85%><color=#B7C0C7>Sell in Black Market</color></size>");
+            int stackCount = cards.GetConsumableStackCountAtSlot(_selectedConsumableSlot);
+            _consumableContextText.text = _discardConfirmationArmed
+                ? $"Discard 1 of {stackCount} copies of {definition.displayName}? This removes this copy and all {_selectedConsumable.RemainingCharges} remaining charge(s). No reward."
+                : $"<size=115%><b>{definition.displayName}</b></size>" +
+                    (stackCount > 1 ? $" — {stackCount} copies" : string.Empty) + $"\n{definition.description}" +
+                    (run != null && run.CanSellItems ? string.Empty : "\n<size=85%><color=#B7C0C7>Sell in Black Market</color></size>");
             float availableWidth = Mathf.Max(80f, _consumableContextRect.rect.width - 24f);
             float textHeight = _consumableContextText.GetPreferredValues(_consumableContextText.text, availableWidth, 0f).y;
             _consumableContextRect.sizeDelta = new Vector2(270f, Mathf.Max(150f, Mathf.Ceil(textHeight + 74f)));
         }
-        if (_consumableUseButton) _consumableUseButton.interactable = cards.CanUseConsumableAtSlot(_selectedConsumableSlot, CombatManager.Instance);
-        if (_consumableSellButton) _consumableSellButton.interactable = run != null && run.CanSellItems;
+        if (_consumableUseButton) _consumableUseButton.interactable = !_discardConfirmationArmed && cards.CanUseConsumableAtSlot(_selectedConsumableSlot, CombatManager.Instance);
+        if (_consumableSellButton)
+        {
+            SetConsumableActionLabel(_consumableSellButton, _discardConfirmationArmed ? "CANCEL" : "SELL");
+            _consumableSellButton.interactable = _discardConfirmationArmed || (run != null && run.CanSellItems);
+        }
+        if (_consumableDiscardButton)
+        {
+            SetConsumableActionLabel(_consumableDiscardButton, _discardConfirmationArmed ? "CONFIRM" : "DISCARD");
+            _consumableDiscardButton.interactable = !GameplayInputGate.IsBlocked;
+        }
         PositionConsumableContext();
         _consumableContextPanel.SetActive(true);
     }
@@ -814,6 +839,35 @@ public class ActionButtonsUI : MonoBehaviour
         }
     }
 
+    void SellOrCancelSelectedConsumable()
+    {
+        if (_discardConfirmationArmed)
+        {
+            _discardConfirmationArmed = false;
+            RefreshAll();
+            return;
+        }
+        SellSelectedConsumable();
+    }
+
+    void DiscardSelectedConsumable()
+    {
+        var cards = CardManager.Instance;
+        if (GameplayInputGate.IsBlocked || cards == null || _selectedConsumable == null ||
+            cards.GetConsumableInstanceAtSlot(_selectedConsumableSlot) != _selectedConsumable) return;
+        if (!_discardConfirmationArmed)
+        {
+            _discardConfirmationArmed = true;
+            RefreshAll();
+            return;
+        }
+        if (cards.RemoveConsumableInstanceAtSlot(_selectedConsumableSlot, _selectedConsumable))
+            ClearSelectedConsumable();
+        else
+            _discardConfirmationArmed = false;
+        RefreshAll();
+    }
+
     void SellSelectedConsumable()
     {
         var cards = CardManager.Instance;
@@ -830,6 +884,7 @@ public class ActionButtonsUI : MonoBehaviour
     {
         _selectedConsumableSlot = -1;
         _selectedConsumable = null;
+        _discardConfirmationArmed = false;
         _contextHandViews.Clear();
         if (_consumableContextPanel) _consumableContextPanel.SetActive(false);
         var cards = CardManager.Instance;

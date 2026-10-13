@@ -18,6 +18,9 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
     Button _backpackButton;
     ConsumableData _heal;
     ConsumableData _knife;
+    ConsumableData _other;
+    ConsumableData[] _extras;
+    RelicData _stackRelic;
 
     [SetUp]
     public void SetUp()
@@ -31,8 +34,32 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         _heal.displayName = "Test Tonic";
         _heal.description = "Restore 5 health.";
         _heal.price = 10;
+        _heal.uses = 3;
         _heal.effectType = ConsumableEffectType.Heal;
         _heal.healAmount = 5;
+        _other = ScriptableObject.CreateInstance<ConsumableData>();
+        _created.Add(_other);
+        _other.id = "ui_test_other";
+        _other.displayName = "Other Trick";
+        _other.price = 7;
+        _other.effectType = ConsumableEffectType.Heal;
+        _other.healAmount = 1;
+        _extras = Enumerable.Range(0, 2).Select(index =>
+        {
+            var item = ScriptableObject.CreateInstance<ConsumableData>();
+            _created.Add(item);
+            item.id = "ui_test_extra_" + index;
+            item.displayName = "Extra Trick " + index;
+            item.effectType = ConsumableEffectType.Heal;
+            item.healAmount = 1;
+            return item;
+        }).ToArray();
+        _stackRelic = ScriptableObject.CreateInstance<RelicData>();
+        _created.Add(_stackRelic);
+        _stackRelic.id = "test_stack_relic";
+        _stackRelic.displayName = "Test Stack Pack";
+        _stackRelic.price = 0;
+        _stackRelic.specialRule = ArtifactSpecialRule.TravelerPackRare;
 
         var fieldRoot = Create("Targeting Test Hand", typeof(RectTransform), typeof(Field));
         var field = fieldRoot.GetComponent<Field>();
@@ -41,9 +68,10 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         var cardPrefabObject = Create("Targeting Test Card Prefab", typeof(RectTransform), typeof(Image), typeof(CardView));
         _cards = Create("Targeting Test Cards", typeof(CardManager)).GetComponent<CardManager>();
         _cards.Configure(field, dragCanvasObject.GetComponent<Canvas>(), cardPrefabObject.GetComponent<CardView>(),
-            System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>(), new[] { _knife, _heal });
+            new[] { _stackRelic }, System.Array.Empty<CardEnhancementData>(), new[] { _knife, _heal, _other }.Concat(_extras).ToArray());
         _cards.ConfigureRandom(new DeterministicRandom(540021));
         _cards.BuildDeck();
+        Assert.That(_cards.BuyArtifact(_stackRelic, 0), Is.True);
 
         _combat = Create("Targeting Test Combat", typeof(CombatManager)).GetComponent<CombatManager>();
         _combat.ConfigurePlayer(30);
@@ -294,6 +322,59 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
     }
 
     [Test]
+    public void DiscardConfirmationRemovesOneChargedCopyFromFullStackWithoutReward()
+    {
+        Assert.That(_cards.AddConsumable(_heal, 2), Is.True);
+        Assert.That(_cards.AddConsumable(_knife), Is.True);
+        Assert.That(_cards.AddConsumable(_other), Is.True);
+        Assert.That(_cards.AddConsumable(_extras[0]), Is.True);
+        Assert.That(_cards.AddConsumable(_extras[1]), Is.True);
+        Assert.That(_cards.IsBackpackFull, Is.True);
+        var stacks = (List<ConsumableStack>)typeof(CardManager)
+            .GetField("_backpack", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(_cards);
+        var stack = stacks[0];
+        var discarded = stack.Items[0];
+        var retained = stack.Items[1];
+        Assert.That(discarded.SpendCharge(), Is.True);
+        _backpackButton.onClick.Invoke();
+
+        var discard = GetPrivate<Button>(_actions, "_consumableDiscardButton");
+        var sellOrCancel = GetPrivate<Button>(_actions, "_consumableSellButton");
+        var details = GetPrivate<TMP_Text>(_actions, "_consumableContextText");
+        discard.onClick.Invoke();
+        Assert.That(details.text, Does.Contain("Discard 1 of 2 copies"));
+        Assert.That(details.text, Does.Contain("2 remaining charge(s)"));
+        Assert.That(_cards.GetConsumableStackCountAtSlot(0), Is.EqualTo(2));
+
+        sellOrCancel.onClick.Invoke();
+        Assert.That(_cards.GetConsumableStackCountAtSlot(0), Is.EqualTo(2), "Cancel leaves the stack unchanged.");
+        _actions.backpackSlotButtons[1].onClick.Invoke();
+        Assert.That(GetPrivate<TMP_Text>(_actions, "_consumableContextText").text, Does.Contain(_knife.displayName));
+        _backpackButton.onClick.Invoke();
+        discard.onClick.Invoke();
+        discard.onClick.Invoke();
+
+        Assert.That(_cards.GetConsumableStackCountAtSlot(0), Is.EqualTo(1));
+        Assert.That(_cards.GetConsumableInstanceAtSlot(0), Is.SameAs(retained));
+        Assert.That(retained.RemainingCharges, Is.EqualTo(_heal.uses));
+        Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(_cards.BackpackCapacity), "Discarding from a stack does not free its slot.");
+        Assert.That(_cards.gold, Is.Zero);
+    }
+
+    [Test]
+    public void DiscardingLastItemRemovesBackpackSlotAndClosesContext()
+    {
+        Assert.That(_cards.AddConsumable(_heal), Is.True);
+        _backpackButton.onClick.Invoke();
+        var discard = GetPrivate<Button>(_actions, "_consumableDiscardButton");
+        discard.onClick.Invoke();
+        discard.onClick.Invoke();
+        Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
+        Assert.That(_cards.GetConsumableAtSlot(0), Is.Null);
+        Assert.That(_actions.transform.Find("Selected Consumable Actions").gameObject.activeSelf, Is.False);
+    }
+
+    [Test]
     public void ConsumableDetailsReserveSpaceAboveReadableActionButtons()
     {
         _combat.player.TakeDamage(10);
@@ -359,7 +440,13 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         _backpackButton.targetGraphic = backpackObject.GetComponent<Image>();
         var backpackLabel = Create("Backpack Label", typeof(RectTransform), typeof(TextMeshProUGUI));
         backpackLabel.transform.SetParent(backpackObject.transform, false);
-        _actions.backpackSlotButtons = new[] { _backpackButton };
+        var backpackObject2 = Create("Backpack Slot 2", typeof(RectTransform), typeof(Image), typeof(Button));
+        backpackObject2.transform.SetParent(root.transform, false);
+        var backpackButton2 = backpackObject2.GetComponent<Button>();
+        backpackButton2.targetGraphic = backpackObject2.GetComponent<Image>();
+        var backpackLabel2 = Create("Backpack Label 2", typeof(RectTransform), typeof(TextMeshProUGUI));
+        backpackLabel2.transform.SetParent(backpackObject2.transform, false);
+        _actions.backpackSlotButtons = new[] { _backpackButton, backpackButton2 };
         root.SetActive(true);
         InvokePrivate(_actions, "OnDisable");
         InvokePrivate(_actions, "OnEnable");
