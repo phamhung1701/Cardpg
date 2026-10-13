@@ -1,5 +1,5 @@
 {
-  "name": "CardPG.Runtime",
+  "name": "Dealbreak.Runtime",
   "rootNamespace": "",
   "references": [
     "UnityEngine.UI",

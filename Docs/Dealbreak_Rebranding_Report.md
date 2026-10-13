@@ -1,5 +1,7 @@
 # Dealbreak Branding and GameData Rework Report
 
+This is the earlier content-name audit. The subsequent internal code/assembly renames and compatibility exceptions are recorded in [Dealbreak_Internal_Rebranding_Report.md](Dealbreak_Internal_Rebranding_Report.md).
+
 **Status:** Rebranding/content-name pass completed for matched content. The confirmed source of truth was `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx`. Gameplay values, serialized IDs, asset filenames/GUIDs, class/field/enum names, and save keys were preserved. Unresolved GameData/runtime conflicts are recorded below.
 
 ## Updated

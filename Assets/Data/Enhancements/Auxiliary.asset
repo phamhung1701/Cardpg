@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fbf9f7adc87195344bd52149f3218ce3, type: 3}
   m_Name: Auxiliary
-  m_EditorClassIdentifier: CardPG.Runtime::CardEnhancementData
+  m_EditorClassIdentifier: Dealbreak.Runtime::CardEnhancementData
   id: enh_008
   displayName: Backup
   icon: ATK

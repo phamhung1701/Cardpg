@@ -11,14 +11,14 @@ public sealed class AuxiliaryAndArsenalTests
     CardManager _cards;
     CombatManager _combat;
     Field _field;
-    RelicData _arsenal;
+    GearData _arsenal;
     CardEnhancementData _auxiliary;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _arsenal = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/ArsenalEmblem.asset");
+        _arsenal = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/ArsenalEmblem.asset");
         _auxiliary = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Auxiliary.asset");
         Assert.That(new Object[] { _arsenal, _auxiliary }, Has.All.Not.Null);
 
@@ -63,7 +63,7 @@ public sealed class AuxiliaryAndArsenalTests
     {
         Assert.That(_auxiliary.id, Is.EqualTo("enh_008"));
         Assert.That(_auxiliary.canonicalId, Is.EqualTo("enh_008"));
-        Assert.That(_auxiliary.displayName, Is.EqualTo("Auxiliary"));
+        Assert.That(_auxiliary.displayName, Is.EqualTo("Backup"));
         Assert.That(_auxiliary.rarity, Is.EqualTo("Rare"));
         Assert.That(_auxiliary.tier, Is.EqualTo(1));
         Assert.That(_auxiliary.price, Is.EqualTo(20), "Temporary prototype price; workbook price is blank.");
@@ -143,7 +143,7 @@ public sealed class AuxiliaryAndArsenalTests
         Assert.That(_cards.HandCapacity, Is.EqualTo(CardManager.HAND_SIZE));
         Assert.That(_cards.HandCount, Is.EqualTo(CardManager.HAND_SIZE));
         string definitionBefore = JsonUtility.ToJson(_arsenal);
-        Assert.That(_cards.BuyArtifact(_arsenal, 0), Is.True);
+        Assert.That(_cards.BuyGear(_arsenal, 0), Is.True);
         Assert.That(_cards.HandCapacity, Is.EqualTo(CardManager.HAND_SIZE + 1));
         Assert.That(_cards.DrawToHand(1), Is.EqualTo(1));
         Assert.That(_cards.HandCount, Is.EqualTo(CardManager.HAND_SIZE + 1));

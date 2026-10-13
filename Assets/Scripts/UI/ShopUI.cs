@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ShopUI")]
 public class ShopUI : MonoBehaviour
 {
     [Header("References")]
@@ -10,7 +11,7 @@ public class ShopUI : MonoBehaviour
     public Transform itemsContainer;
     public GameObject itemButtonPrefab;
     public Button continueButton;
-    public TMP_Text goldText;
+    public TMP_Text creditsText;
     public TMP_Text selectedOfferText;
     public Button buyButton;
     public EnhancementTargetUI enhancementTargetUI;
@@ -27,7 +28,7 @@ public class ShopUI : MonoBehaviour
 
     string _selectedOfferId;
     bool _sellingMode;
-    long _selectedArtifactInstanceId;
+    long _selectedGearInstanceId;
     int _selectedSaleAuthoredPrice = -1;
     public string SelectedOfferId => _selectedOfferId;
     public bool SellingMode => _sellingMode;
@@ -42,7 +43,7 @@ public class ShopUI : MonoBehaviour
         }
         if (CardManager.Instance != null)
         {
-            CardManager.Instance.OnGoldChanged += HandleGoldChanged;
+            CardManager.Instance.OnCreditsChanged += HandleCreditsChanged;
             CardManager.Instance.OnBuildChanged += RefreshItems;
             CardManager.Instance.OnDeckChanged += RefreshQuantityLimitDetails;
         }
@@ -66,7 +67,7 @@ public class ShopUI : MonoBehaviour
         }
         if (CardManager.Instance != null)
         {
-            CardManager.Instance.OnGoldChanged -= HandleGoldChanged;
+            CardManager.Instance.OnCreditsChanged -= HandleCreditsChanged;
             CardManager.Instance.OnBuildChanged -= RefreshItems;
             CardManager.Instance.OnDeckChanged -= RefreshQuantityLimitDetails;
         }
@@ -180,7 +181,7 @@ public class ShopUI : MonoBehaviour
 
     void ClearSaleSelection()
     {
-        _selectedArtifactInstanceId = 0;
+        _selectedGearInstanceId = 0;
         _selectedSaleAuthoredPrice = -1;
         if (buyButton) SetButtonLabel(buyButton, _sellingMode ? "Confirm Sale" : "Buy");
         if (buyButton) buyButton.interactable = false;
@@ -192,12 +193,12 @@ public class ShopUI : MonoBehaviour
             button.GetComponentInChildren<TMP_Text>().text = label;
     }
 
-    void SelectArtifactForSale(long instanceId)
+    void SelectGearForSale(long instanceId)
     {
         if (GameplayInputGate.IsBlocked || !IsShopOpen()) return;
-        var item = CardManager.Instance != null ? CardManager.Instance.GetArtifactInstanceById(instanceId) : null;
+        var item = CardManager.Instance != null ? CardManager.Instance.GetGearInstanceById(instanceId) : null;
         if (item == null || item.Definition == null || item.Definition.price < 0) return;
-        _selectedArtifactInstanceId = instanceId;
+        _selectedGearInstanceId = instanceId;
         _selectedSaleAuthoredPrice = item.Definition.price;
         UpdateSaleDetails(item.Definition.displayName, item.Definition.price / 2);
     }
@@ -219,8 +220,8 @@ public class ShopUI : MonoBehaviour
     {
         if (GameplayInputGate.IsBlocked || !IsShopOpen() || !_sellingMode) return;
         var run = RunManager.Instance;
-        bool sold = _selectedArtifactInstanceId != 0 &&
-            run.SellArtifact(_selectedArtifactInstanceId, _selectedSaleAuthoredPrice);
+        bool sold = _selectedGearInstanceId != 0 &&
+            run.SellGear(_selectedGearInstanceId, _selectedSaleAuthoredPrice);
         if (!sold)
         {
             ClearSaleSelection();
@@ -338,13 +339,13 @@ public class ShopUI : MonoBehaviour
         if (_investmentResultText) _investmentResultText.text = message;
     }
 
-    void HandleGoldChanged(int gold)
+    void HandleCreditsChanged(int credits)
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        if (goldText) goldText.text = CardManager.Instance != null && CardManager.Instance.HasInfiniteMoney
-            ? "∞ Credits" : $"{gold} Credits";
+        if (creditsText) creditsText.text = CardManager.Instance != null && CardManager.Instance.HasInfiniteMoney
+            ? "∞ Credits" : $"{credits} Credits";
 #else
-        if (goldText) goldText.text = $"{gold} Credits";
+        if (creditsText) creditsText.text = $"{credits} Credits";
 #endif
         if (panel != null && panel.activeSelf) RefreshItems();
     }
@@ -493,12 +494,12 @@ public class ShopUI : MonoBehaviour
     void RefreshSellItems(CardManager cards)
     {
         if (cards == null) return;
-        for (int i = 0; i < cards.OwnedArtifactInstances.Count; i++)
+        for (int i = 0; i < cards.OwnedGearInstances.Count; i++)
         {
-            var artifact = cards.OwnedArtifactInstances[i];
-            if (artifact == null || artifact.Definition == null || artifact.Definition.price < 0) continue;
-            AddSellRow($"artifact:{artifact.Id}", artifact.Definition.icon, artifact.Definition.displayName,
-                artifact.Definition.price / 2, () => SelectArtifactForSale(artifact.Id));
+            var gear = cards.OwnedGearInstances[i];
+            if (gear == null || gear.Definition == null || gear.Definition.price < 0) continue;
+            AddSellRow($"artifact:{gear.Id}", gear.Definition.icon, gear.Definition.displayName,
+                gear.Definition.price / 2, () => SelectGearForSale(gear.Id));
         }
         if (itemsContainer.childCount == 0 && selectedOfferText)
             selectedOfferText.text = cards.BackpackSlotsUsed > 0
@@ -557,7 +558,7 @@ public class ShopUI : MonoBehaviour
             }
             if (investmentSelected)
             {
-                if (selectedOffer.investmentStake <= 0 && CardManager.Instance != null && CardManager.Instance.gold > 0)
+                if (selectedOffer.investmentStake <= 0 && CardManager.Instance != null && CardManager.Instance.credits > 0)
                     RunManager.Instance.SetInvestmentStake(stableId, 1);
                 _investmentStakeInput.SetTextWithoutNotify(selectedOffer.investmentStake > 0 ? selectedOffer.investmentStake.ToString() : string.Empty);
             }
@@ -595,7 +596,7 @@ public class ShopUI : MonoBehaviour
         }
         int maximum = offer.kind == ShopOfferKind.Supply
             ? run.GetSupplyMaximumQuantity()
-            : CardManager.Instance != null ? CardManager.Instance.gold : 0;
+            : CardManager.Instance != null ? CardManager.Instance.credits : 0;
         int current = offer.kind == ShopOfferKind.Supply ? offer.supplyQuantity : offer.investmentStake;
         if (_quantityDecreaseButton) _quantityDecreaseButton.interactable = current > 1 && !GameplayInputGate.IsBlocked;
         if (_quantityIncreaseButton) _quantityIncreaseButton.interactable = current < maximum && !GameplayInputGate.IsBlocked;
@@ -614,7 +615,7 @@ public class ShopUI : MonoBehaviour
         if (run == null || offer == null) return;
         int maximum = offer.kind == ShopOfferKind.Supply
             ? run.GetSupplyMaximumQuantity()
-            : offer.kind == ShopOfferKind.Investment && CardManager.Instance != null ? CardManager.Instance.gold : 0;
+            : offer.kind == ShopOfferKind.Investment && CardManager.Instance != null ? CardManager.Instance.credits : 0;
         int current = offer.kind == ShopOfferKind.Supply ? offer.supplyQuantity : offer.investmentStake;
         if (maximum < 1) return;
         int next = Mathf.Clamp(current + delta, 1, maximum);

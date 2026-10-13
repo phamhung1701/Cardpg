@@ -5,10 +5,11 @@ using UnityEngine;
 
 public enum ConsumableTargetType { None, Card, Enemy }
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "CardManager")]
 public partial class CardManager : Singleton<CardManager>
 {
     public const int HAND_SIZE = 8;
-    public const int BASE_ARTIFACT_CAPACITY = 5;
+    public const int BASE_GEAR_CAPACITY = 5;
     public const int BASE_BACKPACK_CAPACITY = 3;
     // Kept for existing content/tests that explicitly mean the backpack's unmodified baseline.
     public const int BACKPACK_CAPACITY = BASE_BACKPACK_CAPACITY;
@@ -21,21 +22,24 @@ public partial class CardManager : Singleton<CardManager>
     public Canvas dragCanvas;
 
     [Header("Build Progression Catalogs")]
-    public List<RelicData> relicCatalog = new();
+    [UnityEngine.Serialization.FormerlySerializedAs("relicCatalog")]
+    public List<GearData> gearCatalog = new();
     public List<CardEnhancementData> enhancementCatalog = new();
     public List<ConsumableData> consumableCatalog = new();
 
     [Header("Runtime State")]
-    public int gold;
-    public HashSet<string> relics = new();
-    public List<RelicData> ownedArtifacts = new();
+    [UnityEngine.Serialization.FormerlySerializedAs("gold")]
+    public int credits;
+    public HashSet<string> gearIds = new();
+    [UnityEngine.Serialization.FormerlySerializedAs("ownedArtifacts")]
+    public List<GearData> ownedGear = new();
     public CardView selectedCard;
 
     readonly CardCollection _cards = new();
     readonly HashSet<CardView> _trackedViews = new();
     readonly List<CardView> _selectedCards = new();
     readonly List<CardData> _generatedDefinitions = new();
-    readonly List<ArtifactRuntimeInstance> _orderedArtifactInstances = new();
+    readonly List<GearRuntimeInstance> _orderedGearInstances = new();
     readonly List<ConsumableStack> _backpack = new(BASE_BACKPACK_CAPACITY);
     CardView _activeDragCard;
     int _nextCardId = 1;
@@ -50,9 +54,9 @@ public partial class CardManager : Singleton<CardManager>
     public bool IsEnemyTargeting => _enemyTargetHandler != null;
     public event Action<bool> OnEnemyTargetingChanged;
 
-    public IReadOnlyList<ArtifactRuntimeInstance> OwnedArtifactInstances
+    public IReadOnlyList<GearRuntimeInstance> OwnedGearInstances
     {
-        get { EnsureArtifactInstances(); return _orderedArtifactInstances; }
+        get { EnsureGearInstances(); return _orderedGearInstances; }
     }
     public IReadOnlyList<CardInstance> ownedCards => _cards.OwnedCards;
     public IReadOnlyList<CardInstance> deck => _cards.Deck;
@@ -65,10 +69,10 @@ public partial class CardManager : Singleton<CardManager>
     public int GetConsumableStackCountAtSlot(int slotIndex) =>
         slotIndex >= 0 && slotIndex < _backpack.Count ? _backpack[slotIndex].Count : 0;
     public int BackpackSlotsUsed => _backpack.Count;
-    public int BackpackCapacity => HasArtifactSpecialRule(ArtifactSpecialRule.TravelerPackCommon) ||
-        HasArtifactSpecialRule(ArtifactSpecialRule.TravelerPackRare)
+    public int BackpackCapacity => HasGearSpecialRule(GearSpecialRule.TravelerPackCommon) ||
+        HasGearSpecialRule(GearSpecialRule.TravelerPackRare)
             ? TRAVELER_BACKPACK_CAPACITY : BASE_BACKPACK_CAPACITY;
-    public int ConsumablesPerSlot => HasArtifactSpecialRule(ArtifactSpecialRule.TravelerPackRare)
+    public int ConsumablesPerSlot => HasGearSpecialRule(GearSpecialRule.TravelerPackRare)
         ? RARE_CONSUMABLES_PER_SLOT : 1;
     public int DistinctConsumableTypeCount => _backpack.Select(stack => stack.Definition).Distinct().Count();
     public bool IsBackpackFull => _backpack.Count >= BackpackCapacity;
@@ -79,11 +83,11 @@ public partial class CardManager : Singleton<CardManager>
         get
         {
             int capacity = 0;
-            for (int i = 0; i < ownedArtifacts.Count; i++)
+            for (int i = 0; i < ownedGear.Count; i++)
             {
-                var rule = ownedArtifacts[i]?.specialRule;
-                if (rule is ArtifactSpecialRule.OverflowRare or ArtifactSpecialRule.OverflowEpic) return 3;
-                if (rule == ArtifactSpecialRule.OverflowCommon) capacity = 2;
+                var rule = ownedGear[i]?.specialRule;
+                if (rule is GearSpecialRule.OverflowRare or GearSpecialRule.OverflowEpic) return 3;
+                if (rule == GearSpecialRule.OverflowCommon) capacity = 2;
             }
             return capacity;
         }
@@ -101,19 +105,19 @@ public partial class CardManager : Singleton<CardManager>
     }
     public IReadOnlyList<CardView> SelectedCards => _selectedCards;
     public CardView ActiveDragCard => _activeDragCard;
-    public int ArtifactCapacity => BASE_ARTIFACT_CAPACITY;
-    public int ArtifactSlotsUsed
+    public int GearCapacity => BASE_GEAR_CAPACITY;
+    public int GearSlotsUsed
     {
         get
         {
             int count = 0;
-            foreach (var artifact in ownedArtifacts)
-                if (artifact != null && artifact.OccupiesCapacitySlot) count++;
+            foreach (var gear in ownedGear)
+                if (gear != null && gear.OccupiesCapacitySlot) count++;
             return count;
         }
     }
 
-    public event Action<int> OnGoldChanged;
+    public event Action<int> OnCreditsChanged;
     public event Action OnDeckChanged;
     public event Action OnBuildChanged;
     public event Action<CardView> OnCardSelected;
@@ -125,7 +129,7 @@ public partial class CardManager : Singleton<CardManager>
         Field field,
         Canvas canvas,
         CardView prefab,
-        RelicData[] artifacts,
+        GearData[] gearItems,
         CardEnhancementData[] enhancements = null,
         ConsumableData[] consumables = null)
     {
@@ -133,9 +137,9 @@ public partial class CardManager : Singleton<CardManager>
         dragCanvas = canvas;
         cardPrefab = prefab;
 
-        relicCatalog.Clear();
-        if (artifacts != null)
-            relicCatalog.AddRange(artifacts);
+        gearCatalog.Clear();
+        if (gearItems != null)
+            gearCatalog.AddRange(gearItems);
 
         enhancementCatalog.Clear();
         if (enhancements != null)
@@ -225,7 +229,7 @@ public partial class CardManager : Singleton<CardManager>
     {
         if (consumable == null || !consumable.shopAvailable || !CanAddConsumable(consumable) ||
             price < 0 || !CanAfford(price)) return false;
-        if (!SpendGold(price)) return false;
+        if (!SpendCredits(price)) return false;
         return AddConsumable(consumable);
     }
 
@@ -510,13 +514,13 @@ public partial class CardManager : Singleton<CardManager>
         }
         if (_consumableUsedThisEncounter) return;
         _consumableUsedThisEncounter = true;
-        for (int i = 0; i < ownedArtifacts.Count; i++)
+        for (int i = 0; i < ownedGear.Count; i++)
         {
-            var artifact = ownedArtifacts[i];
-            if (artifact == null) continue;
-            if (artifact.specialRule == ArtifactSpecialRule.ScavengersPouch)
+            var gear = ownedGear[i];
+            if (gear == null) continue;
+            if (gear.specialRule == GearSpecialRule.ScavengersPouch)
                 DrawToHand(1);
-            else if (artifact.specialRule == ArtifactSpecialRule.FieldMedicsKit)
+            else if (gear.specialRule == GearSpecialRule.FieldMedicsKit)
                 combat?.HealPlayer(3);
         }
     }
@@ -543,62 +547,60 @@ public partial class CardManager : Singleton<CardManager>
         RefreshSelectionPresentation();
     }
 
-    public bool HasRelic(string id) => relics.Contains(id);
-    public bool HasArtifact(RelicData artifact) => artifact != null && HasRelic(artifact.id);
-    public bool HasArtifactSpecialRule(ArtifactSpecialRule rule) => ownedArtifacts.Any(artifact =>
-        artifact != null && artifact.specialRule == rule);
+    public bool HasGearId(string id) => gearIds.Contains(id);
+    public bool HasGear(GearData gear) => gear != null && HasGearId(gear.id);
+    public bool HasGearSpecialRule(GearSpecialRule rule) => ownedGear.Any(gear =>
+        gear != null && gear.specialRule == rule);
 
-    public string GetArtifactAcquisitionUnavailableReason(RelicData artifact)
+    public string GetGearAcquisitionUnavailableReason(GearData gear)
     {
-        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id)) return "Gear unavailable";
-        if (artifact.tier > 1)
+        if (gear == null || string.IsNullOrWhiteSpace(gear.id)) return "Gear unavailable";
+        if (gear.tier > 1)
         {
-            var predecessor = ownedArtifacts.FirstOrDefault(value => value != null &&
-                value.canonicalId == artifact.upgradeFromId);
+            var predecessor = ownedGear.FirstOrDefault(value => value != null &&
+                value.canonicalId == gear.upgradeFromId);
             if (predecessor == null) return "Requires immediate predecessor";
-            return ArtifactUpgradeResolver.CanReplace(predecessor, artifact, ownedArtifacts, relicCatalog, out var reason)
+            return GearUpgradeResolver.CanReplace(predecessor, gear, ownedGear, gearCatalog, out var reason)
                 ? string.Empty : reason;
         }
-        if (!string.IsNullOrEmpty(artifact.upgradeFromId)) return "Upgrade cannot be acquired standalone";
-        return artifact.OccupiesCapacitySlot && ArtifactSlotsUsed >= ArtifactCapacity
+        if (!string.IsNullOrEmpty(gear.upgradeFromId)) return "Upgrade cannot be acquired standalone";
+        return gear.OccupiesCapacitySlot && GearSlotsUsed >= GearCapacity
             ? "Gear Capacity Full" : string.Empty;
     }
 
-    public bool BuyRelic(RelicData relic) => BuyArtifact(relic);
+    public bool BuyGear(GearData gear) => BuyGear(gear, gear != null ? gear.price : -1);
 
-    public bool BuyArtifact(RelicData artifact) => BuyArtifact(artifact, artifact != null ? artifact.price : -1);
-
-    public bool BuyArtifact(RelicData artifact, int price)
+    public bool BuyGear(GearData gear, int price)
     {
-        EnsureArtifactInstances();
-        if (price < 0 || !string.IsNullOrEmpty(GetArtifactAcquisitionUnavailableReason(artifact))) return false;
-        var predecessor = artifact.tier > 1
-            ? ownedArtifacts.FirstOrDefault(value => value != null && value.canonicalId == artifact.upgradeFromId)
+        EnsureGearInstances();
+        if (price < 0 || !string.IsNullOrEmpty(GetGearAcquisitionUnavailableReason(gear))) return false;
+        var predecessor = gear.tier > 1
+            ? ownedGear.FirstOrDefault(value => value != null && value.canonicalId == gear.upgradeFromId)
             : null;
-        if (!SpendGold(price)) return false;
-        ArtifactRuntimeInstance instance;
+        if (!SpendCredits(price)) return false;
+        GearRuntimeInstance instance;
         if (predecessor != null)
         {
-            int index = ownedArtifacts.IndexOf(predecessor);
-            ownedArtifacts[index] = artifact;
-            instance = _orderedArtifactInstances[index] = new ArtifactRuntimeInstance(artifact);
-            relics.Remove(predecessor.id);
+            int index = ownedGear.IndexOf(predecessor);
+            ownedGear[index] = gear;
+            instance = _orderedGearInstances[index] = new GearRuntimeInstance(gear);
+            gearIds.Remove(predecessor.id);
         }
         else
         {
-            ownedArtifacts.Add(artifact);
-            instance = new ArtifactRuntimeInstance(artifact);
-            _orderedArtifactInstances.Add(instance);
+            ownedGear.Add(gear);
+            instance = new GearRuntimeInstance(gear);
+            _orderedGearInstances.Add(instance);
         }
-        relics.Add(artifact.id);
+        gearIds.Add(gear.id);
         var run = RunManager.Instance;
         GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(instance),
             run != null ? run.CompletedNodeCount : 0);
-        if (artifact.specialRule == ArtifactSpecialRule.Hammer)
+        if (gear.specialRule == GearSpecialRule.Hammer)
             instance.State.SetCounter(-140, run != null ? run.CompletedNodeCount : 0);
-        if (artifact.specialRule is ArtifactSpecialRule.TravelerPackCommon or ArtifactSpecialRule.TravelerPackRare)
+        if (gear.specialRule is GearSpecialRule.TravelerPackCommon or GearSpecialRule.TravelerPackRare)
         {
-            if (artifact.specialRule == ArtifactSpecialRule.TravelerPackRare) NormalizeBackpackStacks();
+            if (gear.specialRule == GearSpecialRule.TravelerPackRare) NormalizeBackpackStacks();
             OnConsumablesChanged?.Invoke();
         }
         run?.RefreshCurrentMapEffects();
@@ -606,45 +608,45 @@ public partial class CardManager : Singleton<CardManager>
         return true;
     }
 
-    public bool GrantArtifactReward(RelicData artifact, RelicData replacement = null)
+    public bool GrantGearReward(GearData gear, GearData replacement = null)
     {
-        EnsureArtifactInstances();
-        if (artifact == null || string.IsNullOrWhiteSpace(artifact.id) || !relicCatalog.Contains(artifact)) return false;
+        EnsureGearInstances();
+        if (gear == null || string.IsNullOrWhiteSpace(gear.id) || !gearCatalog.Contains(gear)) return false;
 
-        RelicData predecessor = artifact.tier > 1
-            ? ownedArtifacts.FirstOrDefault(value => value != null &&
-                string.Equals(value.canonicalId, artifact.upgradeFromId, StringComparison.Ordinal))
+        GearData predecessor = gear.tier > 1
+            ? ownedGear.FirstOrDefault(value => value != null &&
+                string.Equals(value.canonicalId, gear.upgradeFromId, StringComparison.Ordinal))
             : null;
-        if (artifact.tier > 1 && predecessor == null) return false;
-        if (artifact.tier <= 1 && !string.IsNullOrEmpty(artifact.upgradeFromId)) return false;
+        if (gear.tier > 1 && predecessor == null) return false;
+        if (gear.tier <= 1 && !string.IsNullOrEmpty(gear.upgradeFromId)) return false;
         if (replacement == null && predecessor != null) replacement = predecessor;
-        if (replacement != null && (!ownedArtifacts.Contains(replacement) ||
+        if (replacement != null && (!ownedGear.Contains(replacement) ||
             predecessor != null && replacement != predecessor)) return false;
-        if (replacement == null && artifact.OccupiesCapacitySlot && ArtifactSlotsUsed >= ArtifactCapacity)
+        if (replacement == null && gear.OccupiesCapacitySlot && GearSlotsUsed >= GearCapacity)
             return false;
 
-        int index = replacement != null ? ownedArtifacts.IndexOf(replacement) : ownedArtifacts.Count;
+        int index = replacement != null ? ownedGear.IndexOf(replacement) : ownedGear.Count;
         if (replacement != null)
         {
-            ownedArtifacts[index] = artifact;
-            _orderedArtifactInstances[index] = new ArtifactRuntimeInstance(artifact);
-            relics.Remove(replacement.id);
+            ownedGear[index] = gear;
+            _orderedGearInstances[index] = new GearRuntimeInstance(gear);
+            gearIds.Remove(replacement.id);
         }
         else
         {
-            ownedArtifacts.Add(artifact);
-            _orderedArtifactInstances.Add(new ArtifactRuntimeInstance(artifact));
+            ownedGear.Add(gear);
+            _orderedGearInstances.Add(new GearRuntimeInstance(gear));
         }
-        relics.Add(artifact.id);
-        var instance = _orderedArtifactInstances[index];
+        gearIds.Add(gear.id);
+        var instance = _orderedGearInstances[index];
         var run = RunManager.Instance;
         GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(instance),
             run != null ? run.CompletedNodeCount : 0);
-        if (artifact.specialRule == ArtifactSpecialRule.Hammer)
+        if (gear.specialRule == GearSpecialRule.Hammer)
             instance.State.SetCounter(-140, run != null ? run.CompletedNodeCount : 0);
-        if (artifact.specialRule is ArtifactSpecialRule.TravelerPackCommon or ArtifactSpecialRule.TravelerPackRare)
+        if (gear.specialRule is GearSpecialRule.TravelerPackCommon or GearSpecialRule.TravelerPackRare)
         {
-            if (artifact.specialRule == ArtifactSpecialRule.TravelerPackRare) NormalizeBackpackStacks();
+            if (gear.specialRule == GearSpecialRule.TravelerPackRare) NormalizeBackpackStacks();
             OnConsumablesChanged?.Invoke();
         }
         run?.RefreshCurrentMapEffects();
@@ -652,117 +654,117 @@ public partial class CardManager : Singleton<CardManager>
         return true;
     }
 
-    public ArtifactRuntimeInstance GetArtifactInstance(RelicData artifact)
+    public GearRuntimeInstance GetGearInstance(GearData gear)
     {
-        EnsureArtifactInstances();
-        if (artifact == null) return null;
-        ArtifactRuntimeInstance match = null;
-        for (int i = 0; i < _orderedArtifactInstances.Count; i++)
+        EnsureGearInstances();
+        if (gear == null) return null;
+        GearRuntimeInstance match = null;
+        for (int i = 0; i < _orderedGearInstances.Count; i++)
         {
-            var instance = _orderedArtifactInstances[i];
-            if (instance == null || instance.Definition != artifact) continue;
+            var instance = _orderedGearInstances[i];
+            if (instance == null || instance.Definition != gear) continue;
             if (match != null) return null;
             match = instance;
         }
         return match;
     }
 
-    public ArtifactRuntimeInstance GetArtifactInstanceById(long instanceId)
+    public GearRuntimeInstance GetGearInstanceById(long instanceId)
     {
-        EnsureArtifactInstances();
-        return _orderedArtifactInstances.FirstOrDefault(value => value != null && value.Id == instanceId);
+        EnsureGearInstances();
+        return _orderedGearInstances.FirstOrDefault(value => value != null && value.Id == instanceId);
     }
 
-    public ArtifactRuntimeInstance GetArtifactInstanceAt(int index)
+    public GearRuntimeInstance GetGearInstanceAt(int index)
     {
-        EnsureArtifactInstances();
-        return index >= 0 && index < _orderedArtifactInstances.Count ? _orderedArtifactInstances[index] : null;
+        EnsureGearInstances();
+        return index >= 0 && index < _orderedGearInstances.Count ? _orderedGearInstances[index] : null;
     }
 
-    void EnsureArtifactInstances()
+    void EnsureGearInstances()
     {
-        // Keep compatibility with older callers/tests that directly edit ownedArtifacts.
-        for (int i = _orderedArtifactInstances.Count - 1; i >= 0; i--)
-            if (i >= ownedArtifacts.Count || _orderedArtifactInstances[i]?.Definition != ownedArtifacts[i])
-                _orderedArtifactInstances.RemoveAt(i);
-        while (_orderedArtifactInstances.Count < ownedArtifacts.Count)
+        // Keep runtime instances aligned with callers/tests that directly edit ownedGear.
+        for (int i = _orderedGearInstances.Count - 1; i >= 0; i--)
+            if (i >= ownedGear.Count || _orderedGearInstances[i]?.Definition != ownedGear[i])
+                _orderedGearInstances.RemoveAt(i);
+        while (_orderedGearInstances.Count < ownedGear.Count)
         {
-            var definition = ownedArtifacts[_orderedArtifactInstances.Count];
-            _orderedArtifactInstances.Add(definition != null ? new ArtifactRuntimeInstance(definition) : null);
+            var definition = ownedGear[_orderedGearInstances.Count];
+            _orderedGearInstances.Add(definition != null ? new GearRuntimeInstance(definition) : null);
         }
     }
 
-    public bool RemoveArtifactInstance(long instanceId)
+    public bool RemoveGearInstance(long instanceId)
     {
-        EnsureArtifactInstances();
-        int index = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == instanceId);
+        EnsureGearInstances();
+        int index = _orderedGearInstances.FindIndex(value => value != null && value.Id == instanceId);
         if (index < 0) return false;
-        _orderedArtifactInstances.RemoveAt(index);
-        ownedArtifacts.RemoveAt(index);
-        RebuildRelicIds();
+        _orderedGearInstances.RemoveAt(index);
+        ownedGear.RemoveAt(index);
+        RebuildGearIds();
         RunManager.Instance?.RefreshCurrentMapEffects();
         OnBuildChanged?.Invoke();
         return true;
     }
 
-    public RelicData GetArtifactMergeResult(long firstInstanceId, long secondInstanceId)
+    public GearData GetGearMergeResult(long firstInstanceId, long secondInstanceId)
     {
         if (firstInstanceId == secondInstanceId) return null;
-        int firstIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == firstInstanceId);
-        int secondIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == secondInstanceId);
-        if (firstIndex < 0 || secondIndex < 0 || firstIndex >= ownedArtifacts.Count ||
-            secondIndex >= ownedArtifacts.Count) return null;
-        var first = _orderedArtifactInstances[firstIndex];
-        var second = _orderedArtifactInstances[secondIndex];
+        int firstIndex = _orderedGearInstances.FindIndex(value => value != null && value.Id == firstInstanceId);
+        int secondIndex = _orderedGearInstances.FindIndex(value => value != null && value.Id == secondInstanceId);
+        if (firstIndex < 0 || secondIndex < 0 || firstIndex >= ownedGear.Count ||
+            secondIndex >= ownedGear.Count) return null;
+        var first = _orderedGearInstances[firstIndex];
+        var second = _orderedGearInstances[secondIndex];
         var source = first.Definition;
         if (source == null || second.Definition == null ||
-            ownedArtifacts[firstIndex] != source || ownedArtifacts[secondIndex] != second.Definition ||
+            ownedGear[firstIndex] != source || ownedGear[secondIndex] != second.Definition ||
             source.tier != second.Definition.tier || string.IsNullOrEmpty(source.canonicalId) ||
             source.canonicalId != second.Definition.canonicalId || source.tier < 1) return null;
-        var nextCandidates = relicCatalog.Where(value => value != null &&
+        var nextCandidates = gearCatalog.Where(value => value != null &&
             value.tier == source.tier + 1 && value.upgradeFromId == source.canonicalId).ToArray();
         return nextCandidates.Length == 1 ? nextCandidates[0] : null;
     }
 
-    public bool MergeArtifacts(long firstInstanceId, long secondInstanceId)
+    public bool MergeGear(long firstInstanceId, long secondInstanceId)
     {
-        EnsureArtifactInstances();
-        var next = GetArtifactMergeResult(firstInstanceId, secondInstanceId);
+        EnsureGearInstances();
+        var next = GetGearMergeResult(firstInstanceId, secondInstanceId);
         if (next == null) return false;
-        int firstIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == firstInstanceId);
-        int secondIndex = _orderedArtifactInstances.FindIndex(value => value != null && value.Id == secondInstanceId);
+        int firstIndex = _orderedGearInstances.FindIndex(value => value != null && value.Id == firstInstanceId);
+        int secondIndex = _orderedGearInstances.FindIndex(value => value != null && value.Id == secondInstanceId);
         int firstPosition = Math.Min(firstIndex, secondIndex);
         int lastPosition = Math.Max(firstIndex, secondIndex);
-        ownedArtifacts.RemoveAt(lastPosition);
-        _orderedArtifactInstances.RemoveAt(lastPosition);
-        ownedArtifacts.RemoveAt(firstPosition);
-        _orderedArtifactInstances.RemoveAt(firstPosition);
-        var merged = new ArtifactRuntimeInstance(next);
-        ownedArtifacts.Insert(firstPosition, next);
-        _orderedArtifactInstances.Insert(firstPosition, merged);
-        RebuildRelicIds();
+        ownedGear.RemoveAt(lastPosition);
+        _orderedGearInstances.RemoveAt(lastPosition);
+        ownedGear.RemoveAt(firstPosition);
+        _orderedGearInstances.RemoveAt(firstPosition);
+        var merged = new GearRuntimeInstance(next);
+        ownedGear.Insert(firstPosition, next);
+        _orderedGearInstances.Insert(firstPosition, merged);
+        RebuildGearIds();
         var run = RunManager.Instance;
         GameplayEffectResolver.InitializeNodeCounters(new GameplayEffectSource(merged), run != null ? run.CompletedNodeCount : 0);
-        if (next.specialRule == ArtifactSpecialRule.Hammer)
+        if (next.specialRule == GearSpecialRule.Hammer)
             merged.State.SetCounter(-140, run != null ? run.CompletedNodeCount : 0);
         run?.RefreshCurrentMapEffects();
         OnBuildChanged?.Invoke();
         return true;
     }
 
-    void RebuildRelicIds()
+    void RebuildGearIds()
     {
-        relics.Clear();
-        foreach (var artifact in ownedArtifacts)
-            if (artifact != null) relics.Add(artifact.id);
+        gearIds.Clear();
+        foreach (var gear in ownedGear)
+            if (gear != null) gearIds.Add(gear.id);
     }
 
-    public void ResetArtifactEncounterEffectState()
+    public void ResetGearEncounterEffectState()
     {
-        EnsureArtifactInstances();
+        EnsureGearInstances();
         _consumableUsedThisEncounter = false;
-        foreach (var artifact in _orderedArtifactInstances)
-            artifact?.ResetEncounterState();
+        foreach (var gear in _orderedGearInstances)
+            gear?.ResetEncounterState();
         foreach (var card in ownedCards)
             card?.EffectState.ClearEncounter();
     }
@@ -808,7 +810,7 @@ public partial class CardManager : Singleton<CardManager>
         if (card == null || (card.Enhancement != null && !replaceExisting) ||
             ReferenceEquals(card.Enhancement, enhancement) || enhancement == null || price < 0 || !CanAfford(price))
             return false;
-        if (!SpendGold(price)) return false;
+        if (!SpendCredits(price)) return false;
         if (card.TryApplyEnhancement(enhancement, replaceExisting))
         {
             RefreshTrackedView(card);
@@ -817,7 +819,7 @@ public partial class CardManager : Singleton<CardManager>
             return true;
         }
 
-        AddGold(price);
+        AddCredits(price);
         return false;
     }
 
@@ -842,7 +844,7 @@ public partial class CardManager : Singleton<CardManager>
         OnCardSelected?.Invoke(null);
     }
 
-    public CardInstance AddBossReward(CardData sourceCard)
+    public CardInstance AddHeadlinerReward(CardData sourceCard)
     {
         if (sourceCard == null || !sourceCard.IsFaceCard)
             return null;
@@ -898,15 +900,15 @@ public partial class CardManager : Singleton<CardManager>
 
     public int PurchaseExistingDraw(int quantity, int pricePerCard)
     {
-        if (quantity <= 0 || pricePerCard <= 0 || quantity > gold / pricePerCard ||
+        if (quantity <= 0 || pricePerCard <= 0 || quantity > credits / pricePerCard ||
             quantity > deck.Count || quantity > HandCapacity - HandCount) return 0;
         int previous = _cards.HandCount;
         int drawn = _cards.DrawExistingToHand(quantity, HandCapacity);
         if (drawn <= 0) return 0;
-        gold -= drawn * pricePerCard;
+        credits -= drawn * pricePerCard;
         if (CanCreateViews())
             for (int i = previous; i < _cards.HandCount; i++) CreateView(_cards.Hand[i]);
-        OnGoldChanged?.Invoke(gold);
+        OnCreditsChanged?.Invoke(credits);
         OnDeckChanged?.Invoke();
         return drawn;
     }
@@ -1152,7 +1154,7 @@ public partial class CardManager : Singleton<CardManager>
 
     public bool CanRouteHandEnhancementTargetClick => IsHandEnhancementTargeting &&
         (!GameplayInputGate.IsBlocked || RunManager.Instance != null && RunManager.Instance.IsPendingHammerReward &&
-            GameplayInputGate.Reasons == GameplayInputBlockReason.ArtifactChoice);
+            GameplayInputGate.Reasons == GameplayInputBlockReason.GearChoice);
 
     public void HandleCardClick(CardView card)
     {
@@ -1260,44 +1262,44 @@ public partial class CardManager : Singleton<CardManager>
 
     public void ClearSelection() => ClearSelection(true);
 
-    public void AddGold(int amount)
+    public void AddCredits(int amount)
     {
         if (HasInfiniteMoney)
         {
-            OnGoldChanged?.Invoke(gold);
+            OnCreditsChanged?.Invoke(credits);
             return;
         }
-        gold = (int)Math.Clamp((long)gold + amount, 0L, int.MaxValue);
-        OnGoldChanged?.Invoke(gold);
+        credits = (int)Math.Clamp((long)credits + amount, 0L, int.MaxValue);
+        OnCreditsChanged?.Invoke(credits);
     }
 
-    public bool CanAfford(int amount) => amount >= 0 && (HasInfiniteMoney || gold >= amount);
+    public bool CanAfford(int amount) => amount >= 0 && (HasInfiniteMoney || credits >= amount);
 
-    public bool SpendGold(int amount)
+    public bool SpendCredits(int amount)
     {
         if (!CanAfford(amount)) return false;
         if (HasInfiniteMoney)
         {
-            OnGoldChanged?.Invoke(gold);
+            OnCreditsChanged?.Invoke(credits);
             return true;
         }
-        gold -= amount;
-        OnGoldChanged?.Invoke(gold);
+        credits -= amount;
+        OnCreditsChanged?.Invoke(credits);
         return true;
     }
 
     public void Reset()
     {
         ClearCardState();
-        gold = 0;
-        relics.Clear();
-        ownedArtifacts.Clear();
-        _orderedArtifactInstances.Clear();
+        credits = 0;
+        gearIds.Clear();
+        ownedGear.Clear();
+        _orderedGearInstances.Clear();
         _backpack.Clear();
         _consumableUsedThisEncounter = false;
         _consumableUseInProgress = false;
 
-        OnGoldChanged?.Invoke(gold);
+        OnCreditsChanged?.Invoke(credits);
         OnDeckChanged?.Invoke();
         OnBuildChanged?.Invoke();
         OnConsumablesChanged?.Invoke();

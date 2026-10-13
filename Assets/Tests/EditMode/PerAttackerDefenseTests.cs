@@ -28,7 +28,7 @@ public sealed class PerAttackerDefenseTests
         prefab.face = prefabObject.GetComponent<Image>();
         prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
         _cards = CreateComponent<CardManager>("Defense CardManager");
-        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _cards.BuildDeck();
         _cards.DealHand();
         _combat = CreateComponent<CombatManager>("Defense CombatManager");
@@ -65,35 +65,35 @@ public sealed class PerAttackerDefenseTests
     }
 
     [Test]
-    public void BossEncounter_AceCanBlockOnePointAttackWithoutChangingAggregateRetaliation()
+    public void HeadlinerEncounter_AceCanBlockOnePointAttackWithoutChangingAggregateRetaliation()
     {
         var bossType = EnemyTypeData.Create("Test Boss", 100, 1, 0);
         _created.Add(bossType);
         var ace = FindViewInHand(card => card.Rank == CardData.Rank.Ace);
-        var boss = new EnemyRuntime(bossType);
-        _combat.StartEncounter(new[] { boss }, MapNodeType.Boss);
-        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, boss), Is.True);
+        var headliner = new EnemyRuntime(bossType);
+        _combat.StartEncounter(new[] { headliner }, MapNodeType.Headliner);
+        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, headliner), Is.True);
         Assert.That(_combat.CalculateCardDefense(ace.data), Is.EqualTo(1));
-        Assert.That(_combat.CanDefendWithCards(new[] { ace }, boss), Is.True);
-        Assert.That(_combat.TryDefendWithCards(new[] { ace }, boss), Is.True);
+        Assert.That(_combat.CanDefendWithCards(new[] { ace }, headliner), Is.True);
+        Assert.That(_combat.TryDefendWithCards(new[] { ace }, headliner), Is.True);
         Assert.That(_combat.pendingDamage, Is.Zero);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
     }
 
     [Test]
-    public void BossWithoutAbility_AcePartiallyBlocksAndRemainsInDefense()
+    public void HeadlinerWithoutAbility_AcePartiallyBlocksAndRemainsInDefense()
     {
         var bossType = EnemyTypeData.Create("Test Boss", 100, 8, 0);
         _created.Add(bossType);
         var ace = FindViewInHand(card => card.Rank == CardData.Rank.Ace);
-        var boss = new EnemyRuntime(bossType);
-        _combat.StartEncounter(new[] { boss }, MapNodeType.Boss);
-        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, boss), Is.True);
+        var headliner = new EnemyRuntime(bossType);
+        _combat.StartEncounter(new[] { headliner }, MapNodeType.Headliner);
+        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, headliner), Is.True);
 
-        Assert.That(_combat.CanDefendWithCards(new[] { ace }, boss), Is.True);
-        Assert.That(_combat.TryDefendWithCards(new[] { ace }, boss), Is.True);
+        Assert.That(_combat.CanDefendWithCards(new[] { ace }, headliner), Is.True);
+        Assert.That(_combat.TryDefendWithCards(new[] { ace }, headliner), Is.True);
         Assert.That(_combat.pendingDamage, Is.EqualTo(7));
-        Assert.That(_combat.GetPendingAttackDamage(boss), Is.EqualTo(7));
+        Assert.That(_combat.GetPendingAttackDamage(headliner), Is.EqualTo(7));
         Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
     }
 
@@ -107,18 +107,18 @@ public sealed class PerAttackerDefenseTests
         _created.Add(bossType);
         _created.Add(ability);
         var ace = FindViewInHand(card => card.Rank == CardData.Rank.Ace);
-        var boss = new EnemyRuntime(bossType);
-        _combat.StartEncounter(new[] { boss }, MapNodeType.Boss);
-        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, boss), Is.True);
+        var headliner = new EnemyRuntime(bossType);
+        _combat.StartEncounter(new[] { headliner }, MapNodeType.Headliner);
+        Assert.That(_combat.TryPlayCards(new[] { FindViewInHand(card => card.Rank != CardData.Rank.Ace) }, headliner), Is.True);
 
         int handCount = _cards.HandCount;
-        Assert.That(_combat.CanDefendWithCards(new[] { ace }, boss), Is.False);
-        Assert.That(_combat.TryDefendWithCards(new[] { ace }, boss), Is.False);
+        Assert.That(_combat.CanDefendWithCards(new[] { ace }, headliner), Is.False);
+        Assert.That(_combat.TryDefendWithCards(new[] { ace }, headliner), Is.False);
         Assert.That(_cards.HandCount, Is.EqualTo(handCount));
         Assert.That(_combat.pendingDamage, Is.EqualTo(8));
 
         var sufficient = FindViewInHand(card => _combat.CalculateCardDefense(card) >= 8);
-        Assert.That(_combat.TryDefendWithCards(new[] { sufficient }, boss), Is.True);
+        Assert.That(_combat.TryDefendWithCards(new[] { sufficient }, headliner), Is.True);
         Assert.That(_combat.pendingDamage, Is.Zero);
     }
 
@@ -378,12 +378,12 @@ public sealed class PerAttackerDefenseTests
     public void PerfectParry_UsesPostModifierDamage()
     {
         var defense = HandViews()[1];
-        var armor = ScriptableObject.CreateInstance<RelicData>();
+        var armor = ScriptableObject.CreateInstance<GearData>();
         _created.Add(armor);
         armor.effects = new[] { new GameplayEffectDefinition {
             kind = GameplayEffectKind.IncomingCombatDamageReduction,
             trigger = GameplayEffectTrigger.IncomingDamageCalculated, amount = 3 } };
-        _cards.ownedArtifacts.Add(armor);
+        _cards.ownedGear.Add(armor);
         StartDefenseWindow(_combat.CalculateCardDefense(defense.data) + 3);
         int before = _cards.HandCount;
         Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
@@ -411,12 +411,12 @@ public sealed class PerAttackerDefenseTests
     [Test]
     public void PerfectParry_ModifiersReducingIncomingToZeroNeverAward()
     {
-        var armor = ScriptableObject.CreateInstance<RelicData>();
+        var armor = ScriptableObject.CreateInstance<GearData>();
         _created.Add(armor);
         armor.effects = new[] { new GameplayEffectDefinition {
             kind = GameplayEffectKind.IncomingCombatDamageReduction,
             trigger = GameplayEffectTrigger.IncomingDamageCalculated, amount = 100 } };
-        _cards.ownedArtifacts.Add(armor);
+        _cards.ownedGear.Add(armor);
         var defense = HandViews()[1];
         StartDefenseWindow(_combat.CalculateCardDefense(defense.data));
         int before = _cards.HandCount;
@@ -436,7 +436,7 @@ public sealed class PerAttackerDefenseTests
     }
 
     [Test]
-    public void PerfectParry_DoubleStrikeIncludesArtifactAndEnhancementBlock_AndDrawsOnlyOnce()
+    public void PerfectParry_DoubleStrikeIncludesGearAndEnhancementBlock_AndDrawsOnlyOnce()
     {
         var pair = HandViews().Skip(1).Take(2).ToArray();
         foreach (var view in pair)
@@ -522,10 +522,10 @@ public sealed class PerAttackerDefenseTests
 
     void AddDefenseBonus(int bonus)
     {
-        var relic = ScriptableObject.CreateInstance<RelicData>();
-        relic.defenseBonus = bonus;
-        _created.Add(relic);
-        _cards.ownedArtifacts.Add(relic);
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.defenseBonus = bonus;
+        _created.Add(gear);
+        _cards.ownedGear.Add(gear);
     }
 
     List<CardView> HandViews()

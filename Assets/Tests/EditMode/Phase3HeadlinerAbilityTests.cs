@@ -3,7 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 
-public sealed class Phase3BossAbilityTests
+public sealed class Phase3HeadlinerAbilityTests
 {
     readonly List<Object> _created = new();
 
@@ -19,41 +19,41 @@ public sealed class Phase3BossAbilityTests
     public void GeneratedRoster_KeepsTwelveFaceCardsWithDeterministicValidAbilityPairs()
     {
         var first = CreateGeneratedRun("phase3-seed");
-        var signature = Signature(first.bossDeck);
-        Assert.That(first.bossDeck.Count, Is.EqualTo(12));
+        var signature = Signature(first.headlinerDeck);
+        Assert.That(first.headlinerDeck.Count, Is.EqualTo(12));
         for (int group = 0; group < 3; group++)
         {
-            var bosses = first.bossDeck.Skip(group * 4).Take(4).ToArray();
-            Assert.That(bosses.Select(boss => boss.sourceCard.rank).Distinct().Count(), Is.EqualTo(1));
-            Assert.That(bosses.Select(boss => boss.sourceCard.suit).Distinct().Count(), Is.EqualTo(4));
-            foreach (var boss in bosses)
+            var bosses = first.headlinerDeck.Skip(group * 4).Take(4).ToArray();
+            Assert.That(bosses.Select(headliner => headliner.sourceCard.rank).Distinct().Count(), Is.EqualTo(1));
+            Assert.That(bosses.Select(headliner => headliner.sourceCard.suit).Distinct().Count(), Is.EqualTo(4));
+            foreach (var headliner in bosses)
             {
-                Assert.That((boss.maxHp, boss.baseAttack), Is.EqualTo((30, 6)));
-                Assert.That(boss.goldReward, Is.EqualTo(boss.sourceCard.rank switch
+                Assert.That((headliner.maxHp, headliner.baseAttack), Is.EqualTo((30, 6)));
+                Assert.That(headliner.creditsReward, Is.EqualTo(headliner.sourceCard.rank switch
                 {
                     CardData.Rank.Jack => 10,
                     CardData.Rank.Queen => 15,
                     _ => 20
                 }));
-                Assert.That(boss.abilities.Length, Is.EqualTo(boss.sourceCard.rank == CardData.Rank.King ? 2 : 1));
-                Assert.That(boss.abilities.Select(a => a.effect).Distinct().Count(), Is.EqualTo(boss.abilities.Length));
-                if (boss.sourceCard.rank == CardData.Rank.King)
+                Assert.That(headliner.abilities.Length, Is.EqualTo(headliner.sourceCard.rank == CardData.Rank.King ? 2 : 1));
+                Assert.That(headliner.abilities.Select(a => a.effect).Distinct().Count(), Is.EqualTo(headliner.abilities.Length));
+                if (headliner.sourceCard.rank == CardData.Rank.King)
                 {
-                    var hardCounters = boss.abilities.Count(a => a.effect is EnemyAbilityEffect.Silence or
+                    var hardCounters = headliner.abilities.Count(a => a.effect is EnemyAbilityEffect.Silence or
                         EnemyAbilityEffect.Withering or EnemyAbilityEffect.Oppression);
                     Assert.That(hardCounters, Is.LessThanOrEqualTo(1));
                     if (hardCounters == 0)
                     {
-                        Assert.That(boss.abilities.Count(a => a.effect is EnemyAbilityEffect.Guarded or EnemyAbilityEffect.Regeneration or
+                        Assert.That(headliner.abilities.Count(a => a.effect is EnemyAbilityEffect.Guarded or EnemyAbilityEffect.Regeneration or
                             EnemyAbilityEffect.FullCoverageBlock), Is.EqualTo(1));
-                        Assert.That(boss.abilities.Count(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or EnemyAbilityEffect.Desperation), Is.EqualTo(1));
+                        Assert.That(headliner.abilities.Count(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or EnemyAbilityEffect.Desperation), Is.EqualTo(1));
                     }
                     else
-                        Assert.That(boss.abilities.Count(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or
+                        Assert.That(headliner.abilities.Count(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or
                             EnemyAbilityEffect.Desperation or EnemyAbilityEffect.Regeneration or EnemyAbilityEffect.Guarded or
                             EnemyAbilityEffect.FullCoverageBlock), Is.EqualTo(1));
                 }
-                else Assert.That(boss.abilities.All(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or
+                else Assert.That(headliner.abilities.All(a => a.effect is EnemyAbilityEffect.DoubleStrike or EnemyAbilityEffect.HeavySwing or
                     EnemyAbilityEffect.Desperation or EnemyAbilityEffect.Regeneration or EnemyAbilityEffect.Guarded or
                     EnemyAbilityEffect.Silence or EnemyAbilityEffect.Withering or EnemyAbilityEffect.Oppression or
                     EnemyAbilityEffect.FullCoverageBlock), Is.True);
@@ -62,19 +62,19 @@ public sealed class Phase3BossAbilityTests
         DestroyGeneratedRun(first);
 
         var sameSeed = CreateGeneratedRun("phase3-seed");
-        Assert.That(Signature(sameSeed.bossDeck), Is.EqualTo(signature));
-        sameSeed.bossIndex = 4;
-        var currentBoss = sameSeed.CurrentBoss;
-        var description = sameSeed.CurrentBossDescription;
-        var scaled = EnemyMapScaling.Scale(currentBoss.maxHp, currentBoss.baseAttack, sameSeed.CurrentMapIndex);
+        Assert.That(Signature(sameSeed.headlinerDeck), Is.EqualTo(signature));
+        sameSeed.headlinerIndex = 4;
+        var currentHeadliner = sameSeed.CurrentHeadliner;
+        var description = sameSeed.CurrentHeadlinerDescription;
+        var scaled = EnemyMapScaling.Scale(currentHeadliner.maxHp, currentHeadliner.baseAttack, sameSeed.CurrentMapIndex);
         Assert.That(description, Does.Contain($"{scaled.hp} HP / {scaled.attack} ATK"));
-        Assert.That(description, Does.Contain(currentBoss.abilities[0].displayName));
-        Assert.That(sameSeed.CurrentBossDescription, Is.EqualTo(description));
-        Assert.That(sameSeed.CurrentBoss, Is.SameAs(currentBoss), "Reading/reopening the map description must not reroll the cached boss.");
+        Assert.That(description, Does.Contain(currentHeadliner.abilities[0].displayName));
+        Assert.That(sameSeed.CurrentHeadlinerDescription, Is.EqualTo(description));
+        Assert.That(sameSeed.CurrentHeadliner, Is.SameAs(currentHeadliner), "Reading/reopening the map description must not reroll the cached boss.");
         DestroyGeneratedRun(sameSeed);
 
         var changedSeed = CreateGeneratedRun("phase3-other-seed");
-        Assert.That(Signature(changedSeed.bossDeck), Is.Not.EqualTo(signature));
+        Assert.That(Signature(changedSeed.headlinerDeck), Is.Not.EqualTo(signature));
         DestroyGeneratedRun(changedSeed);
     }
 
@@ -85,13 +85,13 @@ public sealed class Phase3BossAbilityTests
         var run = go.AddComponent<RunManager>();
         typeof(RunManager).GetField("_randomContext", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
             .SetValue(run, new RunRandomContext(seed));
-        typeof(RunManager).GetMethod("BuildBossDeck", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+        typeof(RunManager).GetMethod("BuildHeadlinerDeck", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
             .Invoke(run, null);
         return run;
     }
 
-    static string Signature(IReadOnlyList<EnemyTypeData> deck) => string.Join("|", deck.Select(boss =>
-        $"{boss.sourceCard.rank}:{boss.sourceCard.suit}:{string.Join(",", boss.abilities.Select(a => a.effect))}"));
+    static string Signature(IReadOnlyList<EnemyTypeData> deck) => string.Join("|", deck.Select(headliner =>
+        $"{headliner.sourceCard.rank}:{headliner.sourceCard.suit}:{string.Join(",", headliner.abilities.Select(a => a.effect))}"));
 
     void DestroyGeneratedRun(RunManager run)
     {
@@ -100,15 +100,15 @@ public sealed class Phase3BossAbilityTests
     }
 
     [Test]
-    public void GeneratedBossPool_CanRollUnyieldingDefenseWithoutMakingItUniversal()
+    public void GeneratedHeadlinerPool_CanRollUnyieldingDefenseWithoutMakingItUniversal()
     {
         int abilityCount = 0;
         int bossCount = 0;
         for (int i = 0; i < 40; i++)
         {
             var run = CreateGeneratedRun($"full-coverage-{i}");
-            bossCount += run.bossDeck.Count;
-            abilityCount += run.bossDeck.Count(boss => boss.abilities.Any(ability =>
+            bossCount += run.headlinerDeck.Count;
+            abilityCount += run.headlinerDeck.Count(headliner => headliner.abilities.Any(ability =>
                 ability.effect == EnemyAbilityEffect.FullCoverageBlock));
             DestroyGeneratedRun(run);
         }
@@ -117,30 +117,30 @@ public sealed class Phase3BossAbilityTests
     }
 
     [Test]
-    public void FirstMapBossUsesTwentyHpWithoutChangingLaterBossDefinitions()
+    public void FirstMapHeadlinerUsesTwentyHpWithoutChangingLaterHeadlinerDefinitions()
     {
         var run = CreateGeneratedRun("first-map-boss-nerf");
-        var firstBoss = run.CurrentBoss;
-        var firstNode = new PathNode { kind = MapNodeType.Boss, mapIndex = 0 };
-        Assert.That(firstBoss.maxHp, Is.EqualTo(30), "The generated definition remains reusable for later scaling.");
-        Assert.That(run.GetEncounterStats(firstNode).hp, Is.EqualTo(RunManager.FirstMapBossHp));
-        Assert.That(run.CurrentBossDescription, Does.Contain($"{RunManager.FirstMapBossHp} HP"));
+        var firstHeadliner = run.CurrentHeadliner;
+        var firstNode = new PathNode { kind = MapNodeType.Headliner, mapIndex = 0 };
+        Assert.That(firstHeadliner.maxHp, Is.EqualTo(30), "The generated definition remains reusable for later scaling.");
+        Assert.That(run.GetEncounterStats(firstNode).hp, Is.EqualTo(RunManager.FirstMapHeadlinerHp));
+        Assert.That(run.CurrentHeadlinerDescription, Does.Contain($"{RunManager.FirstMapHeadlinerHp} HP"));
 
-        run.bossIndex = 1;
-        var secondBoss = run.CurrentBoss;
-        var secondNode = new PathNode { kind = MapNodeType.Boss, mapIndex = 1 };
+        run.headlinerIndex = 1;
+        var secondHeadliner = run.CurrentHeadliner;
+        var secondNode = new PathNode { kind = MapNodeType.Headliner, mapIndex = 1 };
         Assert.That(run.GetEncounterStats(secondNode).hp,
-            Is.EqualTo(EnemyMapScaling.Scale(secondBoss.maxHp, secondBoss.baseAttack, 1).hp));
+            Is.EqualTo(EnemyMapScaling.Scale(secondHeadliner.maxHp, secondHeadliner.baseAttack, 1).hp));
         DestroyGeneratedRun(run);
     }
 
     [Test]
-    public void BossSuitImmunity_UsesActionSuitSnapshotAndPreservesGuardAndShield()
+    public void HeadlinerSuitImmunity_UsesActionSuitSnapshotAndPreservesGuardAndShield()
     {
         var type = CreateEnemy(EnemyAbilityEffect.Guarded);
-        var bossCard = CardData.Create(CardData.Suit.Hearts, CardData.Rank.King);
-        _created.Add(bossCard);
-        type.sourceCard = bossCard;
+        var headlinerCard = CardData.Create(CardData.Suit.Hearts, CardData.Rank.King);
+        _created.Add(headlinerCard);
+        type.sourceCard = headlinerCard;
         var runtime = new EnemyRuntime(type);
         runtime.GainShield(1);
 
@@ -161,13 +161,13 @@ public sealed class Phase3BossAbilityTests
     }
 
     [Test]
-    public void BossSuitImmunity_RunsAfterIncomingModifiersAndDoesNotApplyToNonCardDamage()
+    public void HeadlinerSuitImmunity_RunsAfterIncomingModifiersAndDoesNotApplyToNonCardDamage()
     {
         var type = CreateEnemy(EnemyAbilityEffect.ReduceIncomingCardDamage);
         type.abilities[0].amount = 2;
-        var bossCard = CardData.Create(CardData.Suit.Diamonds, CardData.Rank.Queen);
-        _created.Add(bossCard);
-        type.sourceCard = bossCard;
+        var headlinerCard = CardData.Create(CardData.Suit.Diamonds, CardData.Rank.Queen);
+        _created.Add(headlinerCard);
+        type.sourceCard = headlinerCard;
         var runtime = new EnemyRuntime(type);
         var matching = new CardInstance(CardData.Create(CardData.Suit.Spades, CardData.Rank.Four), 3);
         _created.Add(matching.Definition);

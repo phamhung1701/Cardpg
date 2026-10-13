@@ -29,7 +29,7 @@ public sealed class Phase7CCombatPairTests
         prefab.face = prefabObject.GetComponent<Image>();
         prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
         _cards = CreateComponent<CardManager>("Phase7C Card Manager");
-        _cards.Configure(_field, dragCanvas, prefab, Array.Empty<RelicData>(), Array.Empty<CardEnhancementData>());
+        _cards.Configure(_field, dragCanvas, prefab, Array.Empty<GearData>(), Array.Empty<CardEnhancementData>());
         _cards.ConfigureRandom(new DeterministicRandom(1));
         _cards.BuildDeck();
         _cards.DealHand();
@@ -232,7 +232,7 @@ public sealed class Phase7CCombatPairTests
     }
 
     [Test]
-    public void PairArtifactEffects_ApplyToEachCardOnceAndUsePerCardDamage()
+    public void PairGearEffects_ApplyToEachCardOnceAndUsePerCardDamage()
     {
         var target = new EnemyRuntime(EnemyTypeData.Create("Artifact Pair", 100, 30, 0));
         _combat.StartEnemy(target);
@@ -240,14 +240,14 @@ public sealed class Phase7CCombatPairTests
         var views = HandViews();
         var ace = views.First(view => view.data.Rank == CardData.Rank.Ace);
         var other = views.First(view => view.data.Rank != CardData.Rank.Ace);
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = "phase7c_pair_artifact";
-        artifact.displayName = "Paired Artifact";
-        artifact.damageMultiplier = 2;
-        artifact.flatDamageBonus = 3;
-        artifact.reduceEnemyAttackByCardValue = true;
-        _created.Add(artifact);
-        _cards.ownedArtifacts.Add(artifact);
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = "phase7c_pair_artifact";
+        gear.displayName = "Paired Artifact";
+        gear.damageMultiplier = 2;
+        gear.flatDamageBonus = 3;
+        gear.reduceEnemyAttackByCardValue = true;
+        _created.Add(gear);
+        _cards.ownedGear.Add(gear);
         _combat.CriticalChancePercent = 0;
         int expectedDamage = _combat.CalculateCardAttackDamage(ace.data) + _combat.CalculateCardAttackDamage(other.data);
         int expectedReduction = ace.data.BaseAttackValue + other.data.BaseAttackValue;

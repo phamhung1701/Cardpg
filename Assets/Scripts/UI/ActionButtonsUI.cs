@@ -7,6 +7,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ActionButtonsUI")]
 public class ActionButtonsUI : MonoBehaviour
 {
     enum EnemyTargetAction { None, Attack, Consumable }
@@ -155,7 +156,7 @@ public class ActionButtonsUI : MonoBehaviour
     {
         var node = RunManager.Instance?.ActiveNode;
         bool encounter = node != null && (node.kind == MapNodeType.Combat ||
-            node.kind == MapNodeType.Elite || node.kind == MapNodeType.Boss);
+            node.kind == MapNodeType.Elite || node.kind == MapNodeType.Headliner);
         if (turnStateLabel && turnStateLabel.enabled != encounter) turnStateLabel.enabled = encounter;
         if (combatLogLabel && combatLogLabel.enabled != encounter) combatLogLabel.enabled = encounter;
         bool showSelection = node == null || encounter;
@@ -620,7 +621,7 @@ public class ActionButtonsUI : MonoBehaviour
         if (cards == null || item == null || cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting) return;
         if (cards.GetConsumableAtSlot(slotIndex)?.effectType != ConsumableEffectType.ApplyEnhancement)
             cards.ClearSelection();
-        FindFirstObjectByType<ArtifactRailUI>()?.ClearObjectSelection();
+        FindFirstObjectByType<GearRailUI>()?.ClearObjectSelection();
         if (_selectedConsumableSlot == slotIndex && ReferenceEquals(_selectedConsumable, item))
             ClearSelectedConsumable();
         else

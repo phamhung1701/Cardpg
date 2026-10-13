@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-public static class ArtifactUpgradeResolver
+public static class GearUpgradeResolver
 {
-    public static string ValidateCatalog(IReadOnlyList<RelicData> catalog)
+    public static string ValidateCatalog(IReadOnlyList<GearData> catalog)
     {
         if (catalog == null) return "Gear catalog is missing";
-        var byCanonical = new Dictionary<string, RelicData>(StringComparer.Ordinal);
+        var byCanonical = new Dictionary<string, GearData>(StringComparer.Ordinal);
         foreach (var item in catalog)
         {
             if (item == null || string.IsNullOrWhiteSpace(item.canonicalId)) continue;
@@ -33,8 +33,8 @@ public static class ArtifactUpgradeResolver
         return string.Empty;
     }
 
-    public static bool CanReplace(RelicData predecessor, RelicData replacement,
-        IReadOnlyList<RelicData> owned, IReadOnlyList<RelicData> catalog, out string reason)
+    public static bool CanReplace(GearData predecessor, GearData replacement,
+        IReadOnlyList<GearData> owned, IReadOnlyList<GearData> catalog, out string reason)
     {
         reason = ValidateCatalog(catalog);
         if (!string.IsNullOrEmpty(reason)) return false;
@@ -48,7 +48,7 @@ public static class ArtifactUpgradeResolver
         return true;
     }
 
-    public static RelicData FindImmediateUpgrade(RelicData owned, IReadOnlyList<RelicData> catalog) =>
+    public static GearData FindImmediateUpgrade(GearData owned, IReadOnlyList<GearData> catalog) =>
         owned == null || catalog == null ? null : catalog.FirstOrDefault(x => x != null &&
             string.Equals(x.upgradeFromId, owned.canonicalId, StringComparison.Ordinal));
 }

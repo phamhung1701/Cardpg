@@ -39,7 +39,7 @@ public sealed class LowerEffortEnhancementTests
         prefab.face = prefabObject.GetComponent<Image>();
         prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
         _cards = Make<CardManager>("Enhancement Test Cards");
-        _cards.Configure(field, drag, prefab, Array.Empty<RelicData>(),
+        _cards.Configure(field, drag, prefab, Array.Empty<GearData>(),
             new[] { _devouring, _lethal, _explosive, _vampiric, _shifting });
         _cards.ConfigureRandom(new DeterministicRandom(4051));
         _cards.BuildDeck();

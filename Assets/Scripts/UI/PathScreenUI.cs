@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "PathScreenUI")]
 public class PathScreenUI : MonoBehaviour
 {
     [Header("Layout")]
@@ -152,10 +153,10 @@ public class PathScreenUI : MonoBehaviour
     void HandleCycleStarted(string header)
     {
         var run = RunManager.Instance;
-        string bossDescription = run != null ? run.CurrentBossDescription : string.Empty;
-        if (headerText) headerText.text = string.IsNullOrEmpty(bossDescription)
+        string headlinerDescription = run != null ? run.CurrentHeadlinerDescription : string.Empty;
+        if (headerText) headerText.text = string.IsNullOrEmpty(headlinerDescription)
             ? header
-            : $"{header}\n<size=80%>{bossDescription}</size>";
+            : $"{header}\n<size=80%>{headlinerDescription}</size>";
         BuildMap();
     }
 
@@ -243,7 +244,7 @@ public class PathScreenUI : MonoBehaviour
         }
 
         Vector2 startPosition = PositionFor(0, 1);
-        Vector2 bossPosition = PositionFor(displayColumns.Count, 1);
+        Vector2 headlinerPosition = PositionFor(displayColumns.Count, 1);
         foreach (var node in run.currentPath)
             _nodePositions[node.id] = PositionFor(displayColumns.IndexOf(node.col) + 1,
                 Mathf.Clamp(Mathf.RoundToInt(node.row), 0, RunMapGenerator.RowCount - 1));
@@ -254,7 +255,7 @@ public class PathScreenUI : MonoBehaviour
             foreach (int nextId in node.next)
             {
                 var next = run.currentPath.Find(candidate => candidate.id == nextId);
-                if (next == null || next.kind == MapNodeType.Boss) continue;
+                if (next == null || next.kind == MapNodeType.Headliner) continue;
                 routeEdges.Add(ClipConnection(_nodePositions[node.id], _nodePositions[next.id], nodeSize,
                     node.id, next.id, Mathf.RoundToInt(node.row), Mathf.RoundToInt(next.row)));
             }
@@ -263,13 +264,13 @@ public class PathScreenUI : MonoBehaviour
         foreach (var node in run.currentPath.Where(value => Mathf.Approximately(value.col, 0f)))
             routeEdges.Add(ClipConnection(startPosition, _nodePositions[node.id], nodeSize,
                 int.MinValue, node.id, 1, Mathf.RoundToInt(node.row)));
-        var bossNode = run.currentPath.FirstOrDefault(value => value.kind == MapNodeType.Boss);
-        if (bossNode != null)
+        var headlinerNode = run.currentPath.FirstOrDefault(value => value.kind == MapNodeType.Headliner);
+        if (headlinerNode != null)
         {
-            _nodePositions[bossNode.id] = bossPosition;
-            foreach (var predecessor in run.currentPath.Where(value => value.next.Contains(bossNode.id)))
-                routeEdges.Add(ClipConnection(_nodePositions[predecessor.id], bossPosition, nodeSize,
-                    predecessor.id, bossNode.id, Mathf.RoundToInt(predecessor.row), 1));
+            _nodePositions[headlinerNode.id] = headlinerPosition;
+            foreach (var predecessor in run.currentPath.Where(value => value.next.Contains(headlinerNode.id)))
+                routeEdges.Add(ClipConnection(_nodePositions[predecessor.id], headlinerPosition, nodeSize,
+                    predecessor.id, headlinerNode.id, Mathf.RoundToInt(predecessor.row), 1));
         }
 
         // Keep same-lane trunks behind branches, then make genuine crossings read as overpasses.
@@ -531,7 +532,7 @@ public class PathScreenUI : MonoBehaviour
         MapNodeType.Event => "EVENT",
         MapNodeType.Upgrade => "UP",
         MapNodeType.Risk => "RISK",
-        MapNodeType.Boss => "BOSS",
+        MapNodeType.Headliner => "BOSS",
         _ => "NODE"
     };
 
@@ -549,7 +550,7 @@ public class PathScreenUI : MonoBehaviour
             MapNodeType.Event => new Color(0.28f, 0.45f, 0.58f),
             MapNodeType.Upgrade => new Color(0.28f, 0.56f, 0.42f),
             MapNodeType.Risk => new Color(0.54f, 0.28f, 0.48f),
-            MapNodeType.Boss => new Color(0.64f, 0.24f, 0.28f),
+            MapNodeType.Headliner => new Color(0.64f, 0.24f, 0.28f),
             _ => new Color(0.26f, 0.43f, 0.68f)
         };
     }

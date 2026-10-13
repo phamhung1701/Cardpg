@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fc333c80492e32a4981ae457376add7e, type: 3}
   m_Name: FieldMedicsKit
-  m_EditorClassIdentifier: CardPG.Runtime::RelicData
+  m_EditorClassIdentifier: Dealbreak.Runtime::GearData
   id: rel_122
   displayName: First-Aid Kit
   icon: MEDIC

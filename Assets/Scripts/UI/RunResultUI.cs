@@ -4,6 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RunResultUI")]
 public class RunResultUI : MonoBehaviour
 {
     [Header("Encounter Feedback")]
@@ -19,7 +20,7 @@ public class RunResultUI : MonoBehaviour
     public Button newRunButton;
     public Button mainMenuButton;
 
-    string _lastBossRewardName;
+    string _lastHeadlinerRewardName;
     AttackCardPresentationUI _presentation;
     bool _pendingResult;
     bool _pendingResultVictory;
@@ -37,7 +38,7 @@ public class RunResultUI : MonoBehaviour
         }
         if (RunManager.Instance != null)
         {
-            RunManager.Instance.OnBossRewardGranted += HandleBossRewardGranted;
+            RunManager.Instance.OnHeadlinerRewardGranted += HandleHeadlinerRewardGranted;
             RunManager.Instance.OnRunCompleted += HandleRunCompleted;
             RunManager.Instance.OnRunStarted += HandleRunStarted;
         }
@@ -56,7 +57,7 @@ public class RunResultUI : MonoBehaviour
         }
         if (RunManager.Instance != null)
         {
-            RunManager.Instance.OnBossRewardGranted -= HandleBossRewardGranted;
+            RunManager.Instance.OnHeadlinerRewardGranted -= HandleHeadlinerRewardGranted;
             RunManager.Instance.OnRunCompleted -= HandleRunCompleted;
             RunManager.Instance.OnRunStarted -= HandleRunStarted;
         }
@@ -93,9 +94,9 @@ public class RunResultUI : MonoBehaviour
         if (result == EncounterResult.Defeat) ShowWhenPresentationIdle(false);
     }
 
-    void HandleBossRewardGranted(CardInstance reward)
+    void HandleHeadlinerRewardGranted(CardInstance reward)
     {
-        _lastBossRewardName = reward != null ? reward.DisplayName : null;
+        _lastHeadlinerRewardName = reward != null ? reward.DisplayName : null;
         if (rewardBanner) rewardBanner.SetActive(reward != null);
         if (rewardLabel)
             rewardLabel.text = reward != null
@@ -171,15 +172,15 @@ public class RunResultUI : MonoBehaviour
         if (IsShowingResult) return;
         var run = RunManager.Instance;
         var cards = CardManager.Instance;
-        int totalBosses = run != null ? run.BossTotal : 12;
-        int bossesDefeated = run != null ? Mathf.Clamp(run.bossIndex, 0, totalBosses) : 0;
-        int mapReached = victory ? totalBosses : run != null ? Mathf.Clamp(run.CurrentCycle, 1, totalBosses) : 0;
+        int totalHeadliners = run != null ? run.HeadlinerTotal : 12;
+        int headlinersDefeated = run != null ? Mathf.Clamp(run.headlinerIndex, 0, totalHeadliners) : 0;
+        int mapReached = victory ? totalHeadliners : run != null ? Mathf.Clamp(run.CurrentCycle, 1, totalHeadliners) : 0;
         string seed = run != null ? run.RunSeed : string.Empty;
-        string artifacts = cards == null || cards.ownedArtifacts.Count == 0
+        string gearItems = cards == null || cards.ownedGear.Count == 0
             ? "None"
-            : string.Join(", ", cards.ownedArtifacts.Where(value => value != null).Select(value => value.displayName));
+            : string.Join(", ", cards.ownedGear.Where(value => value != null).Select(value => value.displayName));
         int enhanced = cards != null ? cards.ownedCards.Count(card => card.Enhancement != null) : 0;
-        string goldDisplay = cards == null ? "0" : cards.HasInfiniteMoney ? "∞" : cards.gold.ToString();
+        string creditsDisplay = cards == null ? "0" : cards.HasInfiniteMoney ? "∞" : cards.credits.ToString();
 
         string timingSummary = BuildTimingSummary(run?.Timing, victory);
 
@@ -200,10 +201,10 @@ public class RunResultUI : MonoBehaviour
             resultBodyLabel.overflowMode = TextOverflowModes.Overflow;
             resultBodyLabel.text =
                 $"<size=85%><b><color=#F2B95E>SEED</color></b></size>\n{EscapeRichText(seed)}\n\n" +
-                $"<size=85%><b><color=#F2B95E>PROGRESS</color></b></size>\nDistrict {mapReached}/{totalBosses}  ·  Headliners defeated {bossesDefeated}/{totalBosses}\n\n" +
-                $"<size=85%><b><color=#F2B95E>RUN TOTALS</color></b></size>\nCredits  {goldDisplay}\nGear  {EscapeRichText(artifacts)}\nMods applied  {enhanced}" +
-                (victory && !string.IsNullOrEmpty(_lastBossRewardName)
-                    ? $"\nFinal reward  {EscapeRichText(_lastBossRewardName)}" : string.Empty) +
+                $"<size=85%><b><color=#F2B95E>PROGRESS</color></b></size>\nDistrict {mapReached}/{totalHeadliners}  ·  Headliners defeated {headlinersDefeated}/{totalHeadliners}\n\n" +
+                $"<size=85%><b><color=#F2B95E>RUN TOTALS</color></b></size>\nCredits  {creditsDisplay}\nGear  {EscapeRichText(gearItems)}\nMods applied  {enhanced}" +
+                (victory && !string.IsNullOrEmpty(_lastHeadlinerRewardName)
+                    ? $"\nFinal reward  {EscapeRichText(_lastHeadlinerRewardName)}" : string.Empty) +
                 $"\n\n<size=85%><b><color=#F2B95E>TIMING</color></b></size>\n{timingSummary}";
         }
 
@@ -262,7 +263,7 @@ public class RunResultUI : MonoBehaviour
     {
         _pendingResult = false;
         _pendingResultVictory = false;
-        _lastBossRewardName = null;
+        _lastHeadlinerRewardName = null;
         if (rewardBanner) rewardBanner.SetActive(false);
         if (coordinator != null && coordinator.IsTop(this)) coordinator.Pop(this);
         else if (resultPanel) resultPanel.SetActive(false);

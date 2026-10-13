@@ -6,23 +6,23 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 
-public sealed class ArtifactContentBatch1Tests
+public sealed class GearContentBatch1Tests
 {
     readonly List<UnityEngine.Object> _created = new();
     CardManager _cards;
     CombatManager _combat;
-    RelicData _leather, _dagger, _tome, _sword, _club;
+    GearData _leather, _dagger, _tome, _sword, _club;
     CardEnhancementData _sharpened;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _leather = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/LeatherArmor.asset");
-        _dagger = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/Dagger.asset");
-        _tome = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/Tome.asset");
-        _sword = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/Sword.asset");
-        _club = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/ClubPower.asset");
+        _leather = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/LeatherArmor.asset");
+        _dagger = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/Dagger.asset");
+        _tome = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/Tome.asset");
+        _sword = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/Sword.asset");
+        _club = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/ClubPower.asset");
         _sharpened = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Sharpened.asset");
         Assert.That(new UnityEngine.Object[] { _leather, _dagger, _tome, _sword, _club, _sharpened }, Has.All.Not.Null);
 
@@ -74,9 +74,9 @@ public sealed class ArtifactContentBatch1Tests
             Assert.That(assets[i].displayName, Is.EqualTo(names[i]));
             Assert.That(assets[i].tier, Is.EqualTo(1));
             Assert.That(assets[i].rarity, Is.EqualTo(i == 3 ? "Rare" : "Common"));
-            Assert.That(assets[i].capacityCategory, Is.EqualTo(ArtifactCapacityCategory.Persistent));
+            Assert.That(assets[i].capacityCategory, Is.EqualTo(GearCapacityCategory.Persistent));
             Assert.That(assets[i].effects, Is.Not.Empty);
-            Assert.That(_cards.BuyArtifact(assets[i], 0), Is.True);
+            Assert.That(_cards.BuyGear(assets[i], 0), Is.True);
         }
         _cards.Reset();
         for (int i = 0; i < assets.Length; i++)
@@ -86,7 +86,7 @@ public sealed class ArtifactContentBatch1Tests
     [Test]
     public void Leather_ReducesEachCombatInstance_FloorsBeforeShield_AndDoesNotAffectEventCosts()
     {
-        Assert.That(_cards.BuyArtifact(_leather, 0), Is.True);
+        Assert.That(_cards.BuyGear(_leather, 0), Is.True);
         var enemy = Target(100, 5);
         var action = new CombatActionContext(1, CombatActionOrigin.EnemyRetaliation, sourceEnemy: enemy);
         var resolver = new CombatResolver();
@@ -115,7 +115,7 @@ public sealed class ArtifactContentBatch1Tests
     [Test]
     public void Dagger_AddsThreeBelowTen_CapsWholeAction_AndNeverChangesDefense()
     {
-        Assert.That(_cards.BuyArtifact(_dagger, 0), Is.True);
+        Assert.That(_cards.BuyGear(_dagger, 0), Is.True);
         var low = FindCard(c => c.Rank == CardData.Rank.Two);
         var high = FindCard(c => c.Rank == CardData.Rank.Nine, low.data);
         Assert.That(_combat.CalculateCardAttackDamage(low.data), Is.EqualTo(2));
@@ -131,7 +131,7 @@ public sealed class ArtifactContentBatch1Tests
     [Test]
     public void Dagger_AcePairCapsAfterAggregation_ThenGuaranteedCritCanReachTwenty()
     {
-        Assert.That(_cards.BuyArtifact(_dagger, 0), Is.True);
+        Assert.That(_cards.BuyGear(_dagger, 0), Is.True);
         var ace = FindCard(c => c.Rank == CardData.Rank.Ace);
         var eight = FindCard(c => c.Rank == CardData.Rank.Eight, ace.data);
         var enemy = Target(100, 0);
@@ -144,7 +144,7 @@ public sealed class ArtifactContentBatch1Tests
     [Test]
     public void Dagger_MultiHitUsesOneActionBudgetRatherThanResettingTheCapPerHit()
     {
-        Assert.That(_cards.BuyArtifact(_dagger, 0), Is.True);
+        Assert.That(_cards.BuyGear(_dagger, 0), Is.True);
         var two = FindCard(c => c.Rank == CardData.Rank.Two);
         var enemy = Target(100, 0);
         _combat.StartEnemy(enemy);
@@ -165,7 +165,7 @@ public sealed class ArtifactContentBatch1Tests
     [Test]
     public void Tome_DrawsAfterBaseline_OnlyOncePerEncounter_AndClampsAtFullHand()
     {
-        Assert.That(_cards.BuyArtifact(_tome, 0), Is.True);
+        Assert.That(_cards.BuyGear(_tome, 0), Is.True);
         Assert.That(_cards.TryDiscard(Views()[0]), Is.True);
         Assert.That(_cards.TryDiscard(Views()[0]), Is.True);
         int beforeHand = _cards.HandCount, deck = _cards.deck.Count;
@@ -199,7 +199,7 @@ public sealed class ArtifactContentBatch1Tests
         _cards.DealHand();
         _cards.TryDiscard(Views()[0]);
         _cards.TryDiscard(Views()[0]);
-        _cards.BuyArtifact(_tome, 0);
+        _cards.BuyGear(_tome, 0);
         _combat.StartEnemy(Target(100, 0));
         var mapA = first.CreateStream("map-layout", 2);
         var mapB = second.CreateStream("map-layout", 2);
@@ -215,7 +215,7 @@ public sealed class ArtifactContentBatch1Tests
     [Test]
     public void Sword_UsesPreSwordPerCardThreshold_WithSharpenedAndClub()
     {
-        Assert.That(_cards.BuyArtifact(_sword, 0), Is.True);
+        Assert.That(_cards.BuyGear(_sword, 0), Is.True);
         var eight = Card(CardData.Suit.Hearts, CardData.Rank.Eight);
         var nine = Card(CardData.Suit.Hearts, CardData.Rank.Nine);
         var clubFour = Card(CardData.Suit.Clubs, CardData.Rank.Four);
@@ -226,7 +226,7 @@ public sealed class ArtifactContentBatch1Tests
             _sharpened), Is.True);
         var enhancedEight = _cards.ownedCards.First(c => c.Rank == CardData.Rank.Eight && c.Enhancement != null);
         Assert.That(_combat.CalculateCardAttackDamage(enhancedEight), Is.EqualTo(21));
-        Assert.That(_cards.BuyArtifact(_club, 0), Is.True);
+        Assert.That(_cards.BuyGear(_club, 0), Is.True);
         Assert.That(_combat.CalculateCardAttackDamage(clubFour), Is.EqualTo(8));
         Assert.That(_combat.CalculateCardAttackDamage(clubFive), Is.EqualTo(20));
         Assert.That(_combat.CalculateCardDefense(clubFive), Is.EqualTo(5));
@@ -235,7 +235,7 @@ public sealed class ArtifactContentBatch1Tests
     [Test]
     public void Sword_EvaluatesAcePairCardsIndependentlyAndCannotSelfQualify()
     {
-        Assert.That(_cards.BuyArtifact(_sword, 0), Is.True);
+        Assert.That(_cards.BuyGear(_sword, 0), Is.True);
         var ace = FindCard(c => c.Rank == CardData.Rank.Ace);
         var nine = FindCard(c => c.Rank == CardData.Rank.Nine, ace.data);
         var enemy = Target(100, 0);
@@ -248,12 +248,12 @@ public sealed class ArtifactContentBatch1Tests
     }
 
     [Test]
-    public void CombinedArtifacts_KeepActionAndPerCardOrderRegardlessOfAcquisitionOrder()
+    public void CombinedGear_KeepActionAndPerCardOrderRegardlessOfAcquisitionOrder()
     {
         var ace = FindCard(c => c.Rank == CardData.Rank.Ace);
         var club = FindCard(c => c.Suit == CardData.Suit.Clubs && c.Rank == CardData.Rank.Five, ace.data);
-        foreach (var artifact in new[] { _sword, _dagger, _club })
-            Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+        foreach (var gear in new[] { _sword, _dagger, _club })
+            Assert.That(_cards.BuyGear(gear, 0), Is.True);
         var enemy = Target(100, 0);
         _combat.StartEnemy(enemy);
         _combat.CriticalChancePercent = 0f;
@@ -265,11 +265,11 @@ public sealed class ArtifactContentBatch1Tests
         _cards.ConfigureRandom(new DeterministicRandom(41));
         _cards.BuildDeck();
         _cards.DealHand();
-        foreach (var artifact in new[] { _club, _dagger, _sword })
-            Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+        foreach (var gear in new[] { _club, _dagger, _sword })
+            Assert.That(_cards.BuyGear(gear, 0), Is.True);
         var replacementClub = Card(CardData.Suit.Clubs, CardData.Rank.Five);
         Assert.That(_combat.CalculateCardAttackDamage(replacementClub), Is.EqualTo(20));
-        Assert.That(_cards.ArtifactSlotsUsed, Is.EqualTo(3));
+        Assert.That(_cards.GearSlotsUsed, Is.EqualTo(3));
     }
 
     [Test]
@@ -282,19 +282,19 @@ public sealed class ArtifactContentBatch1Tests
         run.StartRunWithSeed("BATCH-FOUR");
         var shop = run.currentPath.First(n => n.kind == MapNodeType.Shop);
         shop.accessible = true;
-        _cards.AddGold(100);
+        _cards.AddCredits(100);
         run.OnPathChosen(shop.id);
-        var offer = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Artifact);
-        int price = offer.price, gold = _cards.gold;
+        var offer = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Gear);
+        int price = offer.price, credits = _cards.credits;
         Assert.That(run.PurchaseShopOffer(offer.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(gold - price));
+        Assert.That(_cards.credits, Is.EqualTo(credits - price));
         Assert.That(run.PurchaseShopOffer(offer.StableId), Is.False);
-        _cards.GetArtifactInstance(offer.artifact).State.SetCounter(0, 12);
+        _cards.GetGearInstance(offer.gear).State.SetCounter(0, 12);
         run.RestartRun();
-        Assert.That(_cards.ArtifactSlotsUsed, Is.Zero);
+        Assert.That(_cards.GearSlotsUsed, Is.Zero);
         Assert.That(_cards.ownedCards.Count, Is.EqualTo(40));
-        Assert.That(_cards.BuyArtifact(offer.artifact, 0), Is.True);
-        Assert.That(_cards.GetArtifactInstance(offer.artifact).State.GetCounter(0), Is.Zero);
+        Assert.That(_cards.BuyGear(offer.gear, 0), Is.True);
+        Assert.That(_cards.GetGearInstance(offer.gear).State.GetCounter(0), Is.Zero);
     }
 
     CardInstance Card(CardData.Suit suit, CardData.Rank rank)

@@ -1,5 +1,7 @@
 # Dealbreak Technical Summary
 
+> **Internal rename update (2026-10-13):** The runtime assembly is now `Dealbreak.Runtime`; Gear uses `GearData`/`GearRuntimeInstance`, and progression APIs use Headliner. This document is a historical implementation snapshot; see `Docs/Dealbreak_Internal_Rebranding_Report.md` for the current API and compatibility boundary.
+
 > Historical technical snapshot. For current player-facing content names and terminology, use `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx`; the legacy symbols and values documented here remain implementation details and are not serialized-ID migration instructions.
 
 Repository review date: **September 18, 2026**  
@@ -56,7 +58,7 @@ There is no save/resume system, metaprogression, profile system, achievements, n
 
 - **Unity 6000.3.24f1** — Engine, scene/prefab serialization, GameObject/component lifecycle, UI, runtime asset loading, and Play Mode execution.
 - **C#** — All gameplay, runtime models, managers, deterministic generation, UI controllers, frontend flow, and tests.
-- **Assembly Definitions** — `Assets/Scripts/CardPG.Runtime.asmdef` separates runtime code; `Assets/Tests/EditMode/CardPG.EditModeTests.asmdef` defines the Editor-only test assembly.
+- **Assembly Definitions** — `Assets/Scripts/Dealbreak.Runtime.asmdef` separates runtime code; `Assets/Tests/EditMode/Dealbreak.EditModeTests.asmdef` defines the Editor-only test assembly.
 
 ### Verified Unity packages and systems actually used
 
@@ -582,7 +584,7 @@ Key files:
 
 ### Automated setup
 
-- Test assembly: `Assets/Tests/EditMode/CardPG.EditModeTests.asmdef`.
+- Test assembly: `Assets/Tests/EditMode/Dealbreak.EditModeTests.asmdef`.
 - Framework: Unity Test Framework with NUnit.
 - Mode: Editor-only EditMode tests.
 - Runtime dependency: `CardPG.Runtime` assembly.
@@ -634,7 +636,7 @@ The current repository contains **77 discovered EditMode cases**. The developmen
 
 EditMode tests cover deterministic logic, models, manager integration, transaction safety, interaction rules, and selected UI-controller behavior without requiring a full manual run.
 
-Manual Play Mode verification documented in `CARDPG_DEVELOPMENT.md` covers:
+Manual Play Mode verification documented in `DEALBREAK_DEVELOPMENT.md` covers:
 
 - Direct and Main Menu initialization.
 - Combat actions and edge cases.

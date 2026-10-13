@@ -10,17 +10,17 @@ public sealed class Phase6RegressionTests
     CardManager _cards;
     CombatManager _combat;
     RunManager _run;
-    RelicData _artifact;
+    GearData _gear;
     CardEnhancementData _enhancement;
 
     [SetUp]
     public void SetUp()
     {
-        _artifact = CreateArtifact("phase6_artifact", 10);
+        _gear = CreateGear("phase6_artifact", 10);
         _enhancement = CreateEnhancement("phase6_enhancement", 8, attack: 3);
 
         _cards = CreateObject<CardManager>("Phase6 CardManager");
-        _cards.Configure(null, null, null, new[] { _artifact }, new[] { _enhancement });
+        _cards.Configure(null, null, null, new[] { _gear }, new[] { _enhancement });
         _combat = CreateObject<CombatManager>("Phase6 CombatManager");
         _combat.ConfigurePlayer(30);
         _run = CreateObject<RunManager>("Phase6 RunManager");
@@ -42,57 +42,57 @@ public sealed class Phase6RegressionTests
     }
 
     [Test]
-    public void CachedArtifactOffer_ChargesDisplayedPriceEvenIfDefinitionChanges()
+    public void CachedGearOffer_ChargesDisplayedPriceEvenIfDefinitionChanges()
     {
         _run.StartRunWithSeed("PHASE6-CACHED-PRICE");
         var shop = _run.currentPath.First(node => node.kind == MapNodeType.Shop);
         shop.accessible = true;
         _run.OnPathChosen(shop.id);
-        var offer = _run.GetCurrentShopOffers().Single(value => value.kind == ShopOfferKind.Artifact);
+        var offer = _run.GetCurrentShopOffers().Single(value => value.kind == ShopOfferKind.Gear);
         int cachedPrice = offer.price;
-        offer.artifact.price = cachedPrice + 100;
-        _cards.AddGold(cachedPrice);
+        offer.gear.price = cachedPrice + 100;
+        _cards.AddCredits(cachedPrice);
 
         Assert.That(_run.PurchaseShopOffer(offer.StableId), Is.True);
-        Assert.That(_cards.gold, Is.Zero);
-        Assert.That(_cards.HasArtifact(offer.artifact), Is.True);
+        Assert.That(_cards.credits, Is.Zero);
+        Assert.That(_cards.HasGear(offer.gear), Is.True);
     }
 
     [Test]
-    public void NegativePrices_CannotIncreaseGoldOrGrantArtifacts()
+    public void NegativePrices_CannotIncreaseCreditsOrGrantGear()
     {
-        _cards.AddGold(5);
-        _artifact.price = -10;
+        _cards.AddCredits(5);
+        _gear.price = -10;
 
-        Assert.That(_cards.SpendGold(-1), Is.False);
-        Assert.That(_cards.BuyArtifact(_artifact), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(5));
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.SpendCredits(-1), Is.False);
+        Assert.That(_cards.BuyGear(_gear), Is.False);
+        Assert.That(_cards.credits, Is.EqualTo(5));
+        Assert.That(_cards.ownedGear, Is.Empty);
     }
 
     [Test]
-    public void ArtifactAttackStacking_IsOrderIndependentAndUsesMultiplierThenFlatBonus()
+    public void GearAttackStacking_IsOrderIndependentAndUsesMultiplierThenFlatBonus()
     {
         _run.StartRunWithSeed("PHASE6-STACKING");
         var card = _cards.ownedCards.First(value => value.Suit == CardData.Suit.Clubs && value.Rank == CardData.Rank.Four);
         Assert.That(_cards.ApplyEnhancement(card.Id, _enhancement), Is.True);
 
-        var club = CreateArtifact("club", 0);
+        var club = CreateGear("club", 0);
         club.restrictToSuit = true;
         club.affectedSuit = CardData.Suit.Clubs;
         club.damageMultiplier = 2;
-        var artisan = CreateArtifact("artisan", 0);
+        var artisan = CreateGear("artisan", 0);
         artisan.requiresEnhancedCard = true;
         artisan.flatDamageBonus = 3;
 
-        _cards.ownedArtifacts.Clear();
-        _cards.ownedArtifacts.Add(club);
-        _cards.ownedArtifacts.Add(artisan);
+        _cards.ownedGear.Clear();
+        _cards.ownedGear.Add(club);
+        _cards.ownedGear.Add(artisan);
         int firstOrder = _combat.CalculateCardAttackDamage(card);
 
-        _cards.ownedArtifacts.Clear();
-        _cards.ownedArtifacts.Add(artisan);
-        _cards.ownedArtifacts.Add(club);
+        _cards.ownedGear.Clear();
+        _cards.ownedGear.Add(artisan);
+        _cards.ownedGear.Add(club);
         int secondOrder = _combat.CalculateCardAttackDamage(card);
 
         Assert.That(card.AttackValue, Is.EqualTo(7));
@@ -107,8 +107,8 @@ public sealed class Phase6RegressionTests
         {
             effects = new[]
             {
-                new RunEffect { type = RunEffectType.GainGold, amount = 5 },
-                new RunEffect { type = RunEffectType.LoseGold, amount = 5 }
+                new RunEffect { type = RunEffectType.GainCredits, amount = 5 },
+                new RunEffect { type = RunEffectType.LoseCredits, amount = 5 }
             }
         };
         var maxHealthBeforeCost = new RunEventChoice
@@ -132,7 +132,7 @@ public sealed class Phase6RegressionTests
     [Test]
     public void UpgradeWithNoEligibleEnhancements_AutoCompletesAndUnlocksSuccessors()
     {
-        _cards.Configure(null, null, null, new[] { _artifact }, System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(null, null, null, new[] { _gear }, System.Array.Empty<CardEnhancementData>());
         _run.StartRunWithSeed("PHASE6-EMPTY-UPGRADE");
         var upgrade = _run.currentPath.First(node => node.kind == MapNodeType.Upgrade);
         upgrade.accessible = true;
@@ -153,7 +153,7 @@ public sealed class Phase6RegressionTests
     [Test]
     public void ShopWithNoCatalogOffers_ShowsSpecialDealsAndRemainsCompletableExactlyOnce()
     {
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _run.StartRunWithSeed("PHASE6-EMPTY-SHOP");
         var shop = _run.currentPath.First(node => node.kind == MapNodeType.Shop);
         shop.accessible = true;
@@ -228,15 +228,15 @@ public sealed class Phase6RegressionTests
         return gameObject.AddComponent<T>();
     }
 
-    RelicData CreateArtifact(string id, int price)
+    GearData CreateGear(string id, int price)
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = id;
-        artifact.displayName = id;
-        artifact.price = price;
-        artifact.damageMultiplier = 1;
-        _assets.Add(artifact);
-        return artifact;
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = id;
+        gear.displayName = id;
+        gear.price = price;
+        gear.damageMultiplier = 1;
+        _assets.Add(gear);
+        return gear;
     }
 
     CardEnhancementData CreateEnhancement(string id, int price, int attack = 0)
@@ -250,9 +250,9 @@ public sealed class Phase6RegressionTests
         return enhancement;
     }
 
-    EnemyTypeData CreateEnemy(string name, int hp, int attack, int gold)
+    EnemyTypeData CreateEnemy(string name, int hp, int attack, int credits)
     {
-        var enemy = EnemyTypeData.Create(name, hp, attack, gold);
+        var enemy = EnemyTypeData.Create(name, hp, attack, credits);
         enemy.name = name;
         _assets.Add(enemy);
         return enemy;

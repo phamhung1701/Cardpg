@@ -7,14 +7,14 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 
-public sealed class ArtifactRuleBatchTests
+public sealed class GearRuleBatchTests
 {
     readonly List<UnityEngine.Object> _assets = new();
     readonly List<GameObject> _objects = new();
     CardManager _cards;
     CombatManager _combat;
     RunManager _run;
-    RelicData _cheater, _hands, _dwarf, _dagger, _healingLight, _handsRare, _royal;
+    GearData _cheater, _hands, _dwarf, _dagger, _healingLight, _handsRare, _royal;
     CardEnhancementData _mending, _sharpened;
     Field _field;
 
@@ -38,10 +38,10 @@ public sealed class ArtifactRuleBatchTests
         prefab.face = prefabObject.GetComponent<Image>();
         prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
         _cards = Make<CardManager>("Rule Batch Cards");
-        _cheater = Artifact("rel_011", "Cheater Emblem",
+        _cheater = Gear("rel_011", "Cheater Emblem",
             Rule("cheater_first_turn", GameplayRuleModifierKind.ExtraTurn,
                 new ExtraTurnRuleDefinition { trigger = ExtraTurnRuleTrigger.FirstPlayerTurnCompleted, oncePerEncounter = true }));
-        _hands = Artifact("rel_012", "Hands Emblem",
+        _hands = Gear("rel_012", "Hands Emblem",
             Rule("hands_same_rank", GameplayRuleModifierKind.SameRankMultiCard,
                 sameRank: new SameRankMultiCardRuleDefinition { requireMatchingRank = true, maximumCards = 3 }));
         _hands.effects = new[] { new GameplayEffectDefinition
@@ -54,19 +54,19 @@ public sealed class ArtifactRuleBatchTests
                 kind = GameplayConditionKind.HandsMultiCardAction, expected = true
             } }
         } };
-        _dwarf = Artifact("rel_013", "Dwarf Emblem",
+        _dwarf = Gear("rel_013", "Dwarf Emblem",
             Rule("dwarf_low_rank_turn", GameplayRuleModifierKind.ExtraTurn,
                 new ExtraTurnRuleDefinition { trigger = ExtraTurnRuleTrigger.QualifyingPlayedActionCompleted,
                     requireAllPlayedCardsBelowRank = true, exclusiveRank = CardData.Rank.Five }));
-        _dagger = AssetDatabaseArtifact("rel_006");
-        _healingLight = AssetDatabaseArtifact("rel_010");
+        _dagger = AssetDatabaseGear("rel_006");
+        _healingLight = AssetDatabaseGear("rel_010");
         _cards.Configure(_field, drag, prefab,
             new[] { _cheater, _hands, _dwarf, _dagger, _healingLight,
-                AssetDatabaseArtifact("rel_005"), AssetDatabaseArtifact("rel_007"),
-                AssetDatabaseArtifact("rel_023"),
-                AssetDatabaseArtifact("rel_001"), AssetDatabaseArtifact("rel_002"),
-                AssetDatabaseArtifact("rel_003"), AssetDatabaseArtifact("rel_004"),
-                AssetDatabaseArtifact("rel_020"), AssetDatabaseArtifact("rel_100") },
+                AssetDatabaseGear("rel_005"), AssetDatabaseGear("rel_007"),
+                AssetDatabaseGear("rel_023"),
+                AssetDatabaseGear("rel_001"), AssetDatabaseGear("rel_002"),
+                AssetDatabaseGear("rel_003"), AssetDatabaseGear("rel_004"),
+                AssetDatabaseGear("rel_020"), AssetDatabaseGear("rel_100") },
             Array.Empty<CardEnhancementData>());
         _cards.ConfigureRandom(new DeterministicRandom(41));
         _combat = Make<CombatManager>("Rule Batch Combat");
@@ -77,8 +77,8 @@ public sealed class ArtifactRuleBatchTests
         _run.goblinType = Enemy("Goblin", 50, 3);
         _run.knightType = Enemy("Knight", 50, 3);
         _run.StartRunWithSeed("RULE-BATCH-SEED");
-        _handsRare = AssetDatabaseArtifact("rel_020");
-        _royal = AssetDatabaseArtifact("rel_100");
+        _handsRare = AssetDatabaseGear("rel_020");
+        _royal = AssetDatabaseGear("rel_100");
         _mending = AssetDatabaseEnhancement("enh_003");
         _sharpened = AssetDatabaseEnhancement("enh_001");
     }
@@ -96,15 +96,15 @@ public sealed class ArtifactRuleBatchTests
     [Test]
     public void CanonicalRuleAssets_PersistTypedDefinitionsAndGameplaySettings()
     {
-        var cheater = AssetDatabaseArtifact("rel_011");
-        var hands = AssetDatabaseArtifact("rel_012");
-        var dwarf = AssetDatabaseArtifact("rel_013");
-        Assert.That(cheater.displayName, Is.EqualTo("Cheater Emblem"));
+        var cheater = AssetDatabaseGear("rel_011");
+        var hands = AssetDatabaseGear("rel_012");
+        var dwarf = AssetDatabaseGear("rel_013");
+        Assert.That(cheater.displayName, Is.EqualTo("Extra Move"));
         Assert.That(cheater.ruleModifiers, Has.Length.EqualTo(1));
         Assert.That(cheater.ruleModifiers[0].kind, Is.EqualTo(GameplayRuleModifierKind.ExtraTurn));
         Assert.That(cheater.ruleModifiers[0].extraTurn.trigger, Is.EqualTo(ExtraTurnRuleTrigger.FirstPlayerTurnCompleted));
         Assert.That(cheater.ruleModifiers[0].extraTurn.oncePerEncounter, Is.True);
-        var cheaterRare = AssetDatabaseArtifact("rel_024");
+        var cheaterRare = AssetDatabaseGear("rel_024");
         Assert.That(cheaterRare.rarity, Is.EqualTo("Rare"));
         Assert.That(cheaterRare.tier, Is.EqualTo(2));
         Assert.That(cheaterRare.upgradeFromId, Is.EqualTo("rel_011"));
@@ -148,8 +148,8 @@ public sealed class ArtifactRuleBatchTests
     [Test]
     public void Cheater_GrantsOneBonusPerNormalActionButNeverFromTheBonusAction()
     {
-        var cheater = AssetDatabaseArtifact("rel_024");
-        var commonCheater = AssetDatabaseArtifact("rel_011");
+        var cheater = AssetDatabaseGear("rel_024");
+        var commonCheater = AssetDatabaseGear("rel_011");
         _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
             new[] { commonCheater, cheater, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
         Buy(commonCheater);
@@ -175,9 +175,9 @@ public sealed class ArtifactRuleBatchTests
     [TestCase("rel_110", 3)]
     public void Overflow_AutoPlaysNestedDrawsWithinTheSharedPerActionBudget(string artifactId, int budget)
     {
-        var common = AssetDatabaseArtifact("rel_015");
-        var rare = AssetDatabaseArtifact("rel_021");
-        var overflow = AssetDatabaseArtifact(artifactId);
+        var common = AssetDatabaseGear("rel_015");
+        var rare = AssetDatabaseGear("rel_021");
+        var overflow = AssetDatabaseGear(artifactId);
         _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
             new[] { common, rare, overflow, _hands, _dwarf, _dagger, _healingLight }.Distinct().ToArray(),
             Array.Empty<CardEnhancementData>());
@@ -228,7 +228,7 @@ public sealed class ArtifactRuleBatchTests
     [Test]
     public void Overflow_AutoPlayFallsBackToFirstLivingEnemyAndClearsCommittedQueue()
     {
-        var overflow = AssetDatabaseArtifact("rel_015");
+        var overflow = AssetDatabaseGear("rel_015");
         _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
             new[] { overflow, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
         Buy(overflow);
@@ -256,7 +256,7 @@ public sealed class ArtifactRuleBatchTests
     [Test]
     public void Overflow_EncounterTerminationDropsPendingQueueWithoutOrphaningCards()
     {
-        var overflow = AssetDatabaseArtifact("rel_015");
+        var overflow = AssetDatabaseGear("rel_015");
         _cards.Configure(_field, _cards.dragCanvas, _cards.cardPrefab,
             new[] { overflow, _hands, _dwarf, _dagger, _healingLight }, Array.Empty<CardEnhancementData>());
         Buy(overflow);
@@ -341,7 +341,7 @@ public sealed class ArtifactRuleBatchTests
             Is.EqualTo(ExtraTurnRuleTrigger.QualifyingPlayedActionCompleted));
         Assert.That(_cheater.ruleModifiers[0].extraTurn.trigger,
             Is.EqualTo(ExtraTurnRuleTrigger.FirstPlayerTurnCompleted));
-        Assert.That(_cards.ownedArtifacts, Is.EqualTo(new[] { _cheater, _dwarf }));
+        Assert.That(_cards.ownedGear, Is.EqualTo(new[] { _cheater, _dwarf }));
         Assert.That(low.data.Rank, Is.LessThan(CardData.Rank.Five));
         Assert.That(_combat.TryPlayCards(new[] { low }, enemy), Is.True);
         Assert.That(_combat.CompletedPlayerTurnCount, Is.EqualTo(1));
@@ -385,8 +385,8 @@ public sealed class ArtifactRuleBatchTests
     {
         Buy(_hands);
         Buy(_handsRare);
-        CollectionAssert.Contains(_cards.ownedArtifacts, _handsRare);
-        CollectionAssert.DoesNotContain(_cards.ownedArtifacts, _hands);
+        CollectionAssert.Contains(_cards.ownedGear, _handsRare);
+        CollectionAssert.DoesNotContain(_cards.ownedGear, _hands);
 
         var group = EnsureRankInHand(CardData.Rank.Six, 3);
         for (int i = 0; i < group.Length; i++)
@@ -451,21 +451,21 @@ public sealed class ArtifactRuleBatchTests
             cards.Select(view => view.data).ToArray()));
         var target = StartTarget(100, 1);
         int handCount = _cards.HandCount;
-        int gold = _cards.gold;
+        int credits = _cards.credits;
         int damageEvents = 0;
         _combat.OnDamageResolved += _ => damageEvents++;
 
         Assert.That(_combat.CanPlayCards(cards, target), Is.False);
         Assert.That(_combat.TryPlayCards(cards, target), Is.False);
         Assert.That(_cards.HandCount, Is.EqualTo(handCount));
-        Assert.That(_cards.gold, Is.EqualTo(gold));
+        Assert.That(_cards.credits, Is.EqualTo(credits));
         Assert.That(target.currentHp, Is.EqualTo(100));
         Assert.That(damageEvents, Is.Zero);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
     }
 
     [Test]
-    public void RoyalFamily_WildSuitDefeatsBossThroughOneActionAndAwardsVictoryOnce()
+    public void RoyalFamily_WildSuitDefeatsHeadlinerThroughOneActionAndAwardsVictoryOnce()
     {
         Buy(_royal);
         AddFaceCard(CardData.Suit.Hearts, CardData.Rank.Jack);
@@ -499,9 +499,9 @@ public sealed class ArtifactRuleBatchTests
             Assert.That(royal[i].data.TryApplyEnhancement(i == 2 ? wildHeal : onPlay), Is.True);
 
         var type = Type("Boss God", int.MaxValue, 9);
-        type.goldReward = 13;
-        var boss = new EnemyRuntime(type);
-        _combat.StartEnemy(boss);
+        type.creditsReward = 13;
+        var headliner = new EnemyRuntime(type);
+        _combat.StartEnemy(headliner);
         _combat.player.TakeDamage(10);
         var damageResults = new List<DamageResult>();
         var encounterResults = new List<EncounterResult>();
@@ -514,29 +514,29 @@ public sealed class ArtifactRuleBatchTests
         _combat.CriticalChancePercent = 100f;
         foreach (var view in royal) _cards.ToggleCardSelection(view);
         Assert.That(_cards.SelectedCards, Has.Count.EqualTo(5));
-        Assert.That(_combat.CanPlayCards(_cards.SelectedCards, boss), Is.True);
+        Assert.That(_combat.CanPlayCards(_cards.SelectedCards, headliner), Is.True);
         int[] committedIds = royal.Select(view => view.data.Id).ToArray();
 
-        Assert.That(_combat.TryPlayCards(_cards.GetSelectedCardsSnapshot(), boss), Is.True);
-        Assert.That(boss.IsDefeated, Is.True, "Instant defeat also applies to boss-scale HP.");
+        Assert.That(_combat.TryPlayCards(_cards.GetSelectedCardsSnapshot(), headliner), Is.True);
+        Assert.That(headliner.IsDefeated, Is.True, "Instant defeat also applies to boss-scale HP.");
         Assert.That(damageResults, Is.Empty, "Instant defeat is not represented by synthetic numeric damage.");
         Assert.That(encounterResults, Is.EqualTo(new[] { EncounterResult.Victory }));
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameWon));
-        Assert.That(_cards.gold, Is.EqualTo(13));
+        Assert.That(_cards.credits, Is.EqualTo(13));
         Assert.That(_combat.player.currentHealth, Is.EqualTo(25), "All five on-play heals resolve before the defeat outcome.");
         Assert.That(random.Calls, Is.Zero, "The instant-defeat action does not spend a critical roll.");
         Assert.That(playLogs, Has.Count.EqualTo(1), "The group is logged as one action.");
         Assert.That(committedIds.All(id => _cards.discardPile.Any(card => card.Id == id)), Is.True);
-        Assert.That(_combat.TryPlayCards(royal, boss), Is.False, "A resolved encounter cannot award victory twice.");
+        Assert.That(_combat.TryPlayCards(royal, headliner), Is.False, "A resolved encounter cannot award victory twice.");
         Assert.That(encounterResults, Has.Count.EqualTo(1));
-        Assert.That(_cards.gold, Is.EqualTo(13));
+        Assert.That(_cards.credits, Is.EqualTo(13));
     }
 
     void AddFaceCard(CardData.Suit suit, CardData.Rank rank)
     {
         var source = CardData.Create(suit, rank);
         _assets.Add(source);
-        Assert.That(_cards.AddBossReward(source), Is.Not.Null);
+        Assert.That(_cards.AddHeadlinerReward(source), Is.Not.Null);
     }
 
     [Test]
@@ -576,7 +576,7 @@ public sealed class ArtifactRuleBatchTests
         target = StartTarget(500, 1);
         var kingSource = CardData.Create(CardData.Suit.Hearts, CardData.Rank.King);
         _assets.Add(kingSource);
-        Assert.That(_cards.AddBossReward(kingSource), Is.Not.Null);
+        Assert.That(_cards.AddHeadlinerReward(kingSource), Is.Not.Null);
         var king = FindView(c => c.Rank == CardData.Rank.King);
         int singleDamage = _combat.CalculateCardAttackDamage(king.data);
         Assert.That(_combat.TryPlayCards(new[] { king }, target), Is.True);
@@ -612,7 +612,7 @@ public sealed class ArtifactRuleBatchTests
     public void AcePairStillUsesExistingCriticalWithHandsOwnedAndDoesNotUseHandsCap()
     {
         Buy(_hands);
-        Buy(AssetDatabaseArtifact("rel_001"));
+        Buy(AssetDatabaseGear("rel_001"));
         var aceClub = FindView(c => c.Rank == CardData.Rank.Ace && c.Suit == CardData.Suit.Clubs);
         var aceDiamond = FindView(c => c.Rank == CardData.Rank.Ace && c.Suit == CardData.Suit.Diamonds, aceClub.data);
         Assert.That(_cards.ApplyEnhancement(aceClub.data.Id, _sharpened), Is.True);
@@ -630,7 +630,7 @@ public sealed class ArtifactRuleBatchTests
     }
 
     [Test]
-    public void RestartClearsRuntimeTurnGrantsAndArtifactOwnership()
+    public void RestartClearsRuntimeTurnGrantsAndGearOwnership()
     {
         Buy(_cheater);
         Buy(_dwarf);
@@ -639,23 +639,23 @@ public sealed class ArtifactRuleBatchTests
         Assert.That(_combat.QueuedExtraPlayerTurns, Is.EqualTo(1));
         _run.RestartRun();
         Assert.That(_combat.QueuedExtraPlayerTurns, Is.Zero);
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.ownedGear, Is.Empty);
         Assert.That(_cards.ownedCards, Has.Count.EqualTo(40));
     }
 
     [Test]
-    public void Phase5Artifacts_AuthorExpectedCatalogMetadataAndUpgradeChains()
+    public void Phase5Gear_AuthorExpectedCatalogMetadataAndUpgradeChains()
     {
-        var club = AssetDatabaseArtifact("rel_034");
-        var overflow = AssetDatabaseArtifact("rel_110");
-        var crest = AssetDatabaseArtifact("rel_136");
-        var bounty = AssetDatabaseArtifact("rel_126");
-        var gilded = AssetDatabaseArtifact("rel_128");
+        var club = AssetDatabaseGear("rel_034");
+        var overflow = AssetDatabaseGear("rel_110");
+        var crest = AssetDatabaseGear("rel_136");
+        var bounty = AssetDatabaseGear("rel_126");
+        var gilded = AssetDatabaseGear("rel_128");
         Assert.That(club.rarity, Is.EqualTo("Epic"));
         Assert.That(club.upgradeFromId, Is.EqualTo("rel_025"));
-        Assert.That(club.specialRule, Is.EqualTo(ArtifactSpecialRule.ClubEpic));
+        Assert.That(club.specialRule, Is.EqualTo(GearSpecialRule.ClubEpic));
         Assert.That(overflow.upgradeFromId, Is.EqualTo("rel_021"));
-        Assert.That(overflow.specialRule, Is.EqualTo(ArtifactSpecialRule.OverflowEpic));
+        Assert.That(overflow.specialRule, Is.EqualTo(GearSpecialRule.OverflowEpic));
         Assert.That(crest.rarity, Is.EqualTo("Common"));
         Assert.That(bounty.rarity, Is.EqualTo("Common"));
         Assert.That(gilded.rarity, Is.EqualTo("Common"));
@@ -665,8 +665,8 @@ public sealed class ArtifactRuleBatchTests
     [Test]
     public void ClubEpic_MultipliesByEachOtherClubHeldAndExcludesPlayedCards()
     {
-        var epic = AssetDatabaseArtifact("rel_034");
-        _cards.ownedArtifacts.Add(epic);
+        var epic = AssetDatabaseGear("rel_034");
+        _cards.ownedGear.Add(epic);
         var clubViews = EnsureInHand(c => c.Suit == CardData.Suit.Clubs, 2);
         var played = clubViews[0].data;
         int expected = (int)((long)played.BaseAttackValue * 5 / 4);
@@ -677,24 +677,24 @@ public sealed class ArtifactRuleBatchTests
     }
 
     [Test]
-    public void ChallengerCrest_GrantsOneShieldOnlyForEliteOrBossCombat()
+    public void ChallengerCrest_GrantsOneShieldOnlyForEliteOrHeadlinerCombat()
     {
-        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_136"));
+        _cards.ownedGear.Add(AssetDatabaseGear("rel_136"));
         _combat.StartEncounter(new[] { new EnemyRuntime(Type("Crest Test", 100, 1)) }, MapNodeType.Combat);
         Assert.That(_combat.player.ShieldCharges, Is.Zero);
         _combat.Reset();
         _combat.StartEncounter(new[] { new EnemyRuntime(Type("Elite Crest Test", 100, 1)) }, MapNodeType.Elite);
         Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
         _combat.Reset();
-        _combat.StartEncounter(new[] { new EnemyRuntime(Type("Boss Crest Test", 100, 1)) }, MapNodeType.Boss);
+        _combat.StartEncounter(new[] { new EnemyRuntime(Type("Boss Crest Test", 100, 1)) }, MapNodeType.Headliner);
         Assert.That(_combat.player.ShieldCharges, Is.EqualTo(1));
     }
 
     [Test]
-    public void GildedBlade_UsesOpeningGoldSnapshotAndOnlyAddsItsBonusOncePerAttack()
+    public void GildedBlade_UsesOpeningCreditsSnapshotAndOnlyAddsItsBonusOncePerAttack()
     {
-        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_128"));
-        _cards.gold = 29;
+        _cards.ownedGear.Add(AssetDatabaseGear("rel_128"));
+        _cards.credits = 29;
         var target = StartTarget(500, 1);
         var first = FindView(_ => true);
         int firstBase = first.data.BaseAttackValue;
@@ -709,30 +709,30 @@ public sealed class ArtifactRuleBatchTests
     [Test]
     public void OverflowEpic_UsesRareBudgetAndKeepsEpicEffectOutOfOrdinaryAttacks()
     {
-        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_110"));
+        _cards.ownedGear.Add(AssetDatabaseGear("rel_110"));
         Assert.That(_cards.OverflowCapacity, Is.EqualTo(3));
         var ordinary = FindView(_ => true).data;
         Assert.That(_combat.CalculateCardAttackDamage(ordinary), Is.EqualTo(ordinary.BaseAttackValue));
     }
 
     [TestCase(MapNodeType.Elite, 3, 5)]
-    [TestCase(MapNodeType.Boss, 5, 6)]
-    public void BountyLedger_ModifiesOnlyBaseRewardWithSingleHalfUpRounding(MapNodeType kind, int baseGold, int expected)
+    [TestCase(MapNodeType.Headliner, 5, 6)]
+    public void BountyLedger_ModifiesOnlyBaseRewardWithSingleHalfUpRounding(MapNodeType kind, int baseCredits, int expected)
     {
-        _cards.ownedArtifacts.Add(AssetDatabaseArtifact("rel_126"));
+        _cards.ownedGear.Add(AssetDatabaseGear("rel_126"));
         _combat.StartEncounter(new[] { new EnemyRuntime(Type("Bounty Test", 100, 1)) }, kind);
-        typeof(CombatManager).GetField("_earnedGoldReward", BindingFlags.Instance | BindingFlags.NonPublic)
-            .SetValue(_combat, baseGold);
+        typeof(CombatManager).GetField("_earnedCreditsReward", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(_combat, baseCredits);
         typeof(CombatManager).GetMethod("ResolveEncounter", BindingFlags.Instance | BindingFlags.NonPublic)
             .Invoke(_combat, new object[] { EncounterResult.Victory });
-        Assert.That(_cards.gold, Is.EqualTo(expected));
+        Assert.That(_cards.credits, Is.EqualTo(expected));
     }
 
-    void Buy(RelicData artifact) => Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+    void Buy(GearData gear) => Assert.That(_cards.BuyGear(gear, 0), Is.True);
 
-    RelicData Artifact(string id, string name, GameplayRuleModifierData rule)
+    GearData Gear(string id, string name, GameplayRuleModifierData rule)
     {
-        var asset = ScriptableObject.CreateInstance<RelicData>();
+        var asset = ScriptableObject.CreateInstance<GearData>();
         asset.id = id;
         asset.canonicalId = id;
         asset.displayName = name;
@@ -757,9 +757,9 @@ public sealed class ArtifactRuleBatchTests
         };
     }
 
-    RelicData AssetDatabaseArtifact(string canonicalId) => AssetDatabase.FindAssets("t:RelicData",
+    GearData AssetDatabaseGear(string canonicalId) => AssetDatabase.FindAssets("t:GearData",
             new[] { "Assets/Data/Relics" })
-        .Select(guid => AssetDatabase.LoadAssetAtPath<RelicData>(AssetDatabase.GUIDToAssetPath(guid)))
+        .Select(guid => AssetDatabase.LoadAssetAtPath<GearData>(AssetDatabase.GUIDToAssetPath(guid)))
         .Single(asset => asset.canonicalId == canonicalId);
 
     CardEnhancementData AssetDatabaseEnhancement(string canonicalId) => AssetDatabase.FindAssets("t:CardEnhancementData",

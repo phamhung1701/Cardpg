@@ -18,7 +18,7 @@ public sealed class ActionGuidanceCopyTests
     {
         GameplayInputGate.Clear();
         _cards = Make<CardManager>("Copy Audit Cards");
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>());
         _cards.BuildDeck();
         _cards.DealHand();
         _combat = Make<CombatManager>("Copy Audit Combat");

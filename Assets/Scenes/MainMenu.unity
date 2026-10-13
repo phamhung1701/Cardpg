@@ -619,7 +619,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b3074aa5f95b5d94e93d43aa539521c4, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::RunSetupUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::RunSetupUI
   navigator: {fileID: 1243943784}
   seedInput: {fileID: 1559034838}
   seedPreviewLabel: {fileID: 92039761}
@@ -3408,7 +3408,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 797400a56b6802f4a8a5bf8a3a633db1, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::MainMenuUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::MainMenuUI
   navigator: {fileID: 1243943784}
   newRunButton: {fileID: 188500623}
   settingsButton: {fileID: 1831532308}
@@ -4916,7 +4916,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: aadcdb23627b95b4d91896e8e493d0b2, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::FrontendMenuNavigator
+  m_EditorClassIdentifier: Dealbreak.Runtime::FrontendMenuNavigator
   homePanel: {fileID: 854605105}
   runSetupPanel: {fileID: 179026824}
   creditsPanel: {fileID: 1287286026}
@@ -4933,7 +4933,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a23a712a2cf574c45adf6e8449c2654c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::SettingsMenuUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::SettingsMenuUI
   panel: {fileID: 222869507}
   resolutionDropdown: {fileID: 517809158}
   displayModeDropdown: {fileID: 1432420670}
@@ -4991,7 +4991,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0fad7db7cbd6b994ba9ebc0fed1cf51d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::CreditsUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::CreditsUI
   navigator: {fileID: 1243943784}
   bodyLabel: {fileID: 1698594191}
   backButton: {fileID: 1313731849}

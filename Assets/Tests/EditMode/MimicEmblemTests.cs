@@ -11,14 +11,14 @@ public sealed class MimicEmblemTests
     CardManager _cards;
     CombatManager _combat;
     Field _field;
-    RelicData _mimic;
+    GearData _mimic;
     CardEnhancementData _auxiliary, _golden, _mending;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _mimic = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/MimicEmblem.asset");
+        _mimic = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/MimicEmblem.asset");
         _auxiliary = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Auxiliary.asset");
         _golden = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Golden.asset");
         _mending = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Mending.asset");
@@ -45,7 +45,7 @@ public sealed class MimicEmblemTests
         _cards.DealHand();
         _combat = Make<CombatManager>("Mimic Test Combat");
         _combat.ConfigurePlayer(30);
-        Assert.That(_cards.BuyArtifact(_mimic, 0), Is.True);
+        Assert.That(_cards.BuyGear(_mimic, 0), Is.True);
     }
 
     [TearDown]
@@ -86,11 +86,11 @@ public sealed class MimicEmblemTests
         var target = new EnemyRuntime(enemyType);
         _combat.StartEnemy(target);
         Assert.That(_combat.player.currentHealth, Is.EqualTo(22), "Mending triggers once normally at turn start.");
-        int goldBefore = _cards.gold;
+        int creditsBefore = _cards.credits;
 
         Assert.That(_combat.TryPlayCards(new[] { attack }, target), Is.True);
 
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore + 8), "Each held Golden pays once normally and once via Mimic.");
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore + 8), "Each held Golden pays once normally and once via Mimic.");
         Assert.That(_combat.player.currentHealth, Is.EqualTo(24), "Held Mending is retriggered once by Mimic.");
     }
 
@@ -107,9 +107,9 @@ public sealed class MimicEmblemTests
     CardView[] HandViews() => _field.cardsHolder.GetComponentsInChildren<CardView>()
         .Where(view => view != null && view.data != null && _cards.hand.Contains(view.data)).ToArray();
 
-    EnemyTypeData Enemy(string name, int hp, int attack, int gold)
+    EnemyTypeData Enemy(string name, int hp, int attack, int credits)
     {
-        var type = EnemyTypeData.Create(name, hp, attack, gold);
+        var type = EnemyTypeData.Create(name, hp, attack, credits);
         _created.Add(type);
         return type;
     }

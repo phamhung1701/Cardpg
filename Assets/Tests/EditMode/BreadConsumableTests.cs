@@ -21,7 +21,7 @@ public sealed class BreadConsumableTests
         Assert.That(_bread, Is.Not.Null);
         _breadUses = _bread.uses;
         _cards = Make<CardManager>("Bread Test Cards");
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>(),
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>(),
             System.Array.Empty<CardEnhancementData>(), new[] { _bread });
         _combat = Make<CombatManager>("Bread Test Combat");
         _combat.ConfigurePlayer(30);
@@ -72,18 +72,18 @@ public sealed class BreadConsumableTests
     }
 
     [Test]
-    public void FullBackpack_RejectsShopPurchaseWithoutChargingGold()
+    public void FullBackpack_RejectsShopPurchaseWithoutChargingCredits()
     {
         Assert.That(_cards.AddConsumable(_bread, CardManager.BACKPACK_CAPACITY), Is.True);
         var shop = _run.currentPath.First(node => node.kind == MapNodeType.Shop);
         shop.accessible = true;
-        _cards.AddGold(10);
+        _cards.AddCredits(10);
         _run.OnPathChosen(shop.id);
         var offer = _run.GetCurrentShopOffers().First(value => value.kind == ShopOfferKind.Consumable);
 
         Assert.That(_run.GetShopOfferUnavailableReason(offer.StableId), Is.EqualTo("Backpack Full"));
         Assert.That(_run.PurchaseShopOffer(offer.StableId), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(10));
+        Assert.That(_cards.credits, Is.EqualTo(10));
         Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(CardManager.BACKPACK_CAPACITY));
     }
 
@@ -135,14 +135,14 @@ public sealed class BreadConsumableTests
     [Test]
     public void EncounterDrop_AutoMergesIntoExistingStackEvenWhenBackpackHasNoFreeSlot()
     {
-        var pack = ScriptableObject.CreateInstance<RelicData>();
+        var pack = ScriptableObject.CreateInstance<GearData>();
         _created.Add(pack);
         pack.id = "test_rare_pack";
         pack.displayName = "Test Pack";
         pack.rarity = "Common";
         pack.tier = 1;
         pack.price = 0;
-        pack.specialRule = ArtifactSpecialRule.TravelerPackRare;
+        pack.specialRule = GearSpecialRule.TravelerPackRare;
         pack.effects = System.Array.Empty<GameplayEffectDefinition>();
         pack.ruleModifiers = System.Array.Empty<GameplayRuleModifierData>();
         var extras = Enumerable.Range(0, 4).Select(index =>
@@ -158,7 +158,7 @@ public sealed class BreadConsumableTests
         }).ToArray();
         _cards.Configure(null, null, null, new[] { pack }, System.Array.Empty<CardEnhancementData>(),
             new[] { _bread }.Concat(extras).ToArray());
-        Assert.That(_cards.BuyArtifact(pack, 0), Is.True);
+        Assert.That(_cards.BuyGear(pack, 0), Is.True);
         Assert.That(_cards.AddConsumable(_bread, 2), Is.True);
         foreach (var extra in extras) Assert.That(_cards.AddConsumable(extra), Is.True);
         Assert.That(_cards.IsBackpackFull, Is.True);
@@ -166,7 +166,7 @@ public sealed class BreadConsumableTests
         const int nodeId = 25;
         const int mapIndex = 2;
         _run.StartRunWithSeed(SeedForBreadDrop(nodeId, mapIndex, "BREAD-STACK-DROP"));
-        Assert.That(_cards.BuyArtifact(pack, 0), Is.True);
+        Assert.That(_cards.BuyGear(pack, 0), Is.True);
         Assert.That(_cards.AddConsumable(_bread, 2), Is.True);
         foreach (var extra in extras) Assert.That(_cards.AddConsumable(extra), Is.True);
         var node = new PathNode { id = nodeId, mapIndex = mapIndex, kind = MapNodeType.Combat };
@@ -263,14 +263,14 @@ public sealed class BreadConsumableTests
     {
         var shop = _run.currentPath.First(node => node.kind == MapNodeType.Shop);
         shop.accessible = true;
-        _cards.AddGold(10);
+        _cards.AddCredits(10);
         _run.OnPathChosen(shop.id);
         var offer = _run.GetCurrentShopOffers().First(value => value.kind == ShopOfferKind.Consumable);
 
         Assert.That(offer.consumable, Is.SameAs(_bread));
         Assert.That(offer.price, Is.EqualTo(5));
         Assert.That(_run.PurchaseShopOffer(offer.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(5));
+        Assert.That(_cards.credits, Is.EqualTo(5));
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1));
         Assert.That(_run.PurchaseShopOffer(offer.StableId), Is.False);
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1));
@@ -287,26 +287,26 @@ public sealed class BreadConsumableTests
         var shop = _run.currentPath.First(node => node.kind == MapNodeType.Shop);
         shop.accessible = true;
         _run.OnPathChosen(shop.id);
-        _cards.AddGold(10);
-        int goldBefore = _cards.gold;
+        _cards.AddCredits(10);
+        int creditsBefore = _cards.credits;
 
         Assert.That(_run.SellConsumable(0, new ConsumableInstance(_bread), _bread.price), Is.False,
             "A different instance in the same slot must not be removed.");
         Assert.That(_run.SellConsumable(0, expected, _bread.price + 1), Is.False,
             "A changed authored price invalidates the selected quote.");
         Assert.That(_run.SellConsumable(0, expected, _bread.price), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore + _bread.price / 2));
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore + _bread.price / 2));
         Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
     }
 
     [Test]
-    public void SellingIsRejectedOutsideActiveShopWithoutChangingInventoryOrGold()
+    public void SellingIsRejectedOutsideActiveShopWithoutChangingInventoryOrCredits()
     {
         Assert.That(_cards.AddConsumable(_bread), Is.True);
         var instance = _cards.GetConsumableInstanceAtSlot(0);
-        int goldBefore = _cards.gold;
+        int creditsBefore = _cards.credits;
         Assert.That(_run.SellConsumable(0, instance, _bread.price), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore));
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore));
         Assert.That(_cards.GetConsumableInstanceAtSlot(0), Is.SameAs(instance));
     }
 

@@ -7,11 +7,11 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public sealed class ArtifactRailUITests
+public sealed class GearRailUITests
 {
     readonly List<Object> _created = new();
     CardManager _cards;
-    ArtifactRailUI _rail;
+    GearRailUI _rail;
     RectTransform _slots;
     TMP_Text _capacity;
     TMP_Text _tooltip;
@@ -30,7 +30,7 @@ public sealed class ArtifactRailUITests
         _cards = Create("Cards").AddComponent<CardManager>();
         var host = Create("Rail");
         host.SetActive(false);
-        _rail = host.AddComponent<ArtifactRailUI>();
+        _rail = host.AddComponent<GearRailUI>();
         _slots = CreateUI("Slots").GetComponent<RectTransform>();
         _capacity = CreateUI("Capacity").AddComponent<TextMeshProUGUI>();
         _tooltipPanel = CreateUI("Tooltip");
@@ -73,12 +73,12 @@ public sealed class ArtifactRailUITests
     [Test]
     public void EmptyInventory_ShowsFiveBlankSlotsAndHidesMergeControls()
     {
-        Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_ARTIFACT_CAPACITY));
+        Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_GEAR_CAPACITY));
         for (int i = 0; i < _slots.childCount; i++)
         {
-            var slot = _slots.GetChild(i).GetComponent<ArtifactIconSlotUI>();
+            var slot = _slots.GetChild(i).GetComponent<GearIconSlotUI>();
             Assert.That(_slots.GetChild(i).gameObject.activeSelf, Is.True);
-            Assert.That(slot.Artifact, Is.Null);
+            Assert.That(slot.Gear, Is.Null);
             Assert.That(string.IsNullOrEmpty(slot.GetComponentInChildren<TMP_Text>(true).text), Is.True);
         }
         Assert.That(_mergeMode.gameObject.activeSelf, Is.False);
@@ -103,10 +103,10 @@ public sealed class ArtifactRailUITests
         var slots = CreateUI("Runtime Slots");
         slots.transform.SetParent(viewport.transform, false);
         _rail.slotsRoot = slots.GetComponent<RectTransform>();
-        _cards.ownedArtifacts.AddRange(new[]
+        _cards.ownedGear.AddRange(new[]
         {
-            Artifact("merge-a", "Merge A", "A", ""),
-            Artifact("merge-b", "Merge B", "B", "")
+            Gear("merge-a", "Merge A", "A", ""),
+            Gear("merge-b", "Merge B", "B", "")
         });
         InvokeRail("OnEnable");
 
@@ -132,63 +132,63 @@ public sealed class ArtifactRailUITests
     [Test]
     public void ManualMergeRequiresTwoDistinctMatchingInstancesAndExplicitConfirmation()
     {
-        var common = Artifact("common", "Common", "C", "Common detail");
+        var common = Gear("common", "Common", "C", "Common detail");
         common.canonicalId = "family-common";
         common.tier = 1;
-        var next = Artifact("rare", "Rare", "R", "Rare detail");
+        var next = Gear("rare", "Rare", "R", "Rare detail");
         next.canonicalId = "family-rare";
         next.tier = 2;
         next.upgradeFromId = "family-common";
-        _cards.relicCatalog.AddRange(new[] { common, next });
-        _cards.BuyArtifact(common, 0);
-        _cards.BuyArtifact(common, 0);
+        _cards.gearCatalog.AddRange(new[] { common, next });
+        _cards.BuyGear(common, 0);
+        _cards.BuyGear(common, 0);
         InvokeRail("Refresh");
         _mergeMode.onClick.Invoke();
-        var first = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
-        var second = _slots.GetChild(1).GetComponent<ArtifactIconSlotUI>();
+        var first = _slots.GetChild(0).GetComponent<GearIconSlotUI>();
+        var second = _slots.GetChild(1).GetComponent<GearIconSlotUI>();
         first.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(_mergeConfirm.interactable, Is.False);
         second.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(_mergeConfirm.interactable, Is.True);
         Assert.That(_mergeStatus.text, Does.Contain("Rare"));
-        Assert.That(_cards.ownedArtifacts.Count, Is.EqualTo(2));
+        Assert.That(_cards.ownedGear.Count, Is.EqualTo(2));
         _mergeConfirm.onClick.Invoke();
-        Assert.That(_cards.ownedArtifacts, Is.EqualTo(new[] { next }));
+        Assert.That(_cards.ownedGear, Is.EqualTo(new[] { next }));
     }
 
     [Test]
-    public void ManualMergeDoesNotEnableForDifferentArtifactFamilies()
+    public void ManualMergeDoesNotEnableForDifferentGearFamilies()
     {
-        var firstArtifact = Artifact("one", "One", "1", "One detail");
-        firstArtifact.canonicalId = "family-one";
-        var secondArtifact = Artifact("two", "Two", "2", "Two detail");
-        secondArtifact.canonicalId = "family-two";
-        _cards.relicCatalog.AddRange(new[] { firstArtifact, secondArtifact });
-        Assert.That(_cards.BuyArtifact(firstArtifact, 0), Is.True);
-        Assert.That(_cards.BuyArtifact(secondArtifact, 0), Is.True);
+        var firstGear = Gear("one", "One", "1", "One detail");
+        firstGear.canonicalId = "family-one";
+        var secondGear = Gear("two", "Two", "2", "Two detail");
+        secondGear.canonicalId = "family-two";
+        _cards.gearCatalog.AddRange(new[] { firstGear, secondGear });
+        Assert.That(_cards.BuyGear(firstGear, 0), Is.True);
+        Assert.That(_cards.BuyGear(secondGear, 0), Is.True);
         InvokeRail("Refresh");
         _mergeMode.onClick.Invoke();
-        _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>().OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
-        _slots.GetChild(1).GetComponent<ArtifactIconSlotUI>().OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        _slots.GetChild(0).GetComponent<GearIconSlotUI>().OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
+        _slots.GetChild(1).GetComponent<GearIconSlotUI>().OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(_mergeConfirm.interactable, Is.False);
-        Assert.That(_cards.ownedArtifacts.Count, Is.EqualTo(2));
+        Assert.That(_cards.ownedGear.Count, Is.EqualTo(2));
     }
 
     [Test]
     public void Acquisition_ShowsOnlyIconUntilHoveredOrClicked()
     {
-        var artifact = Artifact("relic-1", "Hidden Name", "★", "Detail body");
-        Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+        var gear = Gear("relic-1", "Hidden Name", "★", "Detail body");
+        Assert.That(_cards.BuyGear(gear, 0), Is.True);
         Assert.That(_capacity.text, Does.Contain("1/5"));
-                Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_ARTIFACT_CAPACITY));
-        Assert.That(Enumerable.Range(0, CardManager.BASE_ARTIFACT_CAPACITY)
+                Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_GEAR_CAPACITY));
+        Assert.That(Enumerable.Range(0, CardManager.BASE_GEAR_CAPACITY)
             .All(i => _slots.GetChild(i).gameObject.activeSelf), Is.True,
             "The rail keeps a stable five-slot inventory footprint.");
-        Assert.That(Enumerable.Range(1, CardManager.BASE_ARTIFACT_CAPACITY - 1)
-            .Select(i => _slots.GetChild(i).GetComponent<ArtifactIconSlotUI>().Artifact),
+        Assert.That(Enumerable.Range(1, CardManager.BASE_GEAR_CAPACITY - 1)
+            .Select(i => _slots.GetChild(i).GetComponent<GearIconSlotUI>().Gear),
             Is.All.Null, "Unowned capacity remains represented by quiet empty slots.");
-        var slot = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
-        Assert.That(slot.Artifact, Is.SameAs(artifact));
+        var slot = _slots.GetChild(0).GetComponent<GearIconSlotUI>();
+        Assert.That(slot.Gear, Is.SameAs(gear));
         Assert.That(slot.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("★"));
         Assert.That(_capacity.text, Does.Not.Contain("Hidden Name"));
         Assert.That(_tooltipPanel.activeSelf, Is.False);
@@ -207,15 +207,15 @@ public sealed class ArtifactRailUITests
     }
 
     [Test]
-    public void SelectingArtifactShowsAdjacentDetailsUpdatesSelectionAndEmptySlotsStayBlank()
+    public void SelectingGearShowsAdjacentDetailsUpdatesSelectionAndEmptySlotsStayBlank()
     {
-        var first = Artifact("first-detail", "First Name", "A", "First description");
-        var second = Artifact("second-detail", "Second Name", "B", "Second description");
-        Assert.That(_cards.BuyArtifact(first, 0), Is.True);
-        Assert.That(_cards.BuyArtifact(second, 0), Is.True);
+        var first = Gear("first-detail", "First Name", "A", "First description");
+        var second = Gear("second-detail", "Second Name", "B", "Second description");
+        Assert.That(_cards.BuyGear(first, 0), Is.True);
+        Assert.That(_cards.BuyGear(second, 0), Is.True);
         InvokeRail("Refresh");
-        var firstSlot = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
-        var secondSlot = _slots.GetChild(1).GetComponent<ArtifactIconSlotUI>();
+        var firstSlot = _slots.GetChild(0).GetComponent<GearIconSlotUI>();
+        var secondSlot = _slots.GetChild(1).GetComponent<GearIconSlotUI>();
         firstSlot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(firstSlot.IsDetailSelected, Is.True);
         Assert.That(_detailPanel.activeSelf, Is.True);
@@ -229,10 +229,10 @@ public sealed class ArtifactRailUITests
         Assert.That(secondSlot.IsDetailSelected, Is.True);
         Assert.That(_detail.text, Does.Contain("Second Name").And.Contain("Second description"));
         string selectedDescription = _detail.text;
-        _slots.GetChild(2).GetComponent<ArtifactIconSlotUI>()
+        _slots.GetChild(2).GetComponent<GearIconSlotUI>()
             .OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(_detail.text, Is.EqualTo(selectedDescription));
-        Assert.That(_slots.GetChild(2).GetComponent<ArtifactIconSlotUI>().Artifact, Is.Null);
+        Assert.That(_slots.GetChild(2).GetComponent<GearIconSlotUI>().Gear, Is.Null);
 
         secondSlot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(_detailPanel.activeSelf, Is.False);
@@ -240,11 +240,11 @@ public sealed class ArtifactRailUITests
     }
 
     [Test]
-    public void EnemyTargetingClosesArtifactDetailsAndPreventsCompetingMergeSelection()
+    public void EnemyTargetingClosesGearDetailsAndPreventsCompetingMergeSelection()
     {
-        Assert.That(_cards.BuyArtifact(Artifact("target-a", "Target A", "A", "Readable description"), 0), Is.True);
-        Assert.That(_cards.BuyArtifact(Artifact("target-b", "Target B", "B", "Other description"), 0), Is.True);
-        var slot = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
+        Assert.That(_cards.BuyGear(Gear("target-a", "Target A", "A", "Readable description"), 0), Is.True);
+        Assert.That(_cards.BuyGear(Gear("target-b", "Target B", "B", "Other description"), 0), Is.True);
+        var slot = _slots.GetChild(0).GetComponent<GearIconSlotUI>();
         slot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         Assert.That(_detailPanel.activeSelf, Is.True);
         Assert.That(_detail.fontSize, Is.GreaterThanOrEqualTo(18f));
@@ -266,23 +266,23 @@ public sealed class ArtifactRailUITests
     [Test]
     public void Reset_ClearsSlotsAndOpenDetail_ThenAcquisitionReusesSlot()
     {
-        var first = Artifact("first", "First", "A", "First detail");
-        var second = Artifact("second", "Second", "B", "Second detail");
-        _cards.BuyArtifact(first, 0);
-        var slot = _slots.GetChild(0).GetComponent<ArtifactIconSlotUI>();
+        var first = Gear("first", "First", "A", "First detail");
+        var second = Gear("second", "Second", "B", "Second detail");
+        _cards.BuyGear(first, 0);
+        var slot = _slots.GetChild(0).GetComponent<GearIconSlotUI>();
         slot.OnPointerClick(new PointerEventData(null) { button = PointerEventData.InputButton.Left });
         _cards.Reset();
         Assert.That(_capacity.text, Does.Contain("0/5"));
         Assert.That(slot.gameObject.activeSelf, Is.True, "The same slot remains visible as an empty inventory slot.");
-        Assert.That(slot.Artifact, Is.Null);
+        Assert.That(slot.Gear, Is.Null);
         Assert.That(_detailPanel.activeSelf, Is.False);
-        _cards.BuyArtifact(second, 0);
-        Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_ARTIFACT_CAPACITY));
-        Assert.That(slot.Artifact, Is.SameAs(second));
+        _cards.BuyGear(second, 0);
+        Assert.That(_slots.childCount, Is.EqualTo(CardManager.BASE_GEAR_CAPACITY));
+        Assert.That(slot.Gear, Is.SameAs(second));
         Assert.That(slot.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("B"));
     }
 
-    void InvokeRail(string method) => typeof(ArtifactRailUI)
+    void InvokeRail(string method) => typeof(GearRailUI)
         .GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
         .Invoke(_rail, null);
 
@@ -300,14 +300,14 @@ public sealed class ArtifactRailUITests
         return go;
     }
 
-    RelicData Artifact(string id, string name, string icon, string description)
+    GearData Gear(string id, string name, string icon, string description)
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = id;
-        artifact.displayName = name;
-        artifact.icon = icon;
-        artifact.description = description;
-        _created.Add(artifact);
-        return artifact;
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = id;
+        gear.displayName = name;
+        gear.icon = icon;
+        gear.description = description;
+        _created.Add(gear);
+        return gear;
     }
 }

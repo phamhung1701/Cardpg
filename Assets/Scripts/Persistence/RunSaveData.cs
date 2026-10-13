@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 
 // Versioned wire contracts contain values and stable IDs only. No Unity objects, delegates or UI state.
+// Legacy gold/artifact/boss keys are the version-1 JSON contract. Runtime code uses Credits/Gear/Headliner;
+// Unity migration attributes do not migrate this custom persistence format. Keep these keys and enum numbers.
 [Serializable] public sealed class RunSaveData
 {
     public int version = 1;

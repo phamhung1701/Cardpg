@@ -69,11 +69,11 @@ public static class RunMapGenerator
             }
         }
 
-        var boss = new PathNode
+        var headliner = new PathNode
         {
             id = nextId,
             type = "boss",
-            kind = MapNodeType.Boss,
+            kind = MapNodeType.Headliner,
             col = RouteColumnCount,
             row = 1,
             accessible = false,
@@ -84,12 +84,12 @@ public static class RunMapGenerator
             contentId = "boss"
         };
         foreach (var node in columns[^1])
-            AddUnique(node.next, boss.id);
-        nodes.Add(boss);
+            AddUnique(node.next, headliner.id);
+        nodes.Add(headliner);
 
         ApplyEliteRoutePolicy(randomContext, mapIndex, catalog, fallbackEnemies, columns);
-        InsertShopCheckpoint(nodes, columns[1], columns[2], mapIndex, boss.id + 1, 1.5f);
-        InsertShopCheckpoint(nodes, columns[4], new[] { boss }, mapIndex, boss.id + 2, 4.5f);
+        InsertShopCheckpoint(nodes, columns[1], columns[2], mapIndex, headliner.id + 1, 1.5f);
+        InsertShopCheckpoint(nodes, columns[4], new[] { headliner }, mapIndex, headliner.id + 2, 4.5f);
 
         return nodes;
     }
@@ -215,10 +215,12 @@ public static class RunMapGenerator
             return definition != null ? definition.id : string.Empty;
         }
 
-        return kind.ToString().ToLowerInvariant();
+        return ToLegacyType(kind);
     }
 
-    static string ToLegacyType(MapNodeType kind) => kind.ToString().ToLowerInvariant();
+    // PathNode.type/contentId are persisted independently of the numeric kind.
+    static string ToLegacyType(MapNodeType kind) => kind == MapNodeType.Headliner
+        ? "boss" : kind.ToString().ToLowerInvariant();
 
     static void AddUnique(List<int> values, int value)
     {

@@ -52,7 +52,7 @@ public sealed class EnhancementConsumableSelectionTests
         prefab.canvasGroup = cardPrefabObject.GetComponent<CanvasGroup>();
         _cards = Make("Enhancement Flow Cards", typeof(CardManager)).GetComponent<CardManager>();
         _cards.Configure(handField, canvasObject.GetComponent<Canvas>(), prefab,
-            System.Array.Empty<RelicData>(), new[] { _enhancement }, new[] { _patch, _tonic });
+            System.Array.Empty<GearData>(), new[] { _enhancement }, new[] { _patch, _tonic });
         _cards.ConfigureRandom(new DeterministicRandom(38038));
         _cards.BuildDeck();
         _cards.DealHand();

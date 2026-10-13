@@ -66,13 +66,13 @@ public sealed class GameSceneReadabilityTests
         Assert.That(scaler, Is.Not.Null);
         Assert.That(scaler.referenceResolution, Is.EqualTo(new Vector2(1920f, 1080f)));
 
-        AssertReadable("Canvas/GoldLabel", 20f);
+        AssertReadable("Canvas/CreditsLabel", 20f);
         AssertReadable("Canvas/PlayerArea/HealthPanel/PlayerHealthLabel", 19f);
         AssertReadable("Canvas/PlayerArea/ActionBar/PlayButton/PlayCardButtonLabel", 19f);
         AssertReadable("Canvas/PlayerArea/ActionBar/BlockButton/PlayCardButtonLabel", 19f);
         AssertReadable("Canvas/PlayerArea/SelectionLabel", 16f);
         AssertReadable("Canvas/RunHeader/RunProgressLabel", 17f);
-        AssertReadable("Canvas/OwnedArtifactsBar/ArtifactsHeader", 18f);
+        AssertReadable("Canvas/OwnedGearBar/GearHeader", 18f);
         AssertReadable("Canvas/PathPanel/PathCard/PathInstructionLabel", 16f);
         AssertReadable("Canvas/ShopPanel/ShopCard/ShopTitleLabel", 21f);
         AssertReadable("Canvas/EnhancementTargetPanel/TargetPickerCard/ConfirmTargetButton/ContinueRunButtonLabel", 20f);
@@ -83,9 +83,9 @@ public sealed class GameSceneReadabilityTests
     public void ImportantLabelsAndPrimaryButtonsFitTheir1920ReferenceRects()
     {
         Canvas.ForceUpdateCanvases();
-        AssertTextFits("Canvas/GoldLabel");
+        AssertTextFits("Canvas/CreditsLabel");
         AssertTextFits("Canvas/RunHeader/RunProgressLabel");
-        AssertTextFits("Canvas/RunHeader/BossProgressLabel");
+        AssertTextFits("Canvas/RunHeader/HeadlinerProgressLabel");
         AssertTextFits("Canvas/PlayerArea/SelectionLabel");
         AssertTextFits("Canvas/PlayerArea/ActionBar/PlayButton/PlayCardButtonLabel");
         AssertTextFits("Canvas/PlayerArea/ActionBar/BlockButton/PlayCardButtonLabel");

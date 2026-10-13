@@ -1,5 +1,7 @@
 # Dealbreak — Game Design Document
 
+> **Internal rename update (2026-10-13):** The runtime assembly is now `Dealbreak.Runtime`; Gear uses `GearData`/`GearRuntimeInstance`, and progression APIs use Headliner. This document is a historical implementation snapshot; see `Docs/Dealbreak_Internal_Rebranding_Report.md` for the current API and compatibility boundary.
+
 > **Current terminology authority:** `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx` supersedes this snapshot for player-facing content names, categories, and terminology. Use Dealbreak, Credits, Gear, Mods, Tricks, Black Market, Incident, District, Enforcer, Headliner, and Perfect Block. References below to CardPG-era terms are historical descriptions, not current content definitions; serialized IDs and code identifiers remain unchanged unless separately migrated.
 
 ## 1. Game Overview
@@ -146,4 +148,4 @@ These are observable design properties, not inferred developer motivations. The 
 
 ---
 
-**Research boundary:** Sources reviewed include current code and tests under `Assets/Scripts/`, `Assets/Data/`, and `Assets/Tests/`; `CARDPG_DEVELOPMENT.md`; `AGENTS.md`; `CardPG_GameData_organized.xlsx`; and dated implementation trackers in `Locus/knowledge/plan/`. The workbook contains a mixture of implemented, pending-acceptance, draft, and blank rows. Runtime evidence takes precedence for present gameplay.
+**Research boundary:** Sources reviewed include current code and tests under `Assets/Scripts/`, `Assets/Data/`, and `Assets/Tests/`; `DEALBREAK_DEVELOPMENT.md`; `AGENTS.md`; `CardPG_GameData_organized.xlsx`; and dated implementation trackers in `Locus/knowledge/plan/`. The workbook contains a mixture of implemented, pending-acceptance, draft, and blank rows. Runtime evidence takes precedence for present gameplay.

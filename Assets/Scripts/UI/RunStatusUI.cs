@@ -2,22 +2,26 @@ using System.Text;
 using TMPro;
 using UnityEngine;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RunStatusUI")]
 public class RunStatusUI : MonoBehaviour
 {
     [Header("Run Resources")]
-    public TMP_Text goldLabel;
+    [UnityEngine.Serialization.FormerlySerializedAs("goldLabel")]
+    public TMP_Text creditsLabel;
     public TMP_Text pileSummaryLabel;
     public TMP_Text runProgressLabel;
-    public TMP_Text bossProgressLabel;
+    [UnityEngine.Serialization.FormerlySerializedAs("bossProgressLabel")]
+    public TMP_Text headlinerProgressLabel;
     public TMP_Text timingLabel;
-    public TMP_Text ownedArtifactsLabel;
+    [UnityEngine.Serialization.FormerlySerializedAs("ownedArtifactsLabel")]
+    public TMP_Text ownedGearLabel;
     public TMP_Text[] backpackSlotLabels = new TMP_Text[CardManager.BACKPACK_CAPACITY];
 
     void OnEnable()
     {
         if (CardManager.Instance != null)
         {
-            CardManager.Instance.OnGoldChanged += HandleGoldChanged;
+            CardManager.Instance.OnCreditsChanged += HandleCreditsChanged;
             CardManager.Instance.OnDeckChanged += Refresh;
             CardManager.Instance.OnBuildChanged += Refresh;
             CardManager.Instance.OnConsumablesChanged += Refresh;
@@ -41,7 +45,7 @@ public class RunStatusUI : MonoBehaviour
     {
         if (CardManager.Instance != null)
         {
-            CardManager.Instance.OnGoldChanged -= HandleGoldChanged;
+            CardManager.Instance.OnCreditsChanged -= HandleCreditsChanged;
             CardManager.Instance.OnDeckChanged -= Refresh;
             CardManager.Instance.OnBuildChanged -= Refresh;
             CardManager.Instance.OnConsumablesChanged -= Refresh;
@@ -59,7 +63,7 @@ public class RunStatusUI : MonoBehaviour
             CombatManager.Instance.OnEncounterResult -= HandleEncounterResult;
     }
 
-    void HandleGoldChanged(int _) => Refresh();
+    void HandleCreditsChanged(int _) => Refresh();
     void HandleCycleStarted(string _) => Refresh();
     void HandleEncounterResult(EncounterResult _) => Refresh();
 
@@ -73,10 +77,10 @@ public class RunStatusUI : MonoBehaviour
         var cards = CardManager.Instance;
         var run = RunManager.Instance;
 
-        if (goldLabel)
-            goldLabel.text = cards == null ? "CREDITS —" : cards.HasInfiniteMoney ? "CREDITS ∞" : $"CREDITS {cards.gold}";
+        if (creditsLabel)
+            creditsLabel.text = cards == null ? "CREDITS —" : cards.HasInfiniteMoney ? "CREDITS ∞" : $"CREDITS {cards.credits}";
 
-        RefreshArtifacts(cards);
+        RefreshGear(cards);
         RefreshBackpack(cards);
 
         if (pileSummaryLabel)
@@ -98,19 +102,19 @@ public class RunStatusUI : MonoBehaviour
         if (run == null)
         {
             if (runProgressLabel) runProgressLabel.text = "Run —";
-            if (bossProgressLabel) bossProgressLabel.text = "Headliner —";
+            if (headlinerProgressLabel) headlinerProgressLabel.text = "Headliner —";
             return;
         }
 
         int completedNodes = 0;
         foreach (var node in run.currentPath)
-            if (node.completed && !node.isShopCheckpoint && node.kind != MapNodeType.Boss) completedNodes++;
+            if (node.completed && !node.isShopCheckpoint && node.kind != MapNodeType.Headliner) completedNodes++;
 
         if (runProgressLabel)
         {
             string mapProgress = run.IsInfiniteMode
                 ? $"District {run.CurrentCycle}/∞"
-                : $"District {Mathf.Clamp(run.CurrentCycle, 1, run.BossTotal)}/{run.BossTotal}";
+                : $"District {Mathf.Clamp(run.CurrentCycle, 1, run.HeadlinerTotal)}/{run.HeadlinerTotal}";
             string routeProgress = run.IsRunCompleted
                 ? "Run Complete"
                 : $"{mapProgress}  •  Depth {completedNodes}/{RunMapGenerator.RouteColumnCount}";
@@ -119,12 +123,12 @@ public class RunStatusUI : MonoBehaviour
                 runProgressLabel.text += $"\n{FormatContractProgress(run.ActiveContract)}";
         }
 
-        if (bossProgressLabel)
+        if (headlinerProgressLabel)
         {
-            string bossName = run.CurrentBoss != null ? run.CurrentBoss.enemyName : "Complete";
-            bossProgressLabel.text = run.IsInfiniteMode
-                ? $"District {run.CurrentCycle} Headliner  •  {bossName}"
-                : $"Headliner {Mathf.Min(run.bossIndex + 1, run.BossTotal)}/{run.BossTotal}  •  {bossName}";
+            string headlinerName = run.CurrentHeadliner != null ? run.CurrentHeadliner.enemyName : "Complete";
+            headlinerProgressLabel.text = run.IsInfiniteMode
+                ? $"District {run.CurrentCycle} Headliner  •  {headlinerName}"
+                : $"Headliner {Mathf.Min(run.headlinerIndex + 1, run.HeadlinerTotal)}/{run.HeadlinerTotal}  •  {headlinerName}";
         }
 
         RefreshTiming();
@@ -170,29 +174,29 @@ public class RunStatusUI : MonoBehaviour
         }
     }
 
-    void RefreshArtifacts(CardManager cards)
+    void RefreshGear(CardManager cards)
     {
-        if (!ownedArtifactsLabel) return;
-        int used = cards != null ? cards.ArtifactSlotsUsed : 0;
-        int capacity = cards != null ? cards.ArtifactCapacity : CardManager.BASE_ARTIFACT_CAPACITY;
+        if (!ownedGearLabel) return;
+        int used = cards != null ? cards.GearSlotsUsed : 0;
+        int capacity = cards != null ? cards.GearCapacity : CardManager.BASE_GEAR_CAPACITY;
         var text = new StringBuilder($"<b>ARTIFACTS  •  {used}/{capacity}</b>\n");
-        if (cards == null || cards.ownedArtifacts.Count == 0)
+        if (cards == null || cards.ownedGear.Count == 0)
         {
             text.Append("None owned");
         }
         else
         {
             bool first = true;
-            foreach (var artifact in cards.ownedArtifacts)
+            foreach (var gear in cards.ownedGear)
             {
-                if (artifact == null) continue;
+                if (gear == null) continue;
                 if (!first) text.Append("    •    ");
-                if (!string.IsNullOrWhiteSpace(artifact.icon)) text.Append(artifact.icon).Append(' ');
-                text.Append(artifact.displayName);
+                if (!string.IsNullOrWhiteSpace(gear.icon)) text.Append(gear.icon).Append(' ');
+                text.Append(gear.displayName);
                 first = false;
             }
         }
-        ownedArtifactsLabel.text = text.ToString();
+        ownedGearLabel.text = text.ToString();
     }
 
     void RefreshTiming()

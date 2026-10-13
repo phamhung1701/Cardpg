@@ -21,7 +21,7 @@ public sealed class Phase7B5CombatCharacterizationTests
         var prefab = CreateCardView("Phase7B5 Card Prefab");
 
         _cards = CreateComponent<CardManager>("Phase7B5 CardManager");
-        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _cards.BuildDeck();
         _cards.DealHand();
 
@@ -120,17 +120,17 @@ public sealed class Phase7B5CombatCharacterizationTests
     }
 
     [Test]
-    public void ExistingArtifactEnhancementAndEnemyTiming_RemainsOncePerCard()
+    public void ExistingGearEnhancementAndEnemyTiming_RemainsOncePerCard()
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = "phase7b5_spade";
-        artifact.displayName = "Phase7B5 Spade";
-        artifact.damageMultiplier = 1;
-        artifact.restrictToSuit = true;
-        artifact.affectedSuit = CardData.Suit.Spades;
-        artifact.reduceEnemyAttackByCardValue = true;
-        _created.Add(artifact);
-        _cards.ownedArtifacts.Add(artifact);
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = "phase7b5_spade";
+        gear.displayName = "Phase7B5 Spade";
+        gear.damageMultiplier = 1;
+        gear.restrictToSuit = true;
+        gear.affectedSuit = CardData.Suit.Spades;
+        gear.reduceEnemyAttackByCardValue = true;
+        _created.Add(gear);
+        _cards.ownedGear.Add(gear);
 
         var mending = ScriptableObject.CreateInstance<CardEnhancementData>();
         mending.id = "phase7b5_mending";
@@ -165,10 +165,10 @@ public sealed class Phase7B5CombatCharacterizationTests
         Assert.That(_combat.TryPlayCards(new[] { HighestAttackView() }, enemy), Is.True);
 
         Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
-        Assert.That(_cards.gold, Is.EqualTo(7));
+        Assert.That(_cards.credits, Is.EqualTo(7));
         Assert.That(resultCount, Is.EqualTo(1));
         _combat.TakeRemainingDamage();
-        Assert.That(_cards.gold, Is.EqualTo(7));
+        Assert.That(_cards.credits, Is.EqualTo(7));
         Assert.That(resultCount, Is.EqualTo(1));
     }
 
@@ -200,9 +200,9 @@ public sealed class Phase7B5CombatCharacterizationTests
         return ability;
     }
 
-    EnemyTypeData CreateEnemyType(string name, int health, int attack, int gold, params EnemyAbility[] abilities)
+    EnemyTypeData CreateEnemyType(string name, int health, int attack, int credits, params EnemyAbility[] abilities)
     {
-        var type = EnemyTypeData.Create(name, health, attack, gold);
+        var type = EnemyTypeData.Create(name, health, attack, credits);
         type.abilities = abilities ?? System.Array.Empty<EnemyAbility>();
         _created.Add(type);
         return type;

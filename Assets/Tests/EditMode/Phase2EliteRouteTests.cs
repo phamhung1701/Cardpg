@@ -105,7 +105,7 @@ public sealed class Phase2EliteRouteTests
     static void AssertAlternativeForEachElitePredecessor(IReadOnlyList<PathNode> nodes, int mapIndex, string seed)
     {
         var byId = nodes.ToDictionary(node => node.id);
-        var safe = new HashSet<int>(nodes.Where(node => node.kind == MapNodeType.Boss).Select(node => node.id));
+        var safe = new HashSet<int>(nodes.Where(node => node.kind == MapNodeType.Headliner).Select(node => node.id));
         foreach (var node in nodes.OrderByDescending(node => node.col))
             if (node.kind != MapNodeType.Elite && node.next.Any(safe.Contains)) safe.Add(node.id);
         Assert.That(nodes.Where(node => node.col == 0).All(node => safe.Contains(node.id)), Is.True,

@@ -81,7 +81,7 @@ These were direct staged runtime inspections/UI callbacks, **not Unity Test Fram
 
 ### Documentation
 
-- `CARDPG_DEVELOPMENT.md`
+- `DEALBREAK_DEVELOPMENT.md`
 - `Locus/knowledge/plan/combat-shop-economy-rebalance-report.md`
 
 Pre-existing/unrelated work was not reverted or overwritten. Editor/tool-managed changes visible in TMP fallback font, Plastic metadata and Locus workspace metadata are not intentional economy deliverables. No staging, commit or push was performed.

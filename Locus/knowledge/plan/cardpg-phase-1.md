@@ -67,9 +67,9 @@ Final read-only review found no Phase 1 blockers. Scene is saved and not dirty. 
 - `Assets/Scripts/View/Field.cs`
 - `Assets/Scripts/Data/CardInstance.cs`
 - `Assets/Scripts/Data/CardCollection.cs`
-- `Assets/Scripts/CardPG.Runtime.asmdef`
+- `Assets/Scripts/Dealbreak.Runtime.asmdef`
 - `Assets/Tests/EditMode/CardCollectionTests.cs`
-- `Assets/Tests/EditMode/CardPG.EditModeTests.asmdef`
+- `Assets/Tests/EditMode/Dealbreak.EditModeTests.asmdef`
 
 ## Deliberately deferred
 

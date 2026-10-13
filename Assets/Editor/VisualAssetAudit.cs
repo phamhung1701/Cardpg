@@ -13,16 +13,16 @@ public static class VisualAssetAudit
             .Select(AssetDatabase.GetAssetPath)
             .OrderBy(path => path)
             .ToArray();
-        var missingArtifactIcons = FindAssets<RelicData>()
+        var missingGearIcons = FindAssets<GearData>()
             .Where(asset => !asset.iconSprite)
             .Select(AssetDatabase.GetAssetPath)
             .OrderBy(path => path)
             .ToArray();
 
-        Debug.Log($"Visual asset audit: {missingEnemyPortraits.Length} enemy portraits and {missingArtifactIcons.Length} artifact icons are unassigned. " +
+        Debug.Log($"Visual asset audit: {missingEnemyPortraits.Length} enemy portraits and {missingGearIcons.Length} artifact icons are unassigned. " +
                   "Existing glyph/placeholder fallbacks remain active.\n" +
                   "Enemy portraits:\n" + string.Join("\n", missingEnemyPortraits) +
-                  "\nArtifact icons:\n" + string.Join("\n", missingArtifactIcons));
+                  "\nArtifact icons:\n" + string.Join("\n", missingGearIcons));
     }
 
     static IEnumerable<T> FindAssets<T>() where T : Object

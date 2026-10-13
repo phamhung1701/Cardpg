@@ -25,7 +25,7 @@ public sealed class RunResultPresentationTests
     {
         GameplayInputGate.Clear();
         _cards = Make<CardManager>("Results Cards");
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>());
         _cards.BuildDeck();
         _combat = Make<CombatManager>("Results Combat");
         _combat.ConfigurePlayer(30);
@@ -137,13 +137,13 @@ public sealed class RunResultPresentationTests
         }
         for (int i = 0; i < 8; i++)
         {
-            var artifact = ScriptableObject.CreateInstance<RelicData>();
-            artifact.id = "long-summary-gear-" + i;
-            artifact.displayName = "Long Gear Name " + i;
-            _assets.Add(artifact);
-            _cards.ownedArtifacts.Add(artifact);
+            var gear = ScriptableObject.CreateInstance<GearData>();
+            gear.id = "long-summary-gear-" + i;
+            gear.displayName = "Long Gear Name " + i;
+            _assets.Add(gear);
+            _cards.ownedGear.Add(gear);
         }
-        typeof(RunResultUI).GetField("_lastBossRewardName", BindingFlags.Instance | BindingFlags.NonPublic)
+        typeof(RunResultUI).GetField("_lastHeadlinerRewardName", BindingFlags.Instance | BindingFlags.NonPublic)
             .SetValue(_results, "Final Headliner Reward");
 
         Invoke(_results, "ShowResult", true);

@@ -3,15 +3,15 @@ using UnityEngine;
 
 public enum RunEffectType
 {
-    GainGold,
-    LoseGold,
+    GainCredits,
+    LoseCredits,
     Heal,
     LoseHealth,
     GainMaxHealth,
     DrawCards,
     RevealMapNode,
     GainConsumable,
-    RandomArtifactEnhancementOrNothing
+    RandomGearEnhancementOrNothing
 }
 
 [Serializable]
@@ -43,6 +43,7 @@ public class RunEventChoice
 }
 
 [CreateAssetMenu(fileName = "RunEvent", menuName = "Game/Incident")]
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RunEventDefinition")]
 public class RunEventDefinition : ScriptableObject
 {
     public string id;

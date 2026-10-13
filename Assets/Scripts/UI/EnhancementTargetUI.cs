@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 // Owns contextual hand targeting. Separate entries are reserved for choices not visible in hand.
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "EnhancementTargetUI")]
 public sealed class EnhancementTargetUI : MonoBehaviour
 {
     public GameObject panel;
@@ -454,7 +455,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
 
     bool IsInputBlockedForCurrentChoice() => GameplayInputGate.IsBlocked &&
         !(RunManager.Instance != null && RunManager.Instance.IsPendingHammerReward &&
-          GameplayInputGate.Reasons == GameplayInputBlockReason.ArtifactChoice);
+          GameplayInputGate.Reasons == GameplayInputBlockReason.GearChoice);
 
     void Back()
     {

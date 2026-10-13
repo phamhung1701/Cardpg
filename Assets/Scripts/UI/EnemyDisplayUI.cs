@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "EnemyDisplayUI")]
 public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("References")]
@@ -15,7 +16,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     EnemyRuntime _boundEnemy;
     bool _hasExplicitBinding;
-    bool _isDisplayingBossCard;
+    bool _isDisplayingHeadlinerCard;
     bool _isDisplayingAuthoredPortrait;
     Sprite _placeholderSprite;
     Color _placeholderColor;
@@ -216,18 +217,18 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     {
         if (!portrait) return;
 
-        CardData bossCard = enemy?.type?.sourceCard;
-        Sprite bossSprite = bossCard != null && bossCard.IsFaceCard
-            ? CardManager.Instance?.cardPrefab?.ResolveCardSprite(bossCard)
+        CardData headlinerCard = enemy?.type?.sourceCard;
+        Sprite headlinerSprite = headlinerCard != null && headlinerCard.IsFaceCard
+            ? CardManager.Instance?.cardPrefab?.ResolveCardSprite(headlinerCard)
             : null;
         Sprite enemySprite = enemy?.type ? enemy.type.portraitSprite : null;
-        _isDisplayingBossCard = bossSprite != null;
-        _isDisplayingAuthoredPortrait = !_isDisplayingBossCard && enemySprite != null;
+        _isDisplayingHeadlinerCard = headlinerSprite != null;
+        _isDisplayingAuthoredPortrait = !_isDisplayingHeadlinerCard && enemySprite != null;
 
         var rect = portrait.rectTransform;
-        if (_isDisplayingBossCard || _isDisplayingAuthoredPortrait)
+        if (_isDisplayingHeadlinerCard || _isDisplayingAuthoredPortrait)
         {
-            portrait.sprite = _isDisplayingBossCard ? bossSprite : enemySprite;
+            portrait.sprite = _isDisplayingHeadlinerCard ? headlinerSprite : enemySprite;
             portrait.type = Image.Type.Simple;
             portrait.preserveAspect = true;
             portrait.color = Color.white;
@@ -249,7 +250,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
         }
 
         if (_portraitGlyph)
-            _portraitGlyph.gameObject.SetActive(!_isDisplayingBossCard && !_isDisplayingAuthoredPortrait);
+            _portraitGlyph.gameObject.SetActive(!_isDisplayingHeadlinerCard && !_isDisplayingAuthoredPortrait);
     }
 
     void RefreshHp() => RefreshDisplay();
@@ -379,7 +380,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
         if (portrait)
         {
-            if (_isDisplayingBossCard || _isDisplayingAuthoredPortrait)
+            if (_isDisplayingHeadlinerCard || _isDisplayingAuthoredPortrait)
             {
                 portrait.color = Color.white;
                 return;

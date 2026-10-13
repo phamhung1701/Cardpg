@@ -22,7 +22,7 @@ public sealed class Phase7BMultiEnemyTests
         var prefab = CreateCardView("Phase7B Card Prefab");
 
         _cards = CreateComponent<CardManager>("Phase7B CardManager");
-        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _cards.BuildDeck();
         _cards.DealHand();
 
@@ -40,7 +40,7 @@ public sealed class Phase7BMultiEnemyTests
     }
 
     [Test]
-    public void GoblinGroup_TargetedKillsDrawCards_SurvivorsAttack_AndVictoryAwardsNineGold()
+    public void GoblinGroup_TargetedKillsDrawCards_SurvivorsAttack_AndVictoryAwardsNineCredits()
     {
         var type = CreateEnemyType("Goblin", 3, 2, 3, encounterCount: 3);
         var goblins = new[]
@@ -60,7 +60,7 @@ public sealed class Phase7BMultiEnemyTests
         Assert.That(_combat.Enemies.Count, Is.EqualTo(2));
         Assert.That(_cards.HandCount, Is.EqualTo(8), "The consumed attack card should be replaced by the kill draw.");
         Assert.That(_combat.pendingDamage, Is.EqualTo(4));
-        Assert.That(_cards.gold, Is.Zero, "Kill rewards are secured until encounter victory.");
+        Assert.That(_cards.credits, Is.Zero, "Kill rewards are secured until encounter victory.");
 
         _combat.TakeRemainingDamage();
         KillTarget(goblins[0]);
@@ -71,11 +71,11 @@ public sealed class Phase7BMultiEnemyTests
         KillTarget(goblins[1]);
         Assert.That(_combat.Enemies, Is.Empty);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameWon));
-        Assert.That(_cards.gold, Is.EqualTo(9));
+        Assert.That(_cards.credits, Is.EqualTo(9));
     }
 
     [Test]
-    public void Thief_FleesAfterSecondCompletedPlayerTurn_WithoutGoldOrKillDraw()
+    public void Thief_FleesAfterSecondCompletedPlayerTurn_WithoutCreditsOrKillDraw()
     {
         var type = CreateEnemyType("Thief", 12, 1, 15, fleeAfterPlayerTurns: 2);
         var thief = new EnemyRuntime(type);
@@ -92,7 +92,7 @@ public sealed class Phase7BMultiEnemyTests
         Assert.That(thief.PlayerTurnsCompleted, Is.EqualTo(2));
         Assert.That(_combat.Enemies, Is.Empty);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameWon));
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(_cards.hand.Count + _cards.discardPile.Count, Is.EqualTo(initialTotalCardsOutsideDeck),
             "Fleeing must not trigger the kill draw.");
     }
@@ -104,9 +104,9 @@ public sealed class Phase7BMultiEnemyTests
         var thief = UnityEditor.AssetDatabase.LoadAssetAtPath<EnemyTypeData>("Assets/Data/Enemies/Thief.asset");
         var goblin = UnityEditor.AssetDatabase.LoadAssetAtPath<EnemyTypeData>("Assets/Data/Enemies/Goblin.asset");
 
-        Assert.That((thief.maxHp, thief.baseAttack, thief.goldReward, thief.encounterCount, thief.fleeAfterPlayerTurns),
+        Assert.That((thief.maxHp, thief.baseAttack, thief.creditsReward, thief.encounterCount, thief.fleeAfterPlayerTurns),
             Is.EqualTo((12, 1, 15, 1, 2)));
-        Assert.That((goblin.maxHp, goblin.baseAttack, goblin.goldReward, goblin.encounterCount, goblin.fleeAfterPlayerTurns),
+        Assert.That((goblin.maxHp, goblin.baseAttack, goblin.creditsReward, goblin.encounterCount, goblin.fleeAfterPlayerTurns),
             Is.EqualTo((3, 2, 3, 3, 0)));
 #endif
     }
@@ -117,7 +117,7 @@ public sealed class Phase7BMultiEnemyTests
 #if UNITY_EDITOR
         var knight = UnityEditor.AssetDatabase.LoadAssetAtPath<EnemyTypeData>("Assets/Data/Enemies/Knight.asset");
         Assert.That(knight, Is.Not.Null);
-        Assert.That((knight.maxHp, knight.baseAttack, knight.goldReward, knight.encounterCount),
+        Assert.That((knight.maxHp, knight.baseAttack, knight.creditsReward, knight.encounterCount),
             Is.EqualTo((16, 4, 10, 1)));
 #endif
     }
@@ -168,18 +168,18 @@ public sealed class Phase7BMultiEnemyTests
 
         Assert.That(_combat.Enemies.Count, Is.EqualTo(1));
         Assert.That((_combat.Enemies[0].maxHp, _combat.Enemies[0].currentAttack), Is.EqualTo((77, 9)));
-        Assert.That((knight.maxHp, knight.baseAttack, knight.goldReward), Is.EqualTo((16, 4, 10)));
+        Assert.That((knight.maxHp, knight.baseAttack, knight.creditsReward), Is.EqualTo((16, 4, 10)));
     }
 
     [Test]
-    public void BossEncounter_PreviewAndSpawnScaleCachedBossWithoutChangingIt()
+    public void HeadlinerEncounter_PreviewAndSpawnScaleCachedHeadlinerWithoutChangingIt()
     {
-        var boss = CreateEnemyType("Jack of Hearts", 20, 10, 10);
+        var headliner = CreateEnemyType("Jack of Hearts", 20, 10, 10);
         var run = CreateComponent<RunManager>("Phase1 Boss RunManager");
-        run.bossDeck.Add(boss);
+        run.headlinerDeck.Add(headliner);
         var node = new PathNode
         {
-            id = 9, kind = MapNodeType.Boss, contentId = "boss",
+            id = 9, kind = MapNodeType.Headliner, contentId = "boss",
             mapIndex = 11, accessible = true, revealed = true
         };
         run.currentPath.Add(node);
@@ -190,7 +190,7 @@ public sealed class Phase7BMultiEnemyTests
 
         Assert.That(_combat.Enemies.Count, Is.EqualTo(1));
         Assert.That((_combat.Enemies[0].maxHp, _combat.Enemies[0].currentAttack), Is.EqualTo((64, 18)));
-        Assert.That((boss.maxHp, boss.baseAttack), Is.EqualTo((20, 10)));
+        Assert.That((headliner.maxHp, headliner.baseAttack), Is.EqualTo((20, 10)));
     }
 
     [Test]
@@ -398,11 +398,11 @@ public sealed class Phase7BMultiEnemyTests
         string name,
         int health,
         int attack,
-        int gold,
+        int credits,
         int encounterCount = 1,
         int fleeAfterPlayerTurns = 0)
     {
-        var type = EnemyTypeData.Create(name, health, attack, gold);
+        var type = EnemyTypeData.Create(name, health, attack, credits);
         type.encounterCount = encounterCount;
         type.fleeAfterPlayerTurns = fleeAfterPlayerTurns;
         _created.Add(type);

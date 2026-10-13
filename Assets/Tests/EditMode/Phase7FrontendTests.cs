@@ -109,7 +109,7 @@ public sealed class Phase7FrontendTests
         Assert.That(FrontendLaunchContext.TryConsumeRunSeed(out _), Is.False);
 
         var cards = CreateComponent<CardManager>("Seed CardManager");
-        cards.Configure(null, null, null, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        cards.Configure(null, null, null, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         var combat = CreateComponent<CombatManager>("Seed CombatManager");
         combat.ConfigurePlayer(30);
         var run = CreateComponent<RunManager>("Seed RunManager");
@@ -203,7 +203,7 @@ public sealed class Phase7FrontendTests
     public void BlockingMenu_PreventsPathSelectionUntilGameplayInputIsRestored()
     {
         var cards = CreateComponent<CardManager>("Phase7 CardManager");
-        cards.Configure(null, null, null, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        cards.Configure(null, null, null, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         var combat = CreateComponent<CombatManager>("Phase7 CombatManager");
         combat.ConfigurePlayer(30);
         var run = CreateComponent<RunManager>("Phase7 RunManager");
@@ -227,7 +227,7 @@ public sealed class Phase7FrontendTests
     public void ResultsScreen_ShowsCurrentRunSummaryAndRetryUsesSameSeed()
     {
         var cards = CreateComponent<CardManager>("Phase7 Result CardManager");
-        cards.Configure(null, null, null, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        cards.Configure(null, null, null, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         var combat = CreateComponent<CombatManager>("Phase7 Result CombatManager");
         combat.ConfigurePlayer(30);
         var run = CreateComponent<RunManager>("Phase7 Result RunManager");
@@ -237,7 +237,7 @@ public sealed class Phase7FrontendTests
         string generatedSeed = RunSetupUI.ResolveStartSeed("");
         run.StartRunWithSeed(generatedSeed);
         Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));
-        cards.AddGold(27);
+        cards.AddCredits(27);
         run.Timing.Advance(62.8d);
         run.Timing.CompleteCurrentMap();
         run.Timing.Advance(5.4d);
@@ -294,11 +294,11 @@ public sealed class Phase7FrontendTests
 
         result.RetrySameSeed();
         Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));
-        Assert.That(run.bossIndex, Is.Zero);
+        Assert.That(run.headlinerIndex, Is.Zero);
         Assert.That(run.Timing.IsActive, Is.True);
         Assert.That(run.Timing.TotalElapsedSeconds, Is.Zero);
         Assert.That(run.Timing.CompletedSplits, Is.Empty);
-        Assert.That(cards.gold, Is.Zero);
+        Assert.That(cards.credits, Is.Zero);
         Assert.That(panel.activeSelf, Is.False);
 
         typeof(RunResultUI).GetMethod("ShowResult", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -323,9 +323,9 @@ public sealed class Phase7FrontendTests
         return gameObject;
     }
 
-    EnemyTypeData CreateEnemy(string name, int health, int attack, int gold)
+    EnemyTypeData CreateEnemy(string name, int health, int attack, int credits)
     {
-        var enemy = EnemyTypeData.Create(name, health, attack, gold);
+        var enemy = EnemyTypeData.Create(name, health, attack, credits);
         enemy.name = name;
         _created.Add(enemy);
         return enemy;

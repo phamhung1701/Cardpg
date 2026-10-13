@@ -2,20 +2,30 @@ using System;
 
 public enum ShopOfferKind
 {
-    Artifact,
-    Enhancement,
-    Investment,
-    Guidance,
-    Consumable,
-    Contract,
-    Supply
+    Gear = 0,
+    Enhancement = 1,
+    Investment = 2,
+    Guidance = 3,
+    Consumable = 4,
+    Contract = 5,
+    Supply = 6
 }
 
 [Serializable]
 public sealed class ShopOffer
 {
+    // Version-1 saves persist these prefixes. Never derive them from display/code names.
+    public static string PersistentGoodsPrefix(ShopOfferKind kind) => kind switch
+    {
+        ShopOfferKind.Gear => "artifact",
+        ShopOfferKind.Enhancement => "enhancement",
+        ShopOfferKind.Consumable => "consumable",
+        _ => kind.ToString().ToLowerInvariant()
+    };
+
     public ShopOfferKind kind;
-    public RelicData artifact;
+    [UnityEngine.Serialization.FormerlySerializedAs("artifact")]
+    public GearData gear;
     public CardEnhancementData enhancement;
     public ConsumableData consumable;
     public int slot;
@@ -30,7 +40,7 @@ public sealed class ShopOffer
     public string StableId => generation == 0 ? BaseStableId : $"refresh:{generation}:{BaseStableId}";
     string BaseStableId => kind switch
     {
-        ShopOfferKind.Artifact => $"artifact:{artifact?.id}",
+        ShopOfferKind.Gear => $"artifact:{gear?.id}",
         ShopOfferKind.Enhancement => $"enhancement:{slot}:{enhancement?.id}",
         ShopOfferKind.Investment => "investment",
         ShopOfferKind.Guidance => "guidance",
@@ -42,7 +52,7 @@ public sealed class ShopOffer
 
     public string DisplayName => kind switch
     {
-        ShopOfferKind.Artifact => artifact != null ? artifact.displayName : "Unknown Gear",
+        ShopOfferKind.Gear => gear != null ? gear.displayName : "Unknown Gear",
         ShopOfferKind.Enhancement => enhancement != null ? enhancement.displayName : "Unknown Mod",
         ShopOfferKind.Investment => "Stake",
         ShopOfferKind.Guidance => "Intel",
@@ -54,7 +64,7 @@ public sealed class ShopOffer
 
     public string Icon => kind switch
     {
-        ShopOfferKind.Artifact => artifact != null ? artifact.icon : string.Empty,
+        ShopOfferKind.Gear => gear != null ? gear.icon : string.Empty,
         ShopOfferKind.Enhancement => enhancement != null ? enhancement.icon : string.Empty,
         ShopOfferKind.Investment => "GOLD",
         ShopOfferKind.Guidance => "MAP",
@@ -64,8 +74,8 @@ public sealed class ShopOffer
 
     public string Description(CardManager cards)
     {
-        if (kind == ShopOfferKind.Artifact)
-            return artifact != null ? artifact.description : string.Empty;
+        if (kind == ShopOfferKind.Gear)
+            return gear != null ? gear.description : string.Empty;
         if (kind == ShopOfferKind.Enhancement)
         {
             string effect = enhancement != null ? enhancement.description : string.Empty;

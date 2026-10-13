@@ -21,7 +21,7 @@ public sealed class TavernEventTests
         var cardObject = new GameObject("Tavern Test Cards");
         _objects.Add(cardObject);
         _cards = cardObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>());
 
         var combatObject = new GameObject("Tavern Test Combat");
         _objects.Add(combatObject);
@@ -49,13 +49,13 @@ public sealed class TavernEventTests
         var catalog = AssetDatabase.LoadAssetAtPath<RunContentCatalog>("Assets/Data/Run/PrototypeRunContent.asset");
         Assert.That(_tavern.id, Is.EqualTo("evt_006"));
         Assert.That(_tavern.category, Is.EqualTo(MapNodeType.Event));
-        Assert.That(_tavern.title, Is.EqualTo("Tavern"));
+        Assert.That(_tavern.title, Is.EqualTo("Late-Night Diner"));
         Assert.That(catalog.events, Does.Contain(_tavern));
         Assert.That(_tavern.choices, Has.Length.EqualTo(2));
         Assert.That(_tavern.choices[0].effects, Has.Length.EqualTo(1));
         Assert.That(_tavern.choices[0].effects[0].type, Is.EqualTo(RunEffectType.RevealMapNode));
         Assert.That(_tavern.choices[1].effects, Has.Length.EqualTo(2));
-        Assert.That(_tavern.choices[1].effects[0].type, Is.EqualTo(RunEffectType.LoseGold));
+        Assert.That(_tavern.choices[1].effects[0].type, Is.EqualTo(RunEffectType.LoseCredits));
         Assert.That(_tavern.choices[1].effects[0].amount, Is.EqualTo(2));
         Assert.That(_tavern.choices[1].effects[1].type, Is.EqualTo(RunEffectType.Heal));
         Assert.That(_tavern.choices[1].effects[1].amount, Is.EqualTo(5));
@@ -114,7 +114,7 @@ public sealed class TavernEventTests
     }
 
     [Test]
-    public void TavernRest_UsesExistingOrderedGoldAndHealEffects()
+    public void TavernRest_UsesExistingOrderedCreditsAndHealEffects()
     {
         var entry = new PathNode
         {
@@ -122,13 +122,13 @@ public sealed class TavernEventTests
             accessible = true, revealed = true, col = 0, row = 0
         };
         _run.currentPath.Add(entry);
-        _cards.AddGold(2);
+        _cards.AddCredits(2);
         _combat.TakeRunDamage(10);
         _run.OnPathChosen(entry.id);
 
         Assert.That(_run.GetEventOptionUnavailableReason(1), Is.Empty);
         Assert.That(_run.ChooseEventOption(1), Is.True);
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(_combat.player.currentHealth, Is.EqualTo(25));
         Assert.That(entry.completed, Is.True);
     }

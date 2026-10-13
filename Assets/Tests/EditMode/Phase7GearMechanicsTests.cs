@@ -6,7 +6,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 
-public sealed class Phase7ArtifactMechanicsTests
+public sealed class Phase7GearMechanicsTests
 {
     GameObject _cardsObject;
     GameObject _combatObject;
@@ -21,7 +21,7 @@ public sealed class Phase7ArtifactMechanicsTests
     {
         _cardsObject = new GameObject("Phase7 mechanics CardManager");
         _cards = _cardsObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, Array.Empty<RelicData>(), Array.Empty<CardEnhancementData>());
+        _cards.Configure(null, null, null, Array.Empty<GearData>(), Array.Empty<CardEnhancementData>());
         _combatObject = new GameObject("Phase7 mechanics CombatManager");
         _combat = _combatObject.AddComponent<CombatManager>();
         _combat.ConfigurePlayer(30);
@@ -65,19 +65,19 @@ public sealed class Phase7ArtifactMechanicsTests
         Assert.That(hammerCommon.effects.Single().kind, Is.EqualTo(GameplayEffectKind.GrantRandomCommonEnhancement));
         Assert.That(hammerRare.canonicalId, Is.EqualTo("rel_140"));
         Assert.That(hammerRare.upgradeFromId, Is.EqualTo("rel_009"));
-        Assert.That(hammerRare.specialRule, Is.EqualTo(ArtifactSpecialRule.Hammer));
-        Assert.That(AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/SurveyorMap.asset"), Is.Null,
+        Assert.That(hammerRare.specialRule, Is.EqualTo(GearSpecialRule.Hammer));
+        Assert.That(AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/SurveyorMap.asset"), Is.Null,
             "Surveyor’s Map is deliberately deferred as redundant.");
         var thief = AssetDatabase.LoadAssetAtPath<EnemyTypeData>("Assets/Data/Enemies/MasterThief.asset");
         Assert.That(thief, Is.Not.Null);
-        Assert.That((thief.maxHp, thief.baseAttack, thief.goldReward, thief.fleeAfterPlayerTurns),
+        Assert.That((thief.maxHp, thief.baseAttack, thief.creditsReward, thief.fleeAfterPlayerTurns),
             Is.EqualTo((24, 4, 20, 4)));
     }
 
     [Test]
     public void AceReturn_IsOncePerEncounterAndNeverDuplicatesThePhysicalCard()
     {
-        var artifact = Artifact("rel_114", ArtifactSpecialRule.AceRare);
+        var gear = Gear("rel_114", GearSpecialRule.AceRare);
         var ace = Card(CardData.Suit.Clubs, CardData.Rank.Ace, 21);
         var face = Card(CardData.Suit.Hearts, CardData.Rank.Jack, 22);
         SetOwnedCards(new[] { ace, face });
@@ -85,13 +85,13 @@ public sealed class Phase7ArtifactMechanicsTests
         collection.DrawToHand(2, 2);
         Assert.That(collection.TryDiscard(ace), Is.True);
         Invoke(_combat, "TryReturnCriticalAce", new object[] { new[] { ace, face }, _cards });
-        Assert.That(_cards.GetArtifactInstance(artifact).State.GetEncounterCounter(-114), Is.EqualTo(1));
+        Assert.That(_cards.GetGearInstance(gear).State.GetEncounterCounter(-114), Is.EqualTo(1));
         Assert.That(_cards.hand.Count(card => ReferenceEquals(card, ace)), Is.EqualTo(1));
         Assert.That(collection.OwnedCards.Count, Is.EqualTo(2));
         Assert.That(collection.TryDiscard(ace), Is.True);
         Invoke(_combat, "TryReturnCriticalAce", new object[] { new[] { ace, face }, _cards });
         Assert.That(collection.DiscardPile.Count(card => ReferenceEquals(card, ace)), Is.EqualTo(1));
-        _cards.ResetArtifactEncounterEffectState();
+        _cards.ResetGearEncounterEffectState();
         Invoke(_combat, "TryReturnCriticalAce", new object[] { new[] { ace, face }, _cards });
         Assert.That(_cards.hand.Count(card => ReferenceEquals(card, ace)), Is.EqualTo(1));
     }
@@ -99,7 +99,7 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void MimicEpic_RetainsBaseAllHeldTriggersAndAddsOneOnlyForMatchingRank()
     {
-        var mimic = Artifact("rel_116", ArtifactSpecialRule.MimicEpic);
+        var mimic = Gear("rel_116", GearSpecialRule.MimicEpic);
         mimic.effects = new[] { new GameplayEffectDefinition
         {
             kind = GameplayEffectKind.MimicInHandEffects,
@@ -127,7 +127,7 @@ public sealed class Phase7ArtifactMechanicsTests
     }
 
     [Test]
-    public void MasterThief_FourthActionFleeGivesNoKillGoldEvenOnBonusAction()
+    public void MasterThief_FourthActionFleeGivesNoKillCreditsEvenOnBonusAction()
     {
         var type = EnemyTypeData.Create("Master Thief", 24, 4, 20);
         type.fleeAfterPlayerTurns = 4;
@@ -144,8 +144,8 @@ public sealed class Phase7ArtifactMechanicsTests
         SetPrivate(_combat, "_isBonusPlayerAction", true);
         Invoke(_combat, "CompletePlayerTurnForEnemies", null);
         Assert.That(_combat.Enemies.Contains(thief), Is.False);
-        Assert.That(_cards.gold, Is.Zero);
-        Assert.That(GetPrivate<int>(_combat, "_earnedGoldReward"), Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
+        Assert.That(GetPrivate<int>(_combat, "_earnedCreditsReward"), Is.Zero);
     }
 
     [Test]
@@ -153,9 +153,9 @@ public sealed class Phase7ArtifactMechanicsTests
     {
         var common = Asset("Hammer");
         var rare = Asset("HammerRare");
-        _cards.relicCatalog.AddRange(new[] { common, rare });
-        Assert.That(_cards.BuyArtifact(common, 0), Is.True);
-        Assert.That(_cards.BuyArtifact(rare, 0), Is.True);
+        _cards.gearCatalog.AddRange(new[] { common, rare });
+        Assert.That(_cards.BuyGear(common, 0), Is.True);
+        Assert.That(_cards.BuyGear(rare, 0), Is.True);
         foreach (var name in new[] { "Sharpened", "Reinforced", "Mending", "Quickdraw" })
             _cards.enhancementCatalog.Add(AssetDatabase.LoadAssetAtPath<CardEnhancementData>(
                 $"Assets/Data/Enhancements/{name}.asset"));
@@ -183,9 +183,9 @@ public sealed class Phase7ArtifactMechanicsTests
     {
         var common = Asset("Hammer");
         var rare = Asset("HammerRare");
-        _cards.relicCatalog.AddRange(new[] { common, rare });
-        Assert.That(_cards.BuyArtifact(common, 0), Is.True);
-        Assert.That(_cards.BuyArtifact(rare, 0), Is.True);
+        _cards.gearCatalog.AddRange(new[] { common, rare });
+        Assert.That(_cards.BuyGear(common, 0), Is.True);
+        Assert.That(_cards.BuyGear(rare, 0), Is.True);
         foreach (var name in new[] { "Sharpened", "Reinforced", "Mending", "Quickdraw" })
             _cards.enhancementCatalog.Add(AssetDatabase.LoadAssetAtPath<CardEnhancementData>(
                 $"Assets/Data/Enhancements/{name}.asset"));
@@ -214,7 +214,7 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void ArsenalEpic_UsesFlooredHarmonicFaceCardCapacityWithoutShrinkingHand()
     {
-        Artifact("rel_030", ArtifactSpecialRule.ArsenalEpic);
+        Gear("rel_030", GearSpecialRule.ArsenalEpic);
         var faces = new[]
         {
             Card(CardData.Suit.Hearts, CardData.Rank.Jack, 1),
@@ -232,7 +232,7 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void AceEpic_GuaranteesAceFaceCritAndReturnsTheSamePhysicalAceWithinCapacity()
     {
-        Artifact("rel_115", ArtifactSpecialRule.AceEpic);
+        Gear("rel_115", GearSpecialRule.AceEpic);
         var ace = Card(CardData.Suit.Clubs, CardData.Rank.Ace, 11);
         var face = Card(CardData.Suit.Hearts, CardData.Rank.Jack, 12);
         Assert.That(GameplayEffectResolver.TryGetCriticalChanceOverride(new[] { ace, face }, _cards, out float chance), Is.True);
@@ -259,7 +259,7 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void HandsEpic_AllowsFourMatchingCardsAndDoublesOnlyCardAuthoredOnPlayEffects()
     {
-        var hands = Artifact("rel_109", ArtifactSpecialRule.HandsEpic);
+        var hands = Gear("rel_109", GearSpecialRule.HandsEpic);
         hands.ruleModifiers = new[] { new GameplayRuleModifierData
         {
             ruleId = "hands-four",
@@ -269,7 +269,7 @@ public sealed class Phase7ArtifactMechanicsTests
         var group = Enumerable.Range(0, 4).Select(i => Card(CardData.Suit.Spades, CardData.Rank.Seven, 200 + i)).ToArray();
         Assert.That(GameplayEffectResolver.IsHandsMultiCardAction(group, _cards), Is.True);
 
-        var enhancement = Enhancement(GameplayEffectKind.BonusGold, GameplayEffectTrigger.CardCommitted, 1);
+        var enhancement = Enhancement(GameplayEffectKind.BonusCredits, GameplayEffectTrigger.CardCommitted, 1);
         Assert.That(group[0].TryApplyEnhancement(enhancement), Is.True);
         var enemy = Enemy("Hands test", 30);
         var action = new CombatActionContext(1, CombatActionOrigin.PlayerCard, card: group[0], targetEnemy: enemy);
@@ -277,16 +277,16 @@ public sealed class Phase7ArtifactMechanicsTests
         GameplayEffectResolver.EnqueueCardCommitted(
             new CardCommittedEffectContext(action, group[0], enemy, _combat, _cards, 0, cardEffectActivations: 2), queue);
         Assert.That(queue.ProcessPhase(CombatReactionPhase.CardCommitted), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(2));
+        Assert.That(_cards.credits, Is.EqualTo(2));
     }
 
     [Test]
     public void HeartEpic_ConvertsOverhealToVitalityButWitheringPreventsConversion()
     {
-        var heart = Artifact("rel_105", ArtifactSpecialRule.HeartEpic);
+        var heart = Gear("rel_105", GearSpecialRule.HeartEpic);
         var card = Card(CardData.Suit.Hearts, CardData.Rank.Five, 300);
         for (int i = 0; i < 5; i++) EnqueueCardCommit(card, i + 1);
-        var state = _cards.GetArtifactInstance(heart).State;
+        var state = _cards.GetGearInstance(heart).State;
         Assert.That(state.GetCounter(-1050), Is.EqualTo(10));
         SetPrivate(_combat, "_openingPlayerAttackInProgress", true);
         Invoke(_combat, "PreparePhase7ActionBonuses", new object[] { new[] { card } });
@@ -304,7 +304,7 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void DwarfEpic_UsesPreparedSourceIdentityAndGrowsOnlyOnHigherRankKill()
     {
-        Artifact("rel_113", ArtifactSpecialRule.DwarfEpic);
+        Gear("rel_113", GearSpecialRule.DwarfEpic);
         var source = Card(CardData.Suit.Clubs, CardData.Rank.Two, 401);
         var higher = Card(CardData.Suit.Hearts, CardData.Rank.King, 402);
         SetOwnedCards(new[] { source, higher });
@@ -320,12 +320,12 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void Kingslayer_RequiresThreeDistinctManualRanksAndConsumesOneChargeOnAttack()
     {
-        Artifact("rel_138", ArtifactSpecialRule.KingslayersMark);
-        SetPrivate(_combat, "_isBossEncounter", true);
+        Gear("rel_138", GearSpecialRule.KingslayersMark);
+        SetPrivate(_combat, "_isHeadlinerEncounter", true);
         var ace = Card(CardData.Suit.Clubs, CardData.Rank.Ace, 501);
         var king = Card(CardData.Suit.Hearts, CardData.Rank.King, 502);
         var queen = Card(CardData.Suit.Spades, CardData.Rank.Queen, 503);
-        var state = _cards.GetArtifactInstance(_cards.ownedArtifacts[0]).State;
+        var state = _cards.GetGearInstance(_cards.ownedGear[0]).State;
         Invoke(_combat, "ConsumeAndAdvancePhase7ActionState", new object[] { new[] { ace }, false });
         Invoke(_combat, "ConsumeAndAdvancePhase7ActionState", new object[] { new[] { ace }, false });
         Assert.That(state.GetEncounterCounter(-1382), Is.Zero, "Repeating a rank does not qualify.");
@@ -337,17 +337,17 @@ public sealed class Phase7ArtifactMechanicsTests
         Assert.That(GetPrivate<int>(_combat, "_activeKingslayerBonus"), Is.EqualTo(1));
         Invoke(_combat, "ConsumeAndAdvancePhase7ActionState", new object[] { new[] { attack }, false });
         Assert.That(state.GetEncounterCounter(-1382), Is.Zero);
-        _cards.ResetArtifactEncounterEffectState();
+        _cards.ResetGearEncounterEffectState();
         Assert.That(state.GetEncounterCounter(-1381), Is.Zero);
     }
 
     [Test]
     public void Balancer_AlternationAddsOneAndRepeatingGroupResetsBeforeItCanBuff()
     {
-        Artifact("rel_118", ArtifactSpecialRule.BalancersScale);
+        Gear("rel_118", GearSpecialRule.BalancersScale);
         var low = Card(CardData.Suit.Clubs, CardData.Rank.Four, 601);
         var face = Card(CardData.Suit.Hearts, CardData.Rank.Jack, 602);
-        var state = _cards.GetArtifactInstance(_cards.ownedArtifacts[0]).State;
+        var state = _cards.GetGearInstance(_cards.ownedGear[0]).State;
         Invoke(_combat, "ConsumeAndAdvancePhase7ActionState", new object[] { new[] { low }, false });
         Invoke(_combat, "ConsumeAndAdvancePhase7ActionState", new object[] { new[] { face }, false });
         Assert.That(state.GetCounter(-1182), Is.EqualTo(1));
@@ -359,7 +359,7 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void DiamondEpic_QueuesThirdManualPlayOnlyAndCardChoiceKeepsPhysicalIdentity()
     {
-        Artifact("rel_108", ArtifactSpecialRule.DiamondEpic);
+        Gear("rel_108", GearSpecialRule.DiamondEpic);
         var diamonds = Enumerable.Range(0, 3).Select(i => Card(CardData.Suit.Diamonds,
             (CardData.Rank)((int)CardData.Rank.Two + i), 701 + i)).ToArray();
         foreach (var diamond in diamonds)
@@ -378,7 +378,7 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void SpadeEpic_FullBlockDrawsAndUnusedBlockBanksOneNextAttackBonus()
     {
-        var spade = Artifact("rel_107", ArtifactSpecialRule.SpadeEpic);
+        var spade = Gear("rel_107", GearSpecialRule.SpadeEpic);
         spade.effects = new[] { new GameplayEffectDefinition
         {
             kind = GameplayEffectKind.BlockMultiplier,
@@ -407,7 +407,7 @@ public sealed class Phase7ArtifactMechanicsTests
         SetPrivate(_combat, "_isResolvingAction", false);
         queue.Clear();
         Assert.That(_cards.hand.Count, Is.EqualTo(2), "Rare draw behavior is retained on Epic.");
-        Assert.That(_cards.GetArtifactInstance(spade).State.GetEncounterCounter(-1071), Is.EqualTo(1));
+        Assert.That(_cards.GetGearInstance(spade).State.GetEncounterCounter(-1071), Is.EqualTo(1));
         var attack = Card(CardData.Suit.Clubs, CardData.Rank.Five, 803);
         Invoke(_combat, "PreparePhase7ActionBonuses", new object[] { new[] { attack } });
         Assert.That(GetPrivate<int>(_combat, "_activeSpadeBonus"), Is.EqualTo(1));
@@ -424,7 +424,7 @@ public sealed class Phase7ArtifactMechanicsTests
         catalog.risks = new[] { riskDef };
         _run.contentCatalog = catalog;
         SetPrivate(_run, "_randomContext", new RunRandomContext("phase7-hidden-trail"));
-        Artifact("rel_135", ArtifactSpecialRule.HiddenTrail);
+        Gear("rel_135", GearSpecialRule.HiddenTrail);
         var root = new PathNode { id = 1, mapIndex = 0, kind = MapNodeType.Combat, accessible = true, next = new List<int> { 2 } };
         var hidden = new PathNode { id = 2, mapIndex = 0, kind = MapNodeType.Risk, contentId = "old-risk", hidden = true, revealed = false, next = new List<int>() };
         _run.currentPath.AddRange(new[] { root, hidden });
@@ -442,22 +442,22 @@ public sealed class Phase7ArtifactMechanicsTests
     [Test]
     public void WandererAndWarpath_TriggerOncePerMapAndGrantStartingBlockBeforeShield()
     {
-        var boots = Artifact("rel_133", ArtifactSpecialRule.WanderersBoots);
-        var banner = Artifact("rel_134", ArtifactSpecialRule.WarpathBanner);
+        var boots = Gear("rel_133", GearSpecialRule.WanderersBoots);
+        var banner = Gear("rel_134", GearSpecialRule.WarpathBanner);
         _combat.player.TakeDamage(5);
         ApplyNode(MapNodeType.Combat, 0);
         ApplyNode(MapNodeType.Shop, 0);
         Assert.That(_combat.player.currentHealth, Is.EqualTo(25));
         ApplyNode(MapNodeType.Event, 0);
         Assert.That(_combat.player.currentHealth, Is.EqualTo(28));
-        Assert.That(_cards.gold, Is.EqualTo(3));
+        Assert.That(_cards.credits, Is.EqualTo(3));
         ApplyNode(MapNodeType.Risk, 0);
         Assert.That(_combat.player.currentHealth, Is.EqualTo(28));
-        Assert.That(_cards.gold, Is.EqualTo(3));
+        Assert.That(_cards.credits, Is.EqualTo(3));
 
         ApplyNode(MapNodeType.Combat, 1);
         ApplyNode(MapNodeType.Elite, 1);
-        Assert.That(_cards.GetArtifactInstance(banner).State.GetCounter(-1340), Is.EqualTo(2));
+        Assert.That(_cards.GetGearInstance(banner).State.GetCounter(-1340), Is.EqualTo(2));
         _combat.Reset();
         _combat.StartEncounter(new[] { Enemy("Warpath test", 10) }, MapNodeType.Combat);
         Assert.That(_combat.player.EncounterBlock, Is.EqualTo(4));
@@ -492,18 +492,18 @@ public sealed class Phase7ArtifactMechanicsTests
         return value;
     }
 
-    RelicData Asset(string file) => AssetDatabase.LoadAssetAtPath<RelicData>($"Assets/Data/Relics/{file}.asset");
+    GearData Asset(string file) => AssetDatabase.LoadAssetAtPath<GearData>($"Assets/Data/Relics/{file}.asset");
 
-    RelicData Artifact(string id, ArtifactSpecialRule rule)
+    GearData Gear(string id, GearSpecialRule rule)
     {
-        var value = ScriptableObject.CreateInstance<RelicData>();
+        var value = ScriptableObject.CreateInstance<GearData>();
         value.id = id;
         value.canonicalId = id;
         value.displayName = id;
         value.specialRule = rule;
         value.price = 0;
         _created.Add(value);
-        Assert.That(_cards.BuyArtifact(value, 0), Is.True);
+        Assert.That(_cards.BuyGear(value, 0), Is.True);
         return value;
     }
 

@@ -15,7 +15,7 @@ public sealed class NobleFamilyEventTests
         var cardObject = new GameObject("Noble Family Test Cards");
         _objects.Add(cardObject);
         _cards = cardObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>());
 
         var combatObject = new GameObject("Noble Family Test Combat");
         _objects.Add(combatObject);
@@ -39,24 +39,24 @@ public sealed class NobleFamilyEventTests
 
         Assert.That(definition, Is.Not.Null);
         Assert.That(definition.id, Is.EqualTo("evt_009"));
-        Assert.That(definition.title, Is.EqualTo("Noble Family"));
+        Assert.That(definition.title, Is.EqualTo("VIP Party"));
         Assert.That(definition.category, Is.EqualTo(MapNodeType.Event));
         Assert.That(catalog.events, Does.Contain(definition));
         Assert.That(definition.choices, Has.Length.EqualTo(2));
         Assert.That(definition.choices[0].effects, Is.Empty, "Refusing has no gameplay effect.");
         Assert.That(definition.choices[1].effects, Has.Length.EqualTo(1));
-        Assert.That(definition.choices[1].effects[0].type, Is.EqualTo(RunEffectType.GainGold));
+        Assert.That(definition.choices[1].effects[0].type, Is.EqualTo(RunEffectType.GainCredits));
         Assert.That(definition.choices[1].effects[0].amount, Is.EqualTo(10));
     }
 
     [Test]
-    public void RefuseDoesNothing_AndAcceptGrantsTenGoldThroughExistingResolver()
+    public void RefuseDoesNothing_AndAcceptGrantsTenCreditsThroughExistingResolver()
     {
         var definition = AssetDatabase.LoadAssetAtPath<RunEventDefinition>("Assets/Data/Run/Events/NobleFamily.asset");
         Assert.That(RunEffectResolver.Apply(definition.choices[0], _cards, _combat), Is.True);
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
 
         Assert.That(RunEffectResolver.Apply(definition.choices[1], _cards, _combat), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(10));
+        Assert.That(_cards.credits, Is.EqualTo(10));
     }
 }

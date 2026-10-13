@@ -18,13 +18,13 @@ public sealed class CombatShopEconomyTests
     {
         GameplayInputGate.Clear();
         cards = Make<CardManager>();
-        var artifacts = new List<RelicData>();
+        var gearItems = new List<GearData>();
         var enhancements = new List<CardEnhancementData>();
         var consumables = new List<ConsumableData>();
         for (int i = 0; i < 8; i++)
         {
-            var a = ScriptableObject.CreateInstance<RelicData>(); created.Add(a);
-            a.id = "economy-a-" + i; a.price = 10; artifacts.Add(a);
+            var a = ScriptableObject.CreateInstance<GearData>(); created.Add(a);
+            a.id = "economy-a-" + i; a.price = 10; gearItems.Add(a);
             var e = ScriptableObject.CreateInstance<CardEnhancementData>(); created.Add(e);
             e.id = "economy-e-" + i; e.price = 8; enhancements.Add(e);
             var mapped = ScriptableObject.CreateInstance<ConsumableData>(); created.Add(mapped);
@@ -33,10 +33,10 @@ public sealed class CombatShopEconomyTests
             var c = ScriptableObject.CreateInstance<ConsumableData>(); created.Add(c);
             c.id = "economy-c-" + i; c.price = 5; c.shopAvailable = true; consumables.Add(c);
         }
-        cards.Configure(null, null, null, artifacts.ToArray(), enhancements.ToArray(), consumables.ToArray());
+        cards.Configure(null, null, null, gearItems.ToArray(), enhancements.ToArray(), consumables.ToArray());
         cards.BuildDeck();
         cards.DrawExistingToHand(3);
-        cards.AddGold(200);
+        cards.AddCredits(200);
         Make<CombatManager>().ConfigurePlayer(30);
         run = Make<RunManager>();
         Set("_randomContext", new RunRandomContext("economy-check"));
@@ -69,12 +69,12 @@ public sealed class CombatShopEconomyTests
     public void Supply_ChargesActualDraw_ConservesOwnership_RejectsRepeatAndReentrancy()
     {
         var supply = OpenSupply();
-        int owned = cards.ownedCards.Count, deck = cards.deck.Count, hand = cards.HandCount, gold = cards.gold;
+        int owned = cards.ownedCards.Count, deck = cards.deck.Count, hand = cards.HandCount, credits = cards.credits;
         bool nested = true;
-        cards.OnGoldChanged += _ => nested = run.PurchaseSupply(supply.StableId, 1);
+        cards.OnCreditsChanged += _ => nested = run.PurchaseSupply(supply.StableId, 1);
         Assert.That(run.PurchaseSupply(supply.StableId, 2), Is.True);
         Assert.That(nested, Is.False);
-        Assert.That(cards.gold, Is.EqualTo(gold - 6));
+        Assert.That(cards.credits, Is.EqualTo(credits - 6));
         Assert.That(cards.HandCount, Is.EqualTo(hand + 2));
         Assert.That(cards.deck.Count, Is.EqualTo(deck - 2));
         Assert.That(cards.ownedCards.Count, Is.EqualTo(owned));
@@ -85,14 +85,14 @@ public sealed class CombatShopEconomyTests
     public void Supply_RejectsInvalidQuantitiesAndFullHandWithoutCharge()
     {
         var supply = OpenSupply();
-        int gold = cards.gold;
+        int credits = cards.credits;
         Assert.That(run.PurchaseSupply(supply.StableId, 0), Is.False);
         Assert.That(run.PurchaseSupply(supply.StableId, -1), Is.False);
         Assert.That(run.PurchaseSupply(supply.StableId, 6), Is.False);
         cards.DrawExistingToHand(20);
         Assert.That(run.GetSupplyMaximumQuantity(), Is.Zero);
         Assert.That(run.PurchaseSupply(supply.StableId, 1), Is.False);
-        Assert.That(cards.gold, Is.EqualTo(gold));
+        Assert.That(cards.credits, Is.EqualTo(credits));
     }
 
     [Test]
@@ -106,9 +106,9 @@ public sealed class CombatShopEconomyTests
             cards.DrawExistingToHand(8);
         }
         collection.TryDiscard(collection.Hand.ToArray());
-        int gold = cards.gold;
+        int credits = cards.credits;
         Assert.That(run.PurchaseSupply(supply.StableId, 1), Is.False);
-        Assert.That(cards.gold, Is.EqualTo(gold));
+        Assert.That(cards.credits, Is.EqualTo(credits));
         Assert.That(cards.discardPile.Count, Is.EqualTo(40));
     }
 
@@ -121,9 +121,9 @@ public sealed class CombatShopEconomyTests
         for (int i = 0; i < prices.Length; i++)
         {
             Assert.That(run.GoodsRefreshPrice, Is.EqualTo(prices[i]));
-            int gold = cards.gold;
+            int credits = cards.credits;
             Assert.That(run.RefreshGoods(i), Is.True);
-            Assert.That(cards.gold, Is.EqualTo(gold - prices[i]));
+            Assert.That(cards.credits, Is.EqualTo(credits - prices[i]));
             Assert.That(run.RefreshGoods(i), Is.False);
             Assert.That(run.GetCurrentShopOffers().Where(o => o.IsService), Is.EqualTo(services));
         }
@@ -139,13 +139,13 @@ public sealed class CombatShopEconomyTests
     public void PurchasedGoodsNeverReturn_AndStaleOffersAreRejected()
     {
         Open(0, false);
-        var offer = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Artifact);
+        var offer = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Gear);
         var stale = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Consumable &&
             o.consumable.effectType == ConsumableEffectType.ApplyEnhancement).StableId;
         Assert.That(run.PurchaseShopOffer(offer.StableId), Is.True);
         Assert.That(run.PurchaseShopOffer(offer.StableId), Is.False);
         Assert.That(run.RefreshGoods(0), Is.True);
-        Assert.That(run.GetCurrentShopOffers().Any(o => o.artifact == offer.artifact), Is.False);
+        Assert.That(run.GetCurrentShopOffers().Any(o => o.gear == offer.gear), Is.False);
         Assert.That(run.PurchaseShopOffer(stale), Is.False);
     }
 
@@ -163,17 +163,17 @@ public sealed class CombatShopEconomyTests
     {
         Open(0, false);
         var node = run.ActiveNode;
-        int count = run.CompletedNodeCount, gold = cards.gold;
+        int count = run.CompletedNodeCount, credits = cards.credits;
         run.OnShopDone();
         run.OnShopDone();
         Assert.That(node.completed, Is.True);
         Assert.That(run.ActiveNode, Is.Null);
         Assert.That(run.CompletedNodeCount, Is.EqualTo(count + 1));
-        Assert.That(run.currentPath.Count(n => n.completed && !n.isShopCheckpoint && n.kind != MapNodeType.Boss), Is.Zero);
-        Assert.That(cards.gold, Is.EqualTo(gold));
+        Assert.That(run.currentPath.Count(n => n.completed && !n.isShopCheckpoint && n.kind != MapNodeType.Headliner), Is.Zero);
+        Assert.That(cards.credits, Is.EqualTo(credits));
     }
 
-    int[] Counts() => new[] { ShopOfferKind.Artifact, ShopOfferKind.Enhancement, ShopOfferKind.Consumable }
+    int[] Counts() => new[] { ShopOfferKind.Gear, ShopOfferKind.Enhancement, ShopOfferKind.Consumable }
         .Select(kind => run.GetCurrentShopOffers().Count(o => o.kind == kind)).ToArray();
     ShopOffer OpenSupply()
     {
@@ -183,10 +183,10 @@ public sealed class CombatShopEconomyTests
         Open(0, true);
         return run.GetCurrentShopOffers().Single(o => o.kind == ShopOfferKind.Supply);
     }
-    void Open(int map, bool preBoss)
+    void Open(int map, bool preHeadliner)
     {
-        Set("_activeNode", new PathNode { id = preBoss ? 17 : 16, mapIndex = map,
-            kind = MapNodeType.Shop, col = preBoss ? 4.5f : 1.5f, isShopCheckpoint = true });
+        Set("_activeNode", new PathNode { id = preHeadliner ? 17 : 16, mapIndex = map,
+            kind = MapNodeType.Shop, col = preHeadliner ? 4.5f : 1.5f, isShopCheckpoint = true });
         typeof(RunManager).GetMethod("PrepareShopOffers", Private).Invoke(run, new object[] { 4 });
     }
     void Set(string field, object value) => typeof(RunManager).GetField(field, Private).SetValue(run, value);

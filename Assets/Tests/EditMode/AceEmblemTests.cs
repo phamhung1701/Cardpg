@@ -10,15 +10,15 @@ public sealed class AceEmblemTests
     readonly List<UnityEngine.Object> _objects = new();
     CardManager _cards;
     CombatManager _combat;
-    RelicData _aceEmblem;
-    RelicData _hands;
+    GearData _aceEmblem;
+    GearData _hands;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _aceEmblem = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/AceEmblem.asset");
-        _hands = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/HandsEmblem.asset");
+        _aceEmblem = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/AceEmblem.asset");
+        _hands = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/HandsEmblem.asset");
         Assert.That(_aceEmblem, Is.Not.Null);
         Assert.That(_hands, Is.Not.Null);
 
@@ -63,10 +63,10 @@ public sealed class AceEmblemTests
     {
         Assert.That(_aceEmblem.id, Is.EqualTo("rel_014"));
         Assert.That(_aceEmblem.canonicalId, Is.EqualTo("rel_014"));
-        Assert.That(_aceEmblem.displayName, Is.EqualTo("Ace Emblem"));
+        Assert.That(_aceEmblem.displayName, Is.EqualTo("Ace Protocol"));
         Assert.That(_aceEmblem.rarity, Is.EqualTo("Common"));
         Assert.That(_aceEmblem.tier, Is.EqualTo(1));
-        Assert.That(_aceEmblem.capacityCategory, Is.EqualTo(ArtifactCapacityCategory.Persistent));
+        Assert.That(_aceEmblem.capacityCategory, Is.EqualTo(GearCapacityCategory.Persistent));
         Assert.That(_aceEmblem.price, Is.EqualTo(20), "Temporary prototype price; workbook price is blank.");
         Assert.That(_aceEmblem.effects, Has.Length.EqualTo(1));
         var effect = _aceEmblem.effects[0];
@@ -155,7 +155,7 @@ public sealed class AceEmblemTests
         Assert.That(random.Calls, Is.Zero);
     }
 
-    void Buy(RelicData artifact) => Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+    void Buy(GearData gear) => Assert.That(_cards.BuyGear(gear, 0), Is.True);
 
     EnemyRuntime StartTarget(int hp = 500, int attack = 1)
     {

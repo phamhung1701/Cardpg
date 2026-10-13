@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3a8520671e93fea439ddbf46323e52b2, type: 3}
   m_Name: GoblinCaptain
-  m_EditorClassIdentifier: CardPG.Runtime::EnemyTypeData
+  m_EditorClassIdentifier: Dealbreak.Runtime::EnemyTypeData
   enemyName: Goblin Captain
   maxHp: 16
   baseAttack: 3

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 
 /// <summary>Pointer drag routing for a backpack slot: reorder another slot or drop on an enemy.</summary>
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ConsumableSlotDragUI")]
 public sealed class ConsumableSlotDragUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     ActionButtonsUI _owner;

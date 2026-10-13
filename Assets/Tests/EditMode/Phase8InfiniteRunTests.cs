@@ -17,7 +17,7 @@ public sealed class InfiniteRunScalingTests
         GameplayInputGate.Clear();
         _cardsObject = new GameObject("Phase8 Infinite CardManager");
         _cardsObject.AddComponent<CardManager>().Configure(null, null, null,
-            System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+            System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _combatObject = new GameObject("Phase8 Infinite CombatManager");
         _combatObject.AddComponent<CombatManager>().ConfigurePlayer(30);
         _runObject = new GameObject("Phase8 Infinite RunManager");
@@ -67,17 +67,17 @@ public sealed class InfiniteRunScalingTests
     }
 
     [Test]
-    public void InfiniteModeIsOptInAndResumesTimingIntoMapThirteenWithCachedBoss()
+    public void InfiniteModeIsOptInAndResumesTimingIntoMapThirteenWithCachedHeadliner()
     {
         var deck = new List<EnemyTypeData>();
         for (int i = 0; i < 12; i++)
         {
-            var boss = EnemyTypeData.Create($"Boss {i}", 100, 100, 10);
-            deck.Add(boss);
-            _created.Add(boss);
+            var headliner = EnemyTypeData.Create($"Boss {i}", 100, 100, 10);
+            deck.Add(headliner);
+            _created.Add(headliner);
         }
-        _run.bossDeck.AddRange(deck);
-        _run.bossIndex = 12;
+        _run.headlinerDeck.AddRange(deck);
+        _run.headlinerIndex = 12;
         SetProperty(_run, "IsRunCompleted", true);
         _run.Timing.StartNewRun();
         for (int map = 0; map < 11; map++) _run.Timing.CompleteCurrentMap();
@@ -90,12 +90,12 @@ public sealed class InfiniteRunScalingTests
         Assert.That(_run.IsInfiniteMode, Is.True);
         Assert.That(_run.IsRunCompleted, Is.False);
         Assert.That(_run.CurrentMapIndex, Is.EqualTo(12));
-        Assert.That(_run.CurrentBoss, Is.SameAs(deck[0]));
+        Assert.That(_run.CurrentHeadliner, Is.SameAs(deck[0]));
         Assert.That(_run.Timing.IsActive, Is.True);
         Assert.That(_run.Timing.CurrentMapIndex, Is.EqualTo(12));
         Assert.That(_run.Timing.CompletedSplits.Count, Is.EqualTo(12));
-        var bossNode = _run.currentPath.Find(node => node.kind == MapNodeType.Boss);
-        Assert.That(_run.GetEncounterStats(bossNode), Is.EqualTo((352, 184)));
+        var headlinerNode = _run.currentPath.Find(node => node.kind == MapNodeType.Headliner);
+        Assert.That(_run.GetEncounterStats(headlinerNode), Is.EqualTo((352, 184)));
     }
 
     [Test]

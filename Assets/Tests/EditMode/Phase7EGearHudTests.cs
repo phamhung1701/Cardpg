@@ -5,24 +5,24 @@ using NUnit.Framework;
 using TMPro;
 using UnityEngine;
 
-public sealed class Phase7EArtifactHudTests
+public sealed class Phase7EGearHudTests
 {
     readonly List<Object> _assets = new();
     readonly List<GameObject> _objects = new();
     CardManager _cards;
     RunManager _run;
     RunStatusUI _hud;
-    TMP_Text _artifactLabel;
-    RelicData[] _artifacts;
+    TMP_Text _gearLabel;
+    GearData[] _gears;
 
     [SetUp]
     public void SetUp()
     {
-        _artifacts = Enumerable.Range(1, 8)
-            .Select(i => Artifact($"artifact_{i}", $"Artifact {i}", $"Icon{i}"))
+        _gears = Enumerable.Range(1, 8)
+            .Select(i => Gear($"artifact_{i}", $"Artifact {i}", $"Icon{i}"))
             .ToArray();
         _cards = Make<CardManager>("CardManager");
-        _cards.Configure(null, null, null, _artifacts);
+        _cards.Configure(null, null, null, _gears);
         var combat = Make<CombatManager>("CombatManager");
         combat.ConfigurePlayer(30);
         _run = Make<RunManager>("RunManager");
@@ -34,10 +34,10 @@ public sealed class Phase7EArtifactHudTests
         host.SetActive(false);
         _objects.Add(host);
         _hud = host.AddComponent<RunStatusUI>();
-        var label = new GameObject("OwnedArtifactsLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
+        var label = new GameObject("OwnedGearLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
         _objects.Add(label);
-        _artifactLabel = label.GetComponent<TMP_Text>();
-        _hud.ownedArtifactsLabel = _artifactLabel;
+        _gearLabel = label.GetComponent<TMP_Text>();
+        _hud.ownedGearLabel = _gearLabel;
         host.SetActive(true);
         InvokeHud("OnEnable"); // EditMode fixture invokes the UI subscription explicitly.
     }
@@ -81,61 +81,61 @@ public sealed class Phase7EArtifactHudTests
     }
 
     [Test]
-    public void EmptyCollection_ShowsZeroAndNoOwnedArtifacts()
+    public void EmptyCollection_ShowsZeroAndNoOwnedGear()
     {
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
-        Assert.That(_artifactLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
-        Assert.That(_artifactLabel.text, Does.Contain("None owned"));
+        Assert.That(_cards.ownedGear, Is.Empty);
+        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
+        Assert.That(_gearLabel.text, Does.Contain("None owned"));
     }
 
     [Test]
     public void Acquisition_UpdatesNameIconAndCountFromCardManager()
     {
-        Assert.That(_cards.BuyArtifact(_artifacts[0], 0), Is.True);
-        Assert.That(_cards.ownedArtifacts, Has.Count.EqualTo(1));
-        Assert.That(_artifactLabel.text, Does.Contain("ARTIFACTS  •  1/5"));
-        Assert.That(_artifactLabel.text, Does.Contain("Icon1 Artifact 1"));
-        Assert.That(_artifactLabel.text, Does.Not.Contain("Artifact 2"));
+        Assert.That(_cards.BuyGear(_gears[0], 0), Is.True);
+        Assert.That(_cards.ownedGear, Has.Count.EqualTo(1));
+        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  1/5"));
+        Assert.That(_gearLabel.text, Does.Contain("Icon1 Artifact 1"));
+        Assert.That(_gearLabel.text, Does.Not.Contain("Artifact 2"));
     }
 
     [Test]
-    public void MultipleOwnedArtifacts_AllAppearInAcquisitionOrderWithoutDisplayCap()
+    public void MultipleOwnedGear_AllAppearInAcquisitionOrderWithoutDisplayCap()
     {
-        for (int i = 5; i < _artifacts.Length; i++)
-            _artifacts[i].capacityCategory = ArtifactCapacityCategory.NonSlot;
-        foreach (var artifact in _artifacts)
-            Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
-        Assert.That(_artifactLabel.text, Does.Contain("ARTIFACTS  •  5/5"));
-        foreach (var artifact in _artifacts)
-            Assert.That(_artifactLabel.text, Does.Contain($"{artifact.icon} {artifact.displayName}"));
-        Assert.That(_artifactLabel.text.IndexOf("Artifact 1"), Is.LessThan(_artifactLabel.text.IndexOf("Artifact 8")));
-        Assert.That(_cards.ownedArtifacts, Has.Count.EqualTo(8));
+        for (int i = 5; i < _gears.Length; i++)
+            _gears[i].capacityCategory = GearCapacityCategory.NonSlot;
+        foreach (var gear in _gears)
+            Assert.That(_cards.BuyGear(gear, 0), Is.True);
+        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  5/5"));
+        foreach (var gear in _gears)
+            Assert.That(_gearLabel.text, Does.Contain($"{gear.icon} {gear.displayName}"));
+        Assert.That(_gearLabel.text.IndexOf("Artifact 1"), Is.LessThan(_gearLabel.text.IndexOf("Artifact 8")));
+        Assert.That(_cards.ownedGear, Has.Count.EqualTo(8));
     }
 
     [Test]
-    public void ClearingOwnedArtifacts_ThroughResetImmediatelyClearsHud()
+    public void ClearingOwnedGear_ThroughResetImmediatelyClearsHud()
     {
-        _cards.BuyArtifact(_artifacts[0], 0);
-        _cards.BuyArtifact(_artifacts[1], 0);
+        _cards.BuyGear(_gears[0], 0);
+        _cards.BuyGear(_gears[1], 0);
         _cards.Reset();
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
-        Assert.That(_artifactLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
-        Assert.That(_artifactLabel.text, Does.Contain("None owned"));
-        Assert.That(_artifactLabel.text, Does.Not.Contain("Artifact 1"));
+        Assert.That(_cards.ownedGear, Is.Empty);
+        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
+        Assert.That(_gearLabel.text, Does.Contain("None owned"));
+        Assert.That(_gearLabel.text, Does.Not.Contain("Artifact 1"));
     }
 
     [Test]
-    public void RunStartAndRestart_ClearPriorArtifactsInHud()
+    public void RunStartAndRestart_ClearPriorGearInHud()
     {
-        _cards.BuyArtifact(_artifacts[0], 0);
+        _cards.BuyGear(_gears[0], 0);
         _run.StartRunWithSeed("ARTIFACT-HUD");
-        Assert.That(_artifactLabel.text, Does.Contain("None owned"));
-        _cards.BuyArtifact(_artifacts[1], 0);
-        Assert.That(_artifactLabel.text, Does.Contain("Artifact 2"));
+        Assert.That(_gearLabel.text, Does.Contain("None owned"));
+        _cards.BuyGear(_gears[1], 0);
+        Assert.That(_gearLabel.text, Does.Contain("Artifact 2"));
         _run.RestartRun();
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
-        Assert.That(_artifactLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
-        Assert.That(_artifactLabel.text, Does.Not.Contain("Artifact 2"));
+        Assert.That(_cards.ownedGear, Is.Empty);
+        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
+        Assert.That(_gearLabel.text, Does.Not.Contain("Artifact 2"));
     }
 
     void InvokeHud(string method) => typeof(RunStatusUI)
@@ -149,15 +149,15 @@ public sealed class Phase7EArtifactHudTests
         return obj.AddComponent<T>();
     }
 
-    RelicData Artifact(string id, string displayName, string icon)
+    GearData Gear(string id, string displayName, string icon)
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = id;
-        artifact.displayName = displayName;
-        artifact.icon = icon;
-        artifact.damageMultiplier = 1;
-        _assets.Add(artifact);
-        return artifact;
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = id;
+        gear.displayName = displayName;
+        gear.icon = icon;
+        gear.damageMultiplier = 1;
+        _assets.Add(gear);
+        return gear;
     }
 
     EnemyTypeData Enemy(string name)

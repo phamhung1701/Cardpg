@@ -21,7 +21,7 @@ public sealed class DeckMutationTests
         Assert.That(new Object[] { _mirror, _torch, _spade }, Has.All.Not.Null);
         var cardsObject = new GameObject("Mutation cards"); _created.Add(cardsObject);
         _cards = cardsObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>(),
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>(),
             System.Array.Empty<CardEnhancementData>(), new[] { _mirror, _torch, _spade });
         _cards.BuildDeck();
         var combatObject = new GameObject("Mutation combat"); _created.Add(combatObject);
@@ -157,7 +157,7 @@ public sealed class DeckMutationTests
         var prefab = AssetDatabase.LoadAssetAtPath<CardView>("Assets/Prefabs/Card.prefab");
         Assert.That(prefab, Is.Not.Null);
         _cards.Configure(field, canvasObject.GetComponent<Canvas>(), prefab,
-            System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>(),
+            System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>(),
             new[] { _mirror, _torch, _spade });
         _cards.DrawToHand(1);
         Assert.That(field.CardCount, Is.EqualTo(1));

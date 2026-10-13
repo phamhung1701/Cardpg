@@ -23,7 +23,7 @@ public sealed class Phase7B5CombatFoundationTests
         var prefab = CreateCardView("Phase7B5 Foundation Card Prefab");
 
         _cards = CreateComponent<CardManager>("Phase7B5 Foundation CardManager");
-        _cards.Configure(_field, dragCanvas, prefab, Array.Empty<RelicData>(), Array.Empty<CardEnhancementData>());
+        _cards.Configure(_field, dragCanvas, prefab, Array.Empty<GearData>(), Array.Empty<CardEnhancementData>());
         _cards.BuildDeck();
         _cards.DealHand();
 
@@ -369,7 +369,7 @@ public sealed class Phase7B5CombatFoundationTests
     [Test]
     public void Recover_MultiEnemyAggregateAppliesReductionThenConsumesOneShieldAndDrawsOnce()
     {
-        var reduction = ScriptableObject.CreateInstance<RelicData>();
+        var reduction = ScriptableObject.CreateInstance<GearData>();
         reduction.id = "recover-reduction";
         reduction.effects = new[]
         {
@@ -385,7 +385,7 @@ public sealed class Phase7B5CombatFoundationTests
         var type = CreateEnemyType("Shielded Recover", 100, 6, 0);
         var firstEnemy = new EnemyRuntime(type, 1, 3);
         var secondEnemy = new EnemyRuntime(type, 2, 3);
-        _cards.ownedArtifacts.Add(reduction);
+        _cards.ownedGear.Add(reduction);
         _combat.StartEncounter(new[] { firstEnemy, secondEnemy });
         Assert.That(_combat.TotalEnemyAttack, Is.EqualTo(12));
         foreach (var view in HandViews().ToArray())
@@ -410,7 +410,7 @@ public sealed class Phase7B5CombatFoundationTests
     [Test]
     public void Recover_ZeroPostReductionDamagePreservesShieldAndStillDrawsOnce()
     {
-        var reduction = ScriptableObject.CreateInstance<RelicData>();
+        var reduction = ScriptableObject.CreateInstance<GearData>();
         reduction.id = "recover-full-reduction";
         reduction.effects = new[]
         {
@@ -423,7 +423,7 @@ public sealed class Phase7B5CombatFoundationTests
             }
         };
         _created.Add(reduction);
-        _cards.ownedArtifacts.Add(reduction);
+        _cards.ownedGear.Add(reduction);
         var type = CreateEnemyType("Fully Reduced Recover", 100, 4, 0);
         var firstEnemy = new EnemyRuntime(type, 1, 4);
         var secondEnemy = new EnemyRuntime(type, 2, 4);
@@ -475,13 +475,13 @@ public sealed class Phase7B5CombatFoundationTests
         int handBefore = _cards.HandCount;
         enemy.GainShield(1);
 
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = "phase7b5_once";
-        artifact.displayName = "Once Per Card";
-        artifact.damageMultiplier = 1;
-        artifact.reduceEnemyAttackByCardValue = true;
-        _created.Add(artifact);
-        _cards.ownedArtifacts.Add(artifact);
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = "phase7b5_once";
+        gear.displayName = "Once Per Card";
+        gear.damageMultiplier = 1;
+        gear.reduceEnemyAttackByCardValue = true;
+        _created.Add(gear);
+        _cards.ownedGear.Add(gear);
 
         var enhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
         enhancement.id = "phase7b5_heal";
@@ -532,7 +532,7 @@ public sealed class Phase7B5CombatFoundationTests
         Assert.That(first.IsDefeated, Is.True);
         Assert.That(second.currentHp, Is.EqualTo(second.maxHp));
         Assert.That(_combat.Enemies, Is.EqualTo(new[] { second }));
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
     }
 
     [Test]
@@ -598,10 +598,10 @@ public sealed class Phase7B5CombatFoundationTests
         var order = new List<string>();
 
         Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Enhancement, 0, 0, () => order.Add("enhancement"), priority: -10), Is.True);
-        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 1, 0, () => order.Add("artifact-1"), priority: -20), Is.True);
-        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 0, 1, () => order.Add("artifact-0-handler-1"), priority: -30), Is.True);
-        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 0, 0, () => order.Add("artifact-0"), priority: 20), Is.True);
-        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Artifact, 0, 0, () => order.Add("duplicate"), priority: -20), Is.False);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Gear, 1, 0, () => order.Add("artifact-1"), priority: -20), Is.True);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Gear, 0, 1, () => order.Add("artifact-0-handler-1"), priority: -30), Is.True);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Gear, 0, 0, () => order.Add("artifact-0"), priority: 20), Is.True);
+        Assert.That(queue.Enqueue(10, -1, CombatReactionPhase.CardCommitted, CombatReactionSourceCategory.Gear, 0, 0, () => order.Add("duplicate"), priority: -20), Is.False);
         Assert.That(queue.Enqueue(10, 0, CombatReactionPhase.HitResolved, CombatReactionSourceCategory.EnemyAbility, 0, 0, () => order.Add("hit-0")), Is.True);
         Assert.That(queue.Enqueue(10, 1, CombatReactionPhase.HitResolved, CombatReactionSourceCategory.EnemyAbility, 0, 0, () => order.Add("hit-1")), Is.True);
 
@@ -649,7 +649,7 @@ public sealed class Phase7B5CombatFoundationTests
         Assert.That(enemy.IsDefeated, Is.True);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
         Assert.That(results, Is.EqualTo(1));
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.False);
         Assert.That(results, Is.EqualTo(1), "A terminal reaction fault must not publish a second result.");
     }
@@ -657,9 +657,9 @@ public sealed class Phase7B5CombatFoundationTests
     [Test]
     public void RunawayDuringDefense_DoesNotResolveVictoryOrGrantRewards()
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = "test-runaway-counter";
-        artifact.effects = new[]
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = "test-runaway-counter";
+        gear.effects = new[]
         {
             new GameplayEffectDefinition
             {
@@ -669,8 +669,8 @@ public sealed class Phase7B5CombatFoundationTests
                 conditions = Array.Empty<GameplayEffectCondition>()
             }
         };
-        _created.Add(artifact);
-        Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
+        _created.Add(gear);
+        Assert.That(_cards.BuyGear(gear, 0), Is.True);
 
         var enemy = new EnemyRuntime(CreateEnemyType("Runaway Defense", 1000, 1, 90));
         _combat.StartEnemy(enemy);
@@ -691,7 +691,7 @@ public sealed class Phase7B5CombatFoundationTests
         Assert.That(enemy.IsDefeated, Is.True);
         Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
         Assert.That(results, Is.EqualTo(1));
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(_combat.TryDefendWithCards(new[] { LowestAttackView() }, enemy), Is.False);
         Assert.That(results, Is.EqualTo(1), "A terminal reaction fault must not publish a second result.");
     }
@@ -757,9 +757,9 @@ public sealed class Phase7B5CombatFoundationTests
         return ability;
     }
 
-    EnemyTypeData CreateEnemyType(string name, int health, int attack, int gold, params EnemyAbility[] abilities)
+    EnemyTypeData CreateEnemyType(string name, int health, int attack, int credits, params EnemyAbility[] abilities)
     {
-        var type = EnemyTypeData.Create(name, health, attack, gold);
+        var type = EnemyTypeData.Create(name, health, attack, credits);
         type.abilities = abilities ?? Array.Empty<EnemyAbility>();
         _created.Add(type);
         return type;

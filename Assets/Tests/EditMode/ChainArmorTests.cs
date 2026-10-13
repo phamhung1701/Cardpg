@@ -9,15 +9,15 @@ public sealed class ChainArmorTests
     readonly List<UnityEngine.Object> _objects = new();
     CardManager _cards;
     CombatManager _combat;
-    RelicData _chainArmor;
-    RelicData _leatherArmor;
+    GearData _chainArmor;
+    GearData _leatherArmor;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _chainArmor = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/ChainArmor.asset");
-        _leatherArmor = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/LeatherArmor.asset");
+        _chainArmor = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/ChainArmor.asset");
+        _leatherArmor = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/LeatherArmor.asset");
         Assert.That(_chainArmor, Is.Not.Null);
         Assert.That(_leatherArmor, Is.Not.Null);
 
@@ -59,10 +59,10 @@ public sealed class ChainArmorTests
     {
         Assert.That(_chainArmor.id, Is.EqualTo("rel_019"));
         Assert.That(_chainArmor.canonicalId, Is.EqualTo("rel_019"));
-        Assert.That(_chainArmor.displayName, Is.EqualTo("Chain Armor"));
+        Assert.That(_chainArmor.displayName, Is.EqualTo("Tactical Plating"));
         Assert.That(_chainArmor.rarity, Is.EqualTo("Rare"));
         Assert.That(_chainArmor.tier, Is.EqualTo(1));
-        Assert.That(_chainArmor.capacityCategory, Is.EqualTo(ArtifactCapacityCategory.Persistent));
+        Assert.That(_chainArmor.capacityCategory, Is.EqualTo(GearCapacityCategory.Persistent));
         Assert.That(_chainArmor.price, Is.EqualTo(25), "Prototype price only; workbook price is blank.");
         Assert.That(_chainArmor.effects, Has.Length.EqualTo(1));
         Assert.That(_chainArmor.effects[0].kind, Is.EqualTo(GameplayEffectKind.IncomingCombatDamageReduction));
@@ -70,7 +70,7 @@ public sealed class ChainArmorTests
         Assert.That(_chainArmor.effects[0].amount, Is.EqualTo(8));
 
         string before = JsonUtility.ToJson(_chainArmor);
-        Assert.That(_cards.BuyArtifact(_chainArmor, 0), Is.True);
+        Assert.That(_cards.BuyGear(_chainArmor, 0), Is.True);
         ResolveHit(0, 5);
         Assert.That(JsonUtility.ToJson(_chainArmor), Is.EqualTo(before));
     }
@@ -78,7 +78,7 @@ public sealed class ChainArmorTests
     [Test]
     public void ReducesEachIncomingCombatHitByEight_FloorsAtZero_BeforeShield()
     {
-        Assert.That(_cards.BuyArtifact(_chainArmor, 0), Is.True);
+        Assert.That(_cards.BuyGear(_chainArmor, 0), Is.True);
         var first = ResolveHit(0, 6);
         Assert.That(first.ModifiedDamage, Is.Zero);
         Assert.That(first.ShieldConsumed, Is.False);
@@ -99,8 +99,8 @@ public sealed class ChainArmorTests
     [Test]
     public void StacksAdditivelyWithLeatherArmor_AndDoesNotReduceDirectRunHpCosts()
     {
-        Assert.That(_cards.BuyArtifact(_leatherArmor, 0), Is.True);
-        Assert.That(_cards.BuyArtifact(_chainArmor, 0), Is.True);
+        Assert.That(_cards.BuyGear(_leatherArmor, 0), Is.True);
+        Assert.That(_cards.BuyGear(_chainArmor, 0), Is.True);
         var hit = ResolveHit(0, 15);
         Assert.That(hit.ModifiedDamage, Is.EqualTo(4), "Leather (-3) and Chain Armor (-8) apply before Shield.");
         var clamped = ResolveHit(1, 10);

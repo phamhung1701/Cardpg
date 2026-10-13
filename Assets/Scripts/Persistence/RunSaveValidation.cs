@@ -60,12 +60,12 @@ public static class RunSaveValidation
             cards.artifacts.Select(x => x.id).Distinct().Count() == cards.artifacts.Count, "Invalid Artifact identities.");
         Require(cards.artifactIdWatermark >= 0 && cards.artifactIdWatermark < long.MaxValue / 2 &&
             cards.artifacts.All(x => x.id <= cards.artifactIdWatermark), "Invalid Artifact identity allocator.");
-        foreach (var artifact in cards.artifacts)
+        foreach (var gear in cards.artifacts)
         {
-            Require(artifact.id > 0 && artifact.id < long.MaxValue / 2 && c.Artifact(artifact.contentId) != null, "Unknown Artifact ID.");
-            Require((artifact.preparedCardId == 0 || ids.Contains(artifact.preparedCardId)) &&
-                (artifact.pendingCardId == 0 || ids.Contains(artifact.pendingCardId)), "Invalid Artifact card reference.");
-            Effects(artifact.effects);
+            Require(gear.id > 0 && gear.id < long.MaxValue / 2 && c.Gear(gear.contentId) != null, "Unknown Artifact ID.");
+            Require((gear.preparedCardId == 0 || ids.Contains(gear.preparedCardId)) &&
+                (gear.pendingCardId == 0 || ids.Contains(gear.pendingCardId)), "Invalid Artifact card reference.");
+            Effects(gear.effects);
         }
         Require(cards.backpack != null && cards.backpack.Count <= 64, "Invalid backpack.");
         foreach (var slot in cards.backpack)
@@ -87,7 +87,7 @@ public static class RunSaveValidation
             if (kind is MapNodeType.Event or MapNodeType.Risk) Require(c.Event(node.contentId, kind) != null, "Missing event content: " + node.contentId);
             Require(!node.shopCheckpoint || kind == MapNodeType.Shop, "Invalid checkpoint type.");
         }
-        Require(s.nodes.Count(x => x.kind == (int)MapNodeType.Boss) == 1, "Missing map boss.");
+        Require(s.nodes.Count(x => x.kind == (int)MapNodeType.Headliner) == 1, "Missing map boss.");
         Require(s.activeNodeId == -1 || nodes.ContainsKey(s.activeNodeId), "Missing active node.");
         NodeSaveData active = s.activeNodeId < 0 ? null : nodes[s.activeNodeId];
         if (active != null) Require(!active.completed && !active.accessible && (MapNodeType)active.kind is
@@ -125,7 +125,7 @@ public static class RunSaveValidation
     static void Offer(OfferSaveData o, SaveContentCatalog c)
     {
         Require(o != null && Defined<ShopOfferKind>(o.kind) && o.price >= 0 && o.basePrice >= 0 && o.slot >= 0 && o.generation >= 0 && o.investmentStake >= 0 && o.supplyQuantity >= 0, "Invalid offer.");
-        if (o.kind == (int)ShopOfferKind.Artifact) Require(c.Artifact(o.artifactId) != null, "Unknown offered Artifact.");
+        if (o.kind == (int)ShopOfferKind.Gear) Require(c.Gear(o.artifactId) != null, "Unknown offered Artifact.");
         if (o.kind == (int)ShopOfferKind.Enhancement) Require(c.Enhancement(o.enhancementId) != null, "Unknown offered Enhancement.");
         if (o.kind == (int)ShopOfferKind.Consumable) Require(c.Consumable(o.consumableId) != null, "Unknown offered Consumable.");
     }

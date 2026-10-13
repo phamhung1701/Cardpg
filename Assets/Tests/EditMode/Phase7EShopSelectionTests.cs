@@ -18,8 +18,8 @@ public sealed class Phase7EShopSelectionTests
     [SetUp]
     public void SetUp()
     {
-        var artifactA = CreateArtifact("first", 10);
-        var artifactB = CreateArtifact("second", 12);
+        var gearA = CreateGear("first", 10);
+        var gearB = CreateGear("second", 12);
         _enhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
         _enhancement.id = "sharp";
         _enhancement.displayName = "Sharpened";
@@ -38,7 +38,7 @@ public sealed class Phase7EShopSelectionTests
         _assets.Add(_enhancementPatch);
 
         _cards = Make<CardManager>("Cards");
-        _cards.Configure(null, null, null, new[] { artifactA, artifactB }, new[] { _enhancement }, new[] { _enhancementPatch });
+        _cards.Configure(null, null, null, new[] { gearA, gearB }, new[] { _enhancement }, new[] { _enhancementPatch });
         var combat = Make<CombatManager>("Combat");
         combat.ConfigurePlayer(30);
         _run = Make<RunManager>("Run");
@@ -66,7 +66,7 @@ public sealed class Phase7EShopSelectionTests
         _ui.buyButton = Make<Button>("Buy");
         _ui.continueButton = Make<Button>("Continue");
         _ui.selectedOfferText = Make<TextMeshProUGUI>("Details");
-        _ui.goldText = Make<TextMeshProUGUI>("Gold");
+        _ui.creditsText = Make<TextMeshProUGUI>("Gold");
         uiObject.SetActive(true);
         InvokeUi("OnEnable"); // MonoBehaviour lifecycle is not dispatched for plain EditMode fixtures.
         _run.StartRunWithSeed("7E-SLICE-1");
@@ -88,7 +88,7 @@ public sealed class Phase7EShopSelectionTests
     [Test]
     public void SelectAndSwitch_InspectWithoutSpendingOrGranting()
     {
-        _cards.AddGold(50);
+        _cards.AddCredits(50);
         var offers = _run.GetCurrentShopOffers();
         var first = offers[0];
         var second = offers[1];
@@ -103,15 +103,15 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(ButtonFor(first).GetComponentInChildren<TMP_Text>().text, Does.Not.StartWith("SELECTED"));
         Assert.That(ButtonFor(first).GetComponent<Outline>().enabled, Is.False);
         Assert.That(ButtonFor(second).GetComponent<Outline>().enabled, Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(50));
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.credits, Is.EqualTo(50));
+        Assert.That(_cards.ownedGear, Is.Empty);
         Assert.That(_cards.ownedCards.All(card => card.Enhancement == null), Is.True);
     }
 
     [Test]
     public void SupplySteppersFollowAuthoritativeMaximumAndShowTotalBeforePurchase()
     {
-        _cards.AddGold(9);
+        _cards.AddCredits(9);
         var collection = (CardCollection)typeof(CardManager)
             .GetField("_cards", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
             .GetValue(_cards);
@@ -123,7 +123,7 @@ public sealed class Phase7EShopSelectionTests
         var up = GetUiField<Button>("_quantityIncreaseButton");
         var input = GetUiField<TMP_InputField>("_investmentStakeInput");
         Assert.That(down.interactable, Is.False, "Quantity one is the minimum.");
-        Assert.That(up.interactable, Is.True, $"max={_run.GetSupplyMaximumQuantity()}, gold={_cards.gold}, draw={_cards.deck.Count}, hand={_cards.HandCount}/{_cards.HandCapacity}, quantity={offer.supplyQuantity}");
+        Assert.That(up.interactable, Is.True, $"max={_run.GetSupplyMaximumQuantity()}, gold={_cards.credits}, draw={_cards.deck.Count}, hand={_cards.HandCount}/{_cards.HandCapacity}, quantity={offer.supplyQuantity}");
         up.onClick.Invoke();
         up.onClick.Invoke();
         Assert.That(offer.supplyQuantity, Is.EqualTo(3));
@@ -141,14 +141,14 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(offer.supplyQuantity, Is.EqualTo(1));
         Assert.That(_ui.buyButton.interactable, Is.True);
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(6));
+        Assert.That(_cards.credits, Is.EqualTo(6));
         Assert.That(_cards.HandCount, Is.EqualTo(CardManager.Instance.HandCapacity));
     }
 
     [Test]
     public void InvestmentSteppersEnforceMinimumMaximumAndRejectStaleKeyboardValue()
     {
-        _cards.AddGold(10);
+        _cards.AddCredits(10);
         var offer = ReplaceCurrentServiceWith(ShopOfferKind.Investment);
         Click(offer);
         var down = GetUiField<Button>("_quantityDecreaseButton");
@@ -163,7 +163,7 @@ public sealed class Phase7EShopSelectionTests
         input.onEndEdit.Invoke("11");
         Assert.That(offer.investmentStake, Is.EqualTo(3));
         Assert.That(input.text, Is.EqualTo("3"));
-        Assert.That(_cards.gold, Is.EqualTo(10));
+        Assert.That(_cards.credits, Is.EqualTo(10));
         Assert.That(_run.SetInvestmentStake(offer.StableId, 11), Is.False);
         down.onClick.Invoke();
         Assert.That(offer.investmentStake, Is.EqualTo(2));
@@ -187,41 +187,41 @@ public sealed class Phase7EShopSelectionTests
     [Test]
     public void Buy_ChargesCachedPriceOnlyAtConfirmation_AndClearsSelection()
     {
-        _cards.AddGold(50);
-        var offer = ArtifactOffer();
+        _cards.AddCredits(50);
+        var offer = GearOffer();
         Click(offer);
         int price = offer.price;
-        offer.artifact.price = price + 100;
-        Assert.That(_cards.gold, Is.EqualTo(50));
+        offer.gear.price = price + 100;
+        Assert.That(_cards.credits, Is.EqualTo(50));
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(50 - price));
-        Assert.That(_cards.HasArtifact(offer.artifact), Is.True);
+        Assert.That(_cards.credits, Is.EqualTo(50 - price));
+        Assert.That(_cards.HasGear(offer.gear), Is.True);
         Assert.That(_ui.SelectedOfferId, Is.Null);
         Assert.That(_ui.buyButton.interactable, Is.False);
     }
 
     [Test]
-    public void InsufficientGold_AndAlreadyOwnedArtifact_FailWithoutSpending()
+    public void InsufficientCredits_AndAlreadyOwnedGear_FailWithoutSpending()
     {
-        var offer = ArtifactOffer();
+        var offer = GearOffer();
         Click(offer);
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.Zero);
-        Assert.That(_cards.HasArtifact(offer.artifact), Is.False);
+        Assert.That(_cards.credits, Is.Zero);
+        Assert.That(_cards.HasGear(offer.gear), Is.False);
         Assert.That(_ui.selectedOfferText.text, Does.Contain("Need"));
-        _cards.AddGold(50);
+        _cards.AddCredits(50);
         Click(offer);
-        _cards.relics.Add(offer.artifact.id); // Simulate ownership changing after selection, without a UI refresh.
+        _cards.gearIds.Add(offer.gear.id); // Simulate ownership changing after selection, without a UI refresh.
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(50));
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.credits, Is.EqualTo(50));
+        Assert.That(_cards.ownedGear, Is.Empty);
         Assert.That(_ui.selectedOfferText.text, Does.Contain("Already owned"));
     }
 
     [Test]
     public void NoDirectEnhancementOffer_BuyAddsMappedConsumableWithoutApplyingIt()
     {
-        _cards.AddGold(50);
+        _cards.AddCredits(50);
         Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Enhancement), Is.False);
         var offer = _run.GetCurrentShopOffers().Single(item => item.kind == ShopOfferKind.Consumable &&
             item.consumable == _enhancementPatch);
@@ -234,7 +234,7 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(_cards.GetConsumableCount(_enhancementPatch), Is.EqualTo(1));
         Assert.That(_cards.hand.All(card => card.Enhancement == null), Is.True,
             "Purchasing the mapped Trick does not apply its Mod before the player selects a card and uses it.");
-        Assert.That(_cards.gold, Is.EqualTo(50 - offer.price));
+        Assert.That(_cards.credits, Is.EqualTo(50 - offer.price));
         Assert.That(_ui.SelectedOfferId, Is.Null);
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, _cards.hand[0].Id), Is.False);
     }
@@ -242,74 +242,74 @@ public sealed class Phase7EShopSelectionTests
     [Test]
     public void RemovedCachedOffer_RejectsStaleSelectedBuy()
     {
-        _cards.AddGold(50);
-        var offer = ArtifactOffer();
+        _cards.AddCredits(50);
+        var offer = GearOffer();
         Click(offer);
         ((List<ShopOffer>)_run.GetCurrentShopOffers()).Remove(offer);
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(50));
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.credits, Is.EqualTo(50));
+        Assert.That(_cards.ownedGear, Is.Empty);
         Assert.That(_ui.SelectedOfferId, Is.Null);
         Assert.That(_ui.selectedOfferText.text, Does.Contain("unavailable"));
     }
 
     [Test]
-    public void InvalidCachedPrice_RejectsBuyWithoutGrantingOrChangingGold()
+    public void InvalidCachedPrice_RejectsBuyWithoutGrantingOrChangingCredits()
     {
-        _cards.AddGold(50);
-        var offer = ArtifactOffer();
+        _cards.AddCredits(50);
+        var offer = GearOffer();
         Click(offer);
         offer.price = -5;
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(50));
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.credits, Is.EqualTo(50));
+        Assert.That(_cards.ownedGear, Is.Empty);
         Assert.That(_ui.selectedOfferText.text, Does.Contain("Invalid price"));
     }
 
     [Test]
     public void FullCapacity_OfferCanBeInspectedButBuyFailsWithoutSpendingOrRemovingIt()
     {
-        _cards.AddGold(50);
-        var offer = ArtifactOffer();
-        for (int i = 0; i < CardManager.BASE_ARTIFACT_CAPACITY; i++)
-            Assert.That(_cards.BuyArtifact(CreateArtifact($"other_{i}", 0), 0), Is.True);
-        int gold = _cards.gold;
+        _cards.AddCredits(50);
+        var offer = GearOffer();
+        for (int i = 0; i < CardManager.BASE_GEAR_CAPACITY; i++)
+            Assert.That(_cards.BuyGear(CreateGear($"other_{i}", 0), 0), Is.True);
+        int credits = _cards.credits;
         string stableId = offer.StableId;
         int cachedPrice = offer.price;
         Click(offer);
         Assert.That(_ui.SelectedOfferId, Is.EqualTo(stableId));
-        Assert.That(_ui.selectedOfferText.text, Does.Contain("Artifact Capacity Full"));
-        Assert.That(ButtonFor(offer).GetComponentInChildren<TMP_Text>().text, Does.Contain("Artifact Capacity Full"));
+        Assert.That(_ui.selectedOfferText.text, Does.Contain("Gear Capacity Full"));
+        Assert.That(ButtonFor(offer).GetComponentInChildren<TMP_Text>().text, Does.Contain("Gear Capacity Full"));
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_ui.selectedOfferText.text, Does.Contain("Artifact Capacity Full"));
-        Assert.That(_cards.gold, Is.EqualTo(gold));
-        Assert.That(_cards.ownedArtifacts, Has.Count.EqualTo(5));
-        Assert.That(_cards.HasArtifact(offer.artifact), Is.False);
+        Assert.That(_ui.selectedOfferText.text, Does.Contain("Gear Capacity Full"));
+        Assert.That(_cards.credits, Is.EqualTo(credits));
+        Assert.That(_cards.ownedGear, Has.Count.EqualTo(5));
+        Assert.That(_cards.HasGear(offer.gear), Is.False);
         Assert.That(_run.GetCurrentShopOffers(), Does.Contain(offer));
         Assert.That(offer.StableId, Is.EqualTo(stableId));
         Assert.That(offer.price, Is.EqualTo(cachedPrice));
     }
 
     [Test]
-    public void SellMode_RequiresExplicitConfirmationAndPaysHalfAuthoredArtifactPrice()
+    public void SellMode_RequiresExplicitConfirmationAndPaysHalfAuthoredGearPrice()
     {
-        var artifact = ArtifactOffer().artifact;
-        artifact.price = 11; // Odd authored prices verify integer division rounds down.
-        Assert.That(_cards.BuyArtifact(artifact, 0), Is.True);
-        long instanceId = _cards.OwnedArtifactInstances[0].Id;
-        int goldBefore = _cards.gold;
+        var gear = GearOffer().gear;
+        gear.price = 11; // Odd authored prices verify integer division rounds down.
+        Assert.That(_cards.BuyGear(gear, 0), Is.True);
+        long instanceId = _cards.OwnedGearInstances[0].Id;
+        int creditsBefore = _cards.credits;
         var sellMode = (Button)typeof(ShopUI).GetField("_sellModeButton",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(_ui);
         sellMode.onClick.Invoke();
         var row = _ui.itemsContainer.Cast<Transform>().Single(child => child.name == $"Sell_artifact_{instanceId}");
         row.GetComponent<Button>().onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore), "Selection must not commit a sale.");
-        Assert.That(_cards.GetArtifactInstanceById(instanceId), Is.Not.Null);
-        Assert.That(_ui.selectedOfferText.text, Does.Contain($"{artifact.price / 2}g"));
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore), "Selection must not commit a sale.");
+        Assert.That(_cards.GetGearInstanceById(instanceId), Is.Not.Null);
+        Assert.That(_ui.selectedOfferText.text, Does.Contain($"{gear.price / 2}g"));
 
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore + artifact.price / 2));
-        Assert.That(_cards.GetArtifactInstanceById(instanceId), Is.Null);
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore + gear.price / 2));
+        Assert.That(_cards.GetGearInstanceById(instanceId), Is.Null);
         Assert.That(_ui.SellingMode, Is.True);
     }
 
@@ -339,19 +339,19 @@ public sealed class Phase7EShopSelectionTests
     [Test]
     public void CloseAndRestart_ClearSelectionAndBlockStaleBuy()
     {
-        _cards.AddGold(50);
-        var offer = ArtifactOffer();
+        _cards.AddCredits(50);
+        var offer = GearOffer();
         Click(offer);
         _ui.continueButton.onClick.Invoke();
         Assert.That(_ui.SelectedOfferId, Is.Null);
         Assert.That(_ui.panel.activeSelf, Is.False);
         _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(50));
+        Assert.That(_cards.credits, Is.EqualTo(50));
 
         _run.RestartRun();
         Assert.That(_ui.SelectedOfferId, Is.Null);
-        Assert.That(_cards.gold, Is.Zero);
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.credits, Is.Zero);
+        Assert.That(_cards.ownedGear, Is.Empty);
     }
 
     [Test]
@@ -364,9 +364,9 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(services.Length, Is.EqualTo(2));
         foreach (var service in services)
             Assert.That(ButtonFor(service).transform.parent, Is.Not.SameAs(_ui.itemsContainer));
-        _cards.AddGold(10);
+        _cards.AddCredits(10);
         _ui.itemsContainer.Find("RefreshGoods").GetComponent<Button>().onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(7));
+        Assert.That(_cards.credits, Is.EqualTo(7));
         Assert.That(_run.GoodsRefreshPrice, Is.EqualTo(5));
         Assert.That(_run.GetCurrentShopOffers().Where(offer => offer.IsService), Is.EqualTo(services));
     }
@@ -384,7 +384,7 @@ public sealed class Phase7EShopSelectionTests
         Assert.That(_ui.itemsContainer.childCount, Is.GreaterThan(0), "ShopUI must populate offers when the shop opens");
     }
 
-    ShopOffer ArtifactOffer() => _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Artifact);
+    ShopOffer GearOffer() => _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Gear);
 
     Button ButtonFor(ShopOffer offer) => _ui.panel.GetComponentsInChildren<Button>(true)
         .Last(button => button && button.name == $"ShopOffer_{offer.StableId.Replace(':', '_')}");
@@ -398,15 +398,15 @@ public sealed class Phase7EShopSelectionTests
         return obj.AddComponent<T>();
     }
 
-    RelicData CreateArtifact(string id, int price)
+    GearData CreateGear(string id, int price)
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = id;
-        artifact.displayName = id;
-        artifact.description = "Artifact effect";
-        artifact.price = price;
-        _assets.Add(artifact);
-        return artifact;
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = id;
+        gear.displayName = id;
+        gear.description = "Artifact effect";
+        gear.price = price;
+        _assets.Add(gear);
+        return gear;
     }
 
     EnemyTypeData CreateEnemy(string name)

@@ -5,6 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RunEventUI")]
 public class RunEventUI : MonoBehaviour
 {
     public GameObject panel;
@@ -16,7 +17,7 @@ public class RunEventUI : MonoBehaviour
 
     readonly HashSet<int> _selectedDiscardCardIds = new();
     int _discardChoiceIndex = -1;
-    Action<int> _artifactDiscardChoiceResolved;
+    Action<int> _gearDiscardChoiceResolved;
     RunEventChoiceInteraction _discardInteraction = RunEventChoiceInteraction.Immediate;
     bool _choicesLayoutPrepared;
     bool _descriptionLayoutPrepared;
@@ -34,7 +35,7 @@ public class RunEventUI : MonoBehaviour
         {
             RunManager.Instance.OnShowEvent += Show;
             RunManager.Instance.OnHideEvent += Hide;
-            RunManager.Instance.OnShowArtifactDiscardChoice += ShowArtifactDiscardChoice;
+            RunManager.Instance.OnShowGearDiscardChoice += ShowGearDiscardChoice;
             RunManager.Instance.OnShowUpgrade += ShowUpgrade;
             RunManager.Instance.OnHideUpgrade += Hide;
         }
@@ -49,7 +50,7 @@ public class RunEventUI : MonoBehaviour
         {
             RunManager.Instance.OnShowEvent -= Show;
             RunManager.Instance.OnHideEvent -= Hide;
-            RunManager.Instance.OnShowArtifactDiscardChoice -= ShowArtifactDiscardChoice;
+            RunManager.Instance.OnShowGearDiscardChoice -= ShowGearDiscardChoice;
             RunManager.Instance.OnShowUpgrade -= ShowUpgrade;
             RunManager.Instance.OnHideUpgrade -= Hide;
         }
@@ -335,7 +336,7 @@ public class RunEventUI : MonoBehaviour
         }
     }
 
-    void ShowArtifactDiscardChoice(string title, string description,
+    void ShowGearDiscardChoice(string title, string description,
         IReadOnlyList<CardInstance> choices, Action<int> onResolved)
     {
         PrepareChoicesLayout();
@@ -345,7 +346,7 @@ public class RunEventUI : MonoBehaviour
             onResolved?.Invoke(0);
             return;
         }
-        _artifactDiscardChoiceResolved = onResolved;
+        _gearDiscardChoiceResolved = onResolved;
         ClearChoices();
         if (titleLabel) titleLabel.text = title;
         SetDescription(description);
@@ -354,27 +355,27 @@ public class RunEventUI : MonoBehaviour
             if (card == null) continue;
             int id = card.Id;
             var buttonObject = Instantiate(choiceButtonPrefab, choicesContainer);
-            buttonObject.name = $"ArtifactDiscard_{id}";
+            buttonObject.name = $"GearDiscard_{id}";
             var label = buttonObject.GetComponentInChildren<TMP_Text>();
             if (label) label.text = $"{card.SuitSymbol} {card.DisplayName}  Value {card.BaseAttackValue}  #{id}";
             var button = buttonObject.GetComponent<Button>();
-            if (button) button.onClick.AddListener(() => ResolveArtifactDiscardChoice(id));
+            if (button) button.onClick.AddListener(() => ResolveGearDiscardChoice(id));
         }
         var cancelObject = Instantiate(choiceButtonPrefab, choicesContainer);
-        cancelObject.name = "ArtifactDiscardCancel";
+        cancelObject.name = "GearDiscardCancel";
         var cancelLabel = cancelObject.GetComponentInChildren<TMP_Text>();
         if (cancelLabel) cancelLabel.text = "Cancel (skip this draw)";
         var cancel = cancelObject.GetComponent<Button>();
-        if (cancel) cancel.onClick.AddListener(() => ResolveArtifactDiscardChoice(0));
+        if (cancel) cancel.onClick.AddListener(() => ResolveGearDiscardChoice(0));
         BoardPanelTransition.Show(panel);
         FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }
 
-    void ResolveArtifactDiscardChoice(int cardId)
+    void ResolveGearDiscardChoice(int cardId)
     {
-        var callback = _artifactDiscardChoiceResolved;
-        _artifactDiscardChoiceResolved = null;
+        var callback = _gearDiscardChoiceResolved;
+        _gearDiscardChoiceResolved = null;
         ClearChoices();
         BoardPanelTransition.Hide(panel);
         callback?.Invoke(cardId);
@@ -557,7 +558,7 @@ public class RunEventUI : MonoBehaviour
 
     void Hide()
     {
-        _artifactDiscardChoiceResolved = null;
+        _gearDiscardChoiceResolved = null;
         _discardChoiceIndex = -1;
         _discardInteraction = RunEventChoiceInteraction.Immediate;
         _selectedDiscardCardIds.Clear();

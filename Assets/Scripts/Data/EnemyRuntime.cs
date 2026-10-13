@@ -23,7 +23,7 @@ public class EnemyRuntime : ICombatDamageTarget
     bool _guardedHitConsumed;
     bool _duelistCallConsumed;
     bool _masterThiefHasStolen;
-    int _stolenGold;
+    int _stolenCredits;
     CardData.Suit _announcedSuit;
     EnemyRuntime _captain;
     public bool HasCaptaincy { get; }
@@ -36,7 +36,7 @@ public class EnemyRuntime : ICombatDamageTarget
     public bool HasWarDrum => HasAbility(EnemyAbilityEffect.WarDrum);
     public bool HasMasterThief => HasAbility(EnemyAbilityEffect.MasterThief);
     public bool RequiresFullCoverageBlock => HasAbility(EnemyAbilityEffect.FullCoverageBlock);
-    public int StolenGold => _stolenGold;
+    public int StolenCredits => _stolenCredits;
     public CardData.Suit AnnouncedSuit => _announcedSuit;
     public bool DuelistCallConsumed => _duelistCallConsumed;
     public int PreparedResponseBudget { get; private set; }
@@ -139,12 +139,12 @@ public class EnemyRuntime : ICombatDamageTarget
         return true;
     }
 
-    public void SetStolenGold(int amount) => _stolenGold = Mathf.Max(0, amount);
+    public void SetStolenCredits(int amount) => _stolenCredits = Mathf.Max(0, amount);
 
-    public int ClaimStolenGold()
+    public int ClaimStolenCredits()
     {
-        int amount = _stolenGold;
-        _stolenGold = 0;
+        int amount = _stolenCredits;
+        _stolenCredits = 0;
         return amount;
     }
 
@@ -188,7 +188,7 @@ public class EnemyRuntime : ICombatDamageTarget
     public string DisplayName => _encounterSize > 1 ? $"{type.enemyName} {_instanceNumber}" : type.enemyName;
     public string CombatDisplayName => DisplayName;
     public int CurrentHealth => currentHp;
-    public int GoldReward => type.goldReward;
+    public int CreditsReward => type.creditsReward;
     public bool IsDefeated => currentHp <= 0;
     public bool ShouldFlee => !IsDefeated && type.fleeAfterPlayerTurns > 0 &&
         PlayerTurnsCompleted >= type.fleeAfterPlayerTurns;
@@ -225,7 +225,7 @@ public class EnemyRuntime : ICombatDamageTarget
                     resolvedDamage = ability.ModifyIncomingDamage(this, context, request, resolvedDamage);
             }
         }
-        // Boss immunity is based on the boss's source-card suit and the action's existing
+        // Headliner immunity is based on the Headliner's source-card suit and the action's existing
         // first-card suit snapshot. Multi-card actions therefore use their first selected card.
         // Apply it after incoming modifiers but before Guarded so immune hits consume neither Guarded nor Shield.
         if (request.Origin == CombatDamageOrigin.Card && type.sourceCard != null &&

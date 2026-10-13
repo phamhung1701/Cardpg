@@ -37,7 +37,7 @@ public sealed class Phase2ElitePlayModeTests
         var cardPrefab = CreateCardView("Phase 2 PlayMode Card Prefab");
         var cardsObject = CreateGameObject("Phase 2 PlayMode CardManager");
         _cards = cardsObject.AddComponent<CardManager>();
-        _cards.Configure(_field, dragCanvas, cardPrefab, System.Array.Empty<RelicData>(),
+        _cards.Configure(_field, dragCanvas, cardPrefab, System.Array.Empty<GearData>(),
             System.Array.Empty<CardEnhancementData>());
         _cards.ConfigureRandom(new DeterministicRandom(41));
         _cards.BuildDeck();

@@ -459,7 +459,7 @@ GameObject:
   - component: {fileID: 39315826}
   - component: {fileID: 39315828}
   m_Layer: 5
-  m_Name: OwnedArtifactsBar
+  m_Name: OwnedGearBar
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -536,7 +536,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 47d83d63a5ff8ac4fbd9ea414bc3016d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::ArtifactRailUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::GearRailUI
   source: {fileID: 0}
   slotsRoot: {fileID: 1950763785}
   capacityLabel: {fileID: 1918429082}
@@ -1925,7 +1925,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cd464a3a2e7bf4a459936252b1de3a43, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::PauseMenuUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::PauseMenuUI
   coordinator: {fileID: 145345025}
   panel: {fileID: 203267942}
   pauseButton: {fileID: 100278040}
@@ -1946,7 +1946,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 949b87f3667393147ba896fdc741ccf2, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::ConfirmationDialogUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::ConfirmationDialogUI
   panel: {fileID: 1620003783}
   titleLabel: {fileID: 1870244066}
   bodyLabel: {fileID: 1510864064}
@@ -1963,7 +1963,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a23a712a2cf574c45adf6e8449c2654c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::SettingsMenuUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::SettingsMenuUI
   panel: {fileID: 869700489}
   resolutionDropdown: {fileID: 377702783}
   displayModeDropdown: {fileID: 1102785507}
@@ -1982,7 +1982,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f5c076d12bc0e364e9a7055bec2131eb, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::GameplayMenuCoordinator
+  m_EditorClassIdentifier: Dealbreak.Runtime::GameplayMenuCoordinator
   gameplayCanvasGroup: {fileID: 2107400375}
   dragCanvasRaycaster: {fileID: 1585532632}
 --- !u!114 &145345026
@@ -2836,7 +2836,7 @@ GameObject:
   - component: {fileID: 230256153}
   - component: {fileID: 230256152}
   m_Layer: 5
-  m_Name: BossRewardLabel
+  m_Name: HeadlinerRewardLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -4733,7 +4733,7 @@ GameObject:
   - component: {fileID: 390743345}
   - component: {fileID: 390743344}
   m_Layer: 5
-  m_Name: ShopGoldLabel
+  m_Name: ShopCreditsLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7534,7 +7534,7 @@ GameObject:
   - component: {fileID: 721487696}
   - component: {fileID: 721487695}
   m_Layer: 5
-  m_Name: ArtifactsHeader
+  m_Name: GearHeader
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8259,7 +8259,7 @@ GameObject:
   - component: {fileID: 807301241}
   - component: {fileID: 807301240}
   m_Layer: 5
-  m_Name: ArtifactTooltip
+  m_Name: GearTooltip
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -10905,7 +10905,7 @@ GameObject:
   - component: {fileID: 1018156399}
   - component: {fileID: 1018156398}
   m_Layer: 5
-  m_Name: ArtifactDetail
+  m_Name: GearDetail
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -12623,7 +12623,7 @@ GameObject:
   - component: {fileID: 1181160965}
   - component: {fileID: 1181160964}
   m_Layer: 5
-  m_Name: BossRewardBanner
+  m_Name: HeadlinerRewardBanner
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -13154,7 +13154,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 625b65b77fe791a4796f4274248b05f0, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::AttackCardPresentationUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::AttackCardPresentationUI
   presentationCanvas: {fileID: 1226402714}
   deckTarget: {fileID: 515410583}
   enemyGroup: {fileID: 2107400376}
@@ -14700,7 +14700,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 575d7867dc7ddff4ca57fa1a641781a8, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::DrawDeckStackUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::DrawDeckStackUI
   stackRoot: {fileID: 515410583}
   deckButton: {fileID: 1406763502}
   cardBackImage: {fileID: 0}
@@ -16193,7 +16193,7 @@ GameObject:
   - component: {fileID: 1521773775}
   - component: {fileID: 1521773774}
   m_Layer: 5
-  m_Name: GoldLabel
+  m_Name: CreditsLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -16662,7 +16662,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7df53530f9e905d408cac2f7965e82f4, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::Field
+  m_EditorClassIdentifier: Dealbreak.Runtime::Field
   cardsHolder: {fileID: 1564072110}
   reorderThreshold: 20
   maximumSpacing: -18
@@ -18891,7 +18891,7 @@ GameObject:
   - component: {fileID: 1770389800}
   - component: {fileID: 1770389799}
   m_Layer: 5
-  m_Name: ArtifactListViewport
+  m_Name: GearListViewport
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -20220,7 +20220,7 @@ GameObject:
   - component: {fileID: 1918429083}
   - component: {fileID: 1918429082}
   m_Layer: 5
-  m_Name: ArtifactCapacityLabel
+  m_Name: GearCapacityLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -20558,7 +20558,7 @@ GameObject:
   - component: {fileID: 1950763787}
   - component: {fileID: 1950763786}
   m_Layer: 0
-  m_Name: ArtifactSlots
+  m_Name: GearSlots
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -21715,7 +21715,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 199cc342f98dcbf46822a4212abbffde, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::RunResultUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::RunResultUI
   rewardBanner: {fileID: 1181160962}
   rewardLabel: {fileID: 230256152}
   coordinator: {fileID: 145345025}
@@ -21736,7 +21736,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a88a5338afb44349801f14c144a4bd8, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::ShopUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::ShopUI
   panel: {fileID: 27114017}
   itemsContainer: {fileID: 2039168348}
   itemButtonPrefab: {fileID: 5736650782702794959, guid: 2f1c4d2241871e04da229455d13f9edf, type: 3}
@@ -21756,7 +21756,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 73c2123baf70e9a4d8f5e415c531f71c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::PathScreenUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::PathScreenUI
   panel: {fileID: 83275268}
   mapContainer: {fileID: 975638562}
   nodeButtonPrefab: {fileID: 9121411215942999883, guid: 07be3cffc2b0603429150bbe1ff2b405, type: 3}
@@ -21775,7 +21775,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 48c1ac3e42331d54d90b5b03c804daf4, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::DeckViewerUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::DeckViewerUI
   panel: {fileID: 1224282638}
   deckText: {fileID: 711763417}
   discardText: {fileID: 0}
@@ -21797,7 +21797,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 159a3a914429edf4bb9ed4424147f5da, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::RunStatusUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::RunStatusUI
   goldLabel: {fileID: 1521773774}
   pileSummaryLabel: {fileID: 360980665}
   runProgressLabel: {fileID: 1174227833}
@@ -21821,7 +21821,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 762b4c56a781c9b488d339a5699e455e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::ActionButtonsUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::ActionButtonsUI
   playButton: {fileID: 1352866218}
   passButton: {fileID: 1142720073}
   blockButton: {fileID: 2113696272}
@@ -21951,7 +21951,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3d7548ae005e5b343931d491e669f803, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::RunSeedUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::RunSeedUI
   seedDisplayLabel: {fileID: 147459627}
 --- !u!114 &2107400374
 MonoBehaviour:
@@ -21964,7 +21964,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2b9469d0c370cfd4bad85e256b6c8182, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::RunEventUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::RunEventUI
   panel: {fileID: 255769208}
   titleLabel: {fileID: 1763574407}
   descriptionLabel: {fileID: 1765654722}
@@ -21994,7 +21994,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f64e6ba4eb701d546880f89d1f51e297, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::EnemyGroupUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::EnemyGroupUI
   enemyContainer: {fileID: 98306649}
   enemyViewPrefab: {fileID: 4997970000244621656, guid: f7f699e7ae2547945bb4dc8771ae4a07, type: 3}
 --- !u!114 &2107400377
@@ -22008,7 +22008,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c2822c1d01cbd1f4196bc2fb2fe60cd7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::EnhancementTargetUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::EnhancementTargetUI
   panel: {fileID: 907522888}
   titleLabel: {fileID: 354879377}
   feedbackLabel: {fileID: 1106211833}
@@ -22027,7 +22027,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 800c248dcc1753e43b064bcd874767d8, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::ConsumableRewardUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::ConsumableRewardUI
   panel: {fileID: 1430308551}
   titleLabel: {fileID: 657341537}
   detailsLabel: {fileID: 599515525}
@@ -22593,7 +22593,7 @@ GameObject:
   - component: {fileID: 2143209668}
   - component: {fileID: 2143209667}
   m_Layer: 5
-  m_Name: BossProgressLabel
+  m_Name: HeadlinerProgressLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

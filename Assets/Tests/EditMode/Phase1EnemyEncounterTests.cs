@@ -22,8 +22,8 @@ public sealed class Phase1EnemyEncounterTests
         var brute = UnityEditor.AssetDatabase.LoadAssetAtPath<EnemyTypeData>("Assets/Data/Enemies/Brute.asset");
         Assert.That(shieldbearer, Is.Not.Null);
         Assert.That(brute, Is.Not.Null);
-        Assert.That((shieldbearer.maxHp, shieldbearer.baseAttack, shieldbearer.goldReward), Is.EqualTo((10, 3, 0)));
-        Assert.That((brute.maxHp, brute.baseAttack, brute.goldReward), Is.EqualTo((18, 3, 0)));
+        Assert.That((shieldbearer.maxHp, shieldbearer.baseAttack, shieldbearer.creditsReward), Is.EqualTo((10, 3, 0)));
+        Assert.That((brute.maxHp, brute.baseAttack, brute.creditsReward), Is.EqualTo((18, 3, 0)));
         Assert.That(shieldbearer.abilities.Any(a => a != null && a.effect == EnemyAbilityEffect.StartWithShield && a.amount == 1), Is.True);
         Assert.That(brute.abilities.Any(a => a != null && a.effect == EnemyAbilityEffect.AlternateChargedAttack), Is.True);
 #endif
@@ -101,9 +101,9 @@ public sealed class Phase1EnemyEncounterTests
         CollectionAssert.AreEqual(first.Select(Signature), second.Select(Signature));
     }
 
-    EnemyTypeData CreateEnemy(string name, int hp, int attack, int gold)
+    EnemyTypeData CreateEnemy(string name, int hp, int attack, int credits)
     {
-        var type = EnemyTypeData.Create(name, hp, attack, gold);
+        var type = EnemyTypeData.Create(name, hp, attack, credits);
         type.name = name;
         _created.Add(type);
         return type;

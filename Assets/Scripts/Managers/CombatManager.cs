@@ -5,6 +5,7 @@ using UnityEngine;
 
 public enum GameState { Idle, PlayerTurn, EnemyAttacking, GameOver, GameWon }
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "CombatManager")]
 public partial class CombatManager : Singleton<CombatManager>
 {
     [Header("Critical Hits")]
@@ -49,7 +50,7 @@ public partial class CombatManager : Singleton<CombatManager>
     readonly HashSet<EnemyRuntime> _processedEnemyDeaths = new();
     readonly CombatResolver _resolver = new();
     readonly CombatReactionQueue _reactions = new();
-    int _earnedGoldReward;
+    int _earnedCreditsReward;
     long _nextActionId = 1;
     int _nextReactiveHitIndex;
     int _playerTurnNumber;
@@ -64,14 +65,14 @@ public partial class CombatManager : Singleton<CombatManager>
     CardInstance _activeDwarfSourceCard;
     int _pendingDiamondDrawChoices;
     int _encounterActualHpLost;
-    bool _isEliteOrBossEncounter;
-    bool _isBossEncounter;
+    bool _isEliteOrHeadlinerEncounter;
+    bool _isHeadlinerEncounter;
     bool _isEliteEncounter;
     int _eliteKillCount;
     public int EliteKillCount => _eliteKillCount;
     public int EncounterDefeatedEnemyCount => _processedEnemyDeaths.Count;
     public int EncounterActualHpLost => _encounterActualHpLost;
-    public bool IsBossEncounter => _isBossEncounter;
+    public bool IsHeadlinerEncounter => _isHeadlinerEncounter;
     public bool IsOpeningPlayerAttack => _openingPlayerAttackInProgress || _playerAttackActionCount == 0;
     public int QueuedExtraPlayerTurns => _queuedPlayerTurnGrants.Count;
     public int CompletedPlayerTurnCount => _completedPlayerTurnCount;
@@ -198,7 +199,7 @@ public partial class CombatManager : Singleton<CombatManager>
         var captain = _enemies.Find(enemy => enemy.HasCaptaincy && !enemy.IsDefeated);
         foreach (var enemy in _enemies)
             enemy.AssignCaptain(enemy.type.enemyName == "Goblin" ? captain : null);
-        _earnedGoldReward = 0;
+        _earnedCreditsReward = 0;
         _processedEnemyDeaths.Clear();
         _reactions.Clear();
         _playerTurnNumber = 0;
@@ -206,26 +207,26 @@ public partial class CombatManager : Singleton<CombatManager>
         _encounterActualHpLost = 0;
         _eliteKillCount = 0;
         _isEliteEncounter = encounterKind == MapNodeType.Elite;
-        _isEliteOrBossEncounter = encounterKind is MapNodeType.Elite or MapNodeType.Boss;
-        _isBossEncounter = encounterKind == MapNodeType.Boss;
+        _isEliteOrHeadlinerEncounter = encounterKind is MapNodeType.Elite or MapNodeType.Headliner;
+        _isHeadlinerEncounter = encounterKind == MapNodeType.Headliner;
         _encounterResolved = false;
         player.ResetShield();
         player.ResetEncounterBlock();
         var cards = CardManager.Instance;
-        if (cards != null && cards.HasArtifactSpecialRule(ArtifactSpecialRule.PreparationManual))
+        if (cards != null && cards.HasGearSpecialRule(GearSpecialRule.PreparationManual))
             player.GainEncounterBlock(cards.DistinctConsumableTypeCount * 2);
         if (cards != null)
-            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+            for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
             {
-                var artifact = cards.ownedArtifacts[artifactIndex];
-                if (artifact != null && artifact.specialRule == ArtifactSpecialRule.WarpathBanner)
+                var gear = cards.ownedGear[gearIndex];
+                if (gear != null && gear.specialRule == GearSpecialRule.WarpathBanner)
                     player.GainEncounterBlock(Math.Min(6,
-                        cards.GetArtifactInstanceAt(artifactIndex).State.GetCounter(-1340) * 2));
+                        cards.GetGearInstanceAt(gearIndex).State.GetCounter(-1340) * 2));
             }
-        if (_isEliteOrBossEncounter && cards?.ownedArtifacts.Any(a => a != null &&
-            a.specialRule == ArtifactSpecialRule.ChallengerCrest) == true)
+        if (_isEliteOrHeadlinerEncounter && cards?.ownedGear.Any(a => a != null &&
+            a.specialRule == GearSpecialRule.ChallengerCrest) == true)
             player.GainShield(1);
-        cards?.ResetArtifactEncounterEffectState();
+        cards?.ResetGearEncounterEffectState();
         SetPendingDamage(0, true);
         var encounterAction = CreateAction(CombatActionOrigin.Legacy);
         for (int i = 0; i < _enemies.Count; i++)
@@ -520,7 +521,7 @@ public partial class CombatManager : Singleton<CombatManager>
         bool isRoyalFamily = GameplayEffectResolver.IsRoyalFamilySelection(cardInstances, CardManager.Instance);
         var cm = CardManager.Instance;
         bool handsGroup = GameplayEffectResolver.IsHandsMultiCardAction(cardInstances, cm);
-        _handsEpicAction = handsGroup && cm != null && cm.HasArtifactSpecialRule(ArtifactSpecialRule.HandsEpic);
+        _handsEpicAction = handsGroup && cm != null && cm.HasGearSpecialRule(GearSpecialRule.HandsEpic);
         bool critical = false;
         bool isAcePair = cards.Count == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards);
         bool hasCriticalChanceOverride = GameplayEffectResolver.TryGetCriticalChanceOverride(
@@ -761,7 +762,7 @@ public partial class CombatManager : Singleton<CombatManager>
         var run = RunManager.Instance;
         if (run == null) return false;
         var candidates = cards.discardPile.ToArray();
-        bool opened = run.RequestArtifactDiscardChoice("DIAMOND EMBLEM",
+        bool opened = run.RequestGearDiscardChoice("DIAMOND EMBLEM",
             "Choose one physical card from the discard pile to return to your hand. Cancel skips this draw.",
             candidates, cardId =>
             {
@@ -1155,9 +1156,9 @@ public partial class CombatManager : Singleton<CombatManager>
     void ResolveMasterThiefSteal(EnemyRuntime thief)
     {
         var cards = CardManager.Instance;
-        int stolen = cards != null ? Math.Min(8, Math.Max(0, cards.gold)) : 0;
-        if (stolen > 0) cards.SpendGold(stolen);
-        thief.SetStolenGold(stolen);
+        int stolen = cards != null ? Math.Min(8, Math.Max(0, cards.credits)) : 0;
+        if (stolen > 0) cards.SpendCredits(stolen);
+        thief.SetStolenCredits(stolen);
         Log($"{thief.DisplayName} stole {stolen} Credits and will flee after 4 player actions unless defeated!");
     }
 
@@ -1178,31 +1179,31 @@ public partial class CombatManager : Singleton<CombatManager>
     void HandleEnemyDefeated(EnemyRuntime enemy)
     {
         if (enemy == null || !_enemies.Contains(enemy) || !_processedEnemyDeaths.Add(enemy)) return;
-        _earnedGoldReward += Mathf.Max(0, enemy.GoldReward);
+        _earnedCreditsReward += Mathf.Max(0, enemy.CreditsReward);
         if (_isEliteEncounter) _eliteKillCount++;
-        int returnedGold = enemy.ClaimStolenGold();
-        if (returnedGold > 0) CardManager.Instance.AddGold(returnedGold);
+        int returnedCredits = enemy.ClaimStolenCredits();
+        if (returnedCredits > 0) CardManager.Instance.AddCredits(returnedCredits);
         RemoveEnemy(enemy);
         int drawn = CardManager.Instance.DrawToHand(1);
-        Log($"{enemy.DisplayName} defeated! {enemy.GoldReward} Credits secured.{(returnedGold > 0 ? $" Returned {returnedGold} stolen Credits." : string.Empty)}{(drawn > 0 ? " Drew 1 card." : string.Empty)}");
+        Log($"{enemy.DisplayName} defeated! {enemy.CreditsReward} Credits secured.{(returnedCredits > 0 ? $" Returned {returnedCredits} stolen Credits." : string.Empty)}{(drawn > 0 ? " Drew 1 card." : string.Empty)}");
     }
 
     void AwardDevouringKillBonus(IReadOnlyList<CardInstance> committedCards)
     {
         if (committedCards == null || CardManager.Instance == null) return;
         var cards = CardManager.Instance;
-        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
         {
-            var artifact = cards.ownedArtifacts[artifactIndex];
-            if (artifact == null || artifact.specialRule != ArtifactSpecialRule.DwarfEpic) continue;
-            var instance = cards.GetArtifactInstanceAt(artifactIndex);
+            var gear = cards.ownedGear[gearIndex];
+            if (gear == null || gear.specialRule != GearSpecialRule.DwarfEpic) continue;
+            var instance = cards.GetGearInstanceAt(gearIndex);
             var source = instance.PendingDwarfSourceCard;
             if (source == null || cards.FindOwnedCard(source.Id) != source ||
                 !committedCards.Any(card => card != null && card.Rank > source.Rank)) continue;
             source.GainPermanentAttackBonus(1);
             cards.NotifyCardInstanceChanged(source);
             instance.PendingDwarfSourceCard = null;
-            Log($"{artifact.displayName}: prepared {source.DisplayName} permanently gained +1 attack.");
+            Log($"{gear.displayName}: prepared {source.DisplayName} permanently gained +1 attack.");
         }
         for (int i = 0; i < committedCards.Count; i++)
         {
@@ -1575,21 +1576,21 @@ public partial class CombatManager : Singleton<CombatManager>
         if (result == EncounterResult.Victory)
         {
             var cards = CardManager.Instance;
-            int reward = _earnedGoldReward;
+            int reward = _earnedCreditsReward;
             int bountyBase = reward;
             if (cards != null)
-                foreach (var artifact in cards.ownedArtifacts)
-                    if (artifact != null && artifact.specialRule == ArtifactSpecialRule.BountyLedger)
+                foreach (var gear in cards.ownedGear)
+                    if (gear != null && gear.specialRule == GearSpecialRule.BountyLedger)
                     {
-                        int numerator = _isBossEncounter ? 125 : _isEliteOrBossEncounter ? 150 : 100;
+                        int numerator = _isHeadlinerEncounter ? 125 : _isEliteOrHeadlinerEncounter ? 150 : 100;
                         bountyBase = (int)Math.Min(int.MaxValue, ((long)bountyBase * numerator + 50) / 100);
                         break;
                     }
             reward = bountyBase;
-            var (bonusGold, victoryHeal) = GameplayEffectResolver.EncounterWon(cards);
-            reward = (int)Math.Min(int.MaxValue, (long)reward + bonusGold);
+            var (bonusCredits, victoryHeal) = GameplayEffectResolver.EncounterWon(cards);
+            reward = (int)Math.Min(int.MaxValue, (long)reward + bonusCredits);
 
-            cards.AddGold(reward);
+            cards.AddCredits(reward);
             if (victoryHeal > 0)
             {
                 int healed = HealPlayer(victoryHeal);
@@ -1657,17 +1658,17 @@ public partial class CombatManager : Singleton<CombatManager>
     void TryReturnCriticalAce(IReadOnlyList<CardInstance> committedCards, CardManager cards)
     {
         if (committedCards == null || cards == null) return;
-        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
         {
-            var artifact = cards.ownedArtifacts[artifactIndex];
-            if (artifact == null || artifact.specialRule is not (ArtifactSpecialRule.AceRare or ArtifactSpecialRule.AceEpic))
+            var gear = cards.ownedGear[gearIndex];
+            if (gear == null || gear.specialRule is not (GearSpecialRule.AceRare or GearSpecialRule.AceEpic))
                 continue;
-            var state = cards.GetArtifactInstanceAt(artifactIndex).State;
+            var state = cards.GetGearInstanceAt(gearIndex).State;
             if (state.GetEncounterCounter(-114) != 0) continue;
             var ace = committedCards.FirstOrDefault(card => card != null && card.Rank == CardData.Rank.Ace);
             if (ace == null || !cards.TryReturnDiscardCardToHand(ace)) continue;
             state.SetEncounterCounter(-114, 1);
-            Log($"{artifact.displayName}: returned the physical Ace to hand.");
+            Log($"{gear.displayName}: returned the physical Ace to hand.");
             return;
         }
     }
@@ -1676,17 +1677,17 @@ public partial class CombatManager : Singleton<CombatManager>
     {
         var cards = CardManager.Instance;
         if (cards == null || playedCards == null) return;
-        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
         {
-            var artifact = cards.ownedArtifacts[artifactIndex];
-            if (artifact == null) continue;
-            var instance = cards.GetArtifactInstanceAt(artifactIndex);
+            var gear = cards.ownedGear[gearIndex];
+            if (gear == null) continue;
+            var instance = cards.GetGearInstanceAt(gearIndex);
             if (instance == null) continue;
             var state = instance.State;
-            if (_isBossEncounter && artifact.specialRule == ArtifactSpecialRule.KingslayersMark &&
+            if (_isHeadlinerEncounter && gear.specialRule == GearSpecialRule.KingslayersMark &&
                 state.GetEncounterCounter(-1382) > 0)
                 _activeKingslayerBonus = 1;
-            if (artifact.specialRule is ArtifactSpecialRule.DwarfRare or ArtifactSpecialRule.DwarfEpic)
+            if (gear.specialRule is GearSpecialRule.DwarfRare or GearSpecialRule.DwarfEpic)
             {
                 var source = instance.PreparedDwarfSourceCard;
                 bool qualifying = source != null && cards.FindOwnedCard(source.Id) == source &&
@@ -1697,7 +1698,7 @@ public partial class CombatManager : Singleton<CombatManager>
                     _activeDwarfSourceCard = source;
                 }
             }
-            if (artifact.specialRule == ArtifactSpecialRule.BalancersScale)
+            if (gear.specialRule == GearSpecialRule.BalancersScale)
             {
                 int previousGroup = state.GetCounter(-1181);
                 int playedGroup = playedCards.Count > 0 ? GetBalancerGroup(playedCards[0]) : 0;
@@ -1708,9 +1709,9 @@ public partial class CombatManager : Singleton<CombatManager>
                 }
                 else _activeBalancerBonus = Math.Max(0, state.GetCounter(-1182));
             }
-            if (artifact.specialRule == ArtifactSpecialRule.SpadeEpic)
+            if (gear.specialRule == GearSpecialRule.SpadeEpic)
                 _activeSpadeBonus = Math.Max(0, state.GetEncounterCounter(-1071));
-            if (artifact.specialRule == ArtifactSpecialRule.HeartEpic &&
+            if (gear.specialRule == GearSpecialRule.HeartEpic &&
                 playedCards.Any(card => card != null && card.MatchesSuit(CardData.Suit.Hearts)))
                 _activeHeartBonus = Math.Max(0, state.GetCounter(-1050));
         }
@@ -1720,41 +1721,41 @@ public partial class CombatManager : Singleton<CombatManager>
     {
         var cards = CardManager.Instance;
         if (cards == null || playedCards == null) return;
-        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
         {
-            var artifact = cards.ownedArtifacts[artifactIndex];
-            if (artifact == null) continue;
-            var instance = cards.GetArtifactInstanceAt(artifactIndex);
+            var gear = cards.ownedGear[gearIndex];
+            if (gear == null) continue;
+            var instance = cards.GetGearInstanceAt(gearIndex);
             var state = instance.State;
             if (_activeDwarfSourceCard != null && instance.PreparedDwarfSourceCard == _activeDwarfSourceCard)
             {
                 instance.PendingDwarfSourceCard = _activeDwarfSourceCard;
                 instance.PreparedDwarfSourceCard = null;
             }
-            if (_activeKingslayerBonus > 0 && artifact.specialRule == ArtifactSpecialRule.KingslayersMark)
+            if (_activeKingslayerBonus > 0 && gear.specialRule == GearSpecialRule.KingslayersMark)
                 state.SetEncounterCounter(-1382, Math.Max(0, state.GetEncounterCounter(-1382) - 1));
-            if (_activeBalancerBonus > 0 && artifact.specialRule == ArtifactSpecialRule.BalancersScale)
+            if (_activeBalancerBonus > 0 && gear.specialRule == GearSpecialRule.BalancersScale)
                 state.SetCounter(-1182, 0);
-            if (_activeSpadeBonus > 0 && artifact.specialRule == ArtifactSpecialRule.SpadeEpic)
+            if (_activeSpadeBonus > 0 && gear.specialRule == GearSpecialRule.SpadeEpic)
                 state.SetEncounterCounter(-1071, 0);
-            if (_activeHeartBonus > 0 && artifact.specialRule == ArtifactSpecialRule.HeartEpic)
+            if (_activeHeartBonus > 0 && gear.specialRule == GearSpecialRule.HeartEpic)
                 state.SetCounter(-1050, 0);
         }
         if (autoPlay) return;
 
-        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
         {
-            var artifact = cards.ownedArtifacts[artifactIndex];
-            if (artifact == null) continue;
-            var instance = cards.GetArtifactInstanceAt(artifactIndex);
+            var gear = cards.ownedGear[gearIndex];
+            if (gear == null) continue;
+            var instance = cards.GetGearInstanceAt(gearIndex);
             var state = instance.State;
             foreach (var card in playedCards)
             {
                 if (card == null) continue;
-                if (artifact.specialRule is ArtifactSpecialRule.DwarfRare or ArtifactSpecialRule.DwarfEpic &&
+                if (gear.specialRule is GearSpecialRule.DwarfRare or GearSpecialRule.DwarfEpic &&
                     card.Rank < CardData.Rank.Five)
                     instance.PreparedDwarfSourceCard = card;
-                if (_isBossEncounter && artifact.specialRule == ArtifactSpecialRule.KingslayersMark)
+                if (_isHeadlinerEncounter && gear.specialRule == GearSpecialRule.KingslayersMark)
                 {
                     int mask = state.GetEncounterCounter(-1381) | (1 << (int)card.Rank);
                     int uniqueRanks = 0;
@@ -1766,7 +1767,7 @@ public partial class CombatManager : Singleton<CombatManager>
                     }
                     else state.SetEncounterCounter(-1381, mask);
                 }
-                if (artifact.specialRule == ArtifactSpecialRule.DiamondEpic &&
+                if (gear.specialRule == GearSpecialRule.DiamondEpic &&
                     card.MatchesSuit(CardData.Suit.Diamonds))
                 {
                     int count = state.GetCounter(-108) + 1;
@@ -1777,7 +1778,7 @@ public partial class CombatManager : Singleton<CombatManager>
                     }
                     state.SetCounter(-108, count);
                 }
-                if (artifact.specialRule == ArtifactSpecialRule.BalancersScale)
+                if (gear.specialRule == GearSpecialRule.BalancersScale)
                 {
                     int group = GetBalancerGroup(card);
                     if (group == 0) continue;
@@ -1800,10 +1801,10 @@ public partial class CombatManager : Singleton<CombatManager>
     {
         var cards = CardManager.Instance;
         if (cards == null) return;
-        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
         {
-            var artifact = cards.ownedArtifacts[artifactIndex];
-            if (artifact != null) cards.GetArtifactInstanceAt(artifactIndex).PendingDwarfSourceCard = null;
+            var gear = cards.ownedGear[gearIndex];
+            if (gear != null) cards.GetGearInstanceAt(gearIndex).PendingDwarfSourceCard = null;
         }
     }
 
@@ -1814,19 +1815,19 @@ public partial class CombatManager : Singleton<CombatManager>
         int overflowHeld = _executingOverflowAutoPlay && cards != null
             ? Math.Max(0, cards.HandCount - 1) : -1;
         int gilded = includeOpeningAttackBonus && IsOpeningPlayerAttack && _playerTurnNumber == 1 &&
-            !_executingOverflowAutoPlay && cards != null ? Math.Max(0, cards.gold / 10) : 0;
+            !_executingOverflowAutoPlay && cards != null ? Math.Max(0, cards.credits / 10) : 0;
         if (includeOpeningAttackBonus)
             gilded += _activeKingslayerBonus + _activeDwarfBonus + _activeBalancerBonus + _activeSpadeBonus + _activeHeartBonus;
         if (includeOpeningAttackBonus && IsOpeningPlayerAttack && cards != null)
         {
-            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+            for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
             {
-                var artifact = cards.ownedArtifacts[artifactIndex];
-                if (artifact == null) continue;
-                var state = cards.GetArtifactInstanceAt(artifactIndex).State;
-                if (artifact.specialRule == ArtifactSpecialRule.HuntersLedger)
+                var gear = cards.ownedGear[gearIndex];
+                if (gear == null) continue;
+                var state = cards.GetGearInstanceAt(gearIndex).State;
+                if (gear.specialRule == GearSpecialRule.HuntersLedger)
                     gilded += state.GetCounter(-119);
-                else if (artifact.specialRule == ArtifactSpecialRule.TrophyRack && _isBossEncounter)
+                else if (gear.specialRule == GearSpecialRule.TrophyRack && _isHeadlinerEncounter)
                     gilded += state.GetCounter(-137);
             }
         }
@@ -1914,11 +1915,11 @@ public partial class CombatManager : Singleton<CombatManager>
         _parryResolved = true;
         _parryDrawCandidates.Clear();
         currentEnemy = null;
-        _isEliteOrBossEncounter = false;
-        _isBossEncounter = false;
+        _isEliteOrHeadlinerEncounter = false;
+        _isHeadlinerEncounter = false;
         _isEliteEncounter = false;
         _eliteKillCount = 0;
-        _earnedGoldReward = 0;
+        _earnedCreditsReward = 0;
         _processedEnemyDeaths.Clear();
         _reactions.Clear();
         _completedPlayerTurnCount = 0;

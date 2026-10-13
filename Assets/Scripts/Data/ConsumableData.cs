@@ -11,6 +11,7 @@ public enum ConsumableEffectType
 }
 
 [CreateAssetMenu(fileName = "Consumable", menuName = "Game/Trick")]
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ConsumableData")]
 public sealed class ConsumableData : ScriptableObject
 {
     public string id;

@@ -21,7 +21,7 @@ public sealed class Phase2EliteCombatTests
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         var prefab = CreateCardView("Phase2 Card Prefab");
         _cards = CreateComponent<CardManager>("Phase2 CardManager");
-        _cards.Configure(_field, canvas, prefab, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(_field, canvas, prefab, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _cards.BuildDeck();
         _cards.DealHand();
         _combat = CreateComponent<CombatManager>("Phase2 CombatManager");
@@ -44,7 +44,7 @@ public sealed class Phase2EliteCombatTests
     {
         var captain = LoadEnemy("GoblinCaptain");
         Assert.That(captain, Is.Not.Null);
-        Assert.That((captain.maxHp, captain.baseAttack, captain.goldReward), Is.EqualTo((16, 3, 0)));
+        Assert.That((captain.maxHp, captain.baseAttack, captain.creditsReward), Is.EqualTo((16, 3, 0)));
         var run = CreateComponent<RunManager>("Phase2 Elite RunManager");
         run.contentCatalog = UnityEditor.AssetDatabase.LoadAssetAtPath<RunContentCatalog>("Assets/Data/Run/PrototypeRunContent.asset");
         run.currentPath.Add(new PathNode { id = 1, kind = MapNodeType.Elite, contentId = captain.name,
@@ -64,7 +64,7 @@ public sealed class Phase2EliteCombatTests
             Assert.That((goblin.maxHp, goblin.currentAttack, goblin.EffectiveAttack),
                 Is.EqualTo((allyStats.hp, allyStats.attack, allyStats.attack + 1)));
         }
-        Assert.That((captain.maxHp, captain.baseAttack, captain.goldReward), Is.EqualTo((16, 3, 0)),
+        Assert.That((captain.maxHp, captain.baseAttack, captain.creditsReward), Is.EqualTo((16, 3, 0)),
             "Previewing and spawning must not mutate the authored source.");
     }
 
@@ -97,7 +97,7 @@ public sealed class Phase2EliteCombatTests
     {
         var knight = LoadEnemy("RoyalKnight");
         Assert.That(knight, Is.Not.Null);
-        Assert.That((knight.maxHp, knight.baseAttack, knight.goldReward), Is.EqualTo((32, 5, 0)));
+        Assert.That((knight.maxHp, knight.baseAttack, knight.creditsReward), Is.EqualTo((32, 5, 0)));
         var runtime = new EnemyRuntime(knight);
         Assert.That(runtime.HasRoyalGuard, Is.True);
         _combat.StartEnemy(runtime);
@@ -137,8 +137,8 @@ public sealed class Phase2EliteCombatTests
         first.IncreaseAttack(2);
         Assert.That((first.currentHp, first.currentAttack), Is.EqualTo((12, 5)));
         Assert.That((second.currentHp, second.currentAttack), Is.EqualTo((16, 3)));
-        Assert.That((captain.maxHp, captain.baseAttack, captain.goldReward), Is.EqualTo((16, 3, 0)));
-        Assert.That((knight.maxHp, knight.baseAttack, knight.goldReward), Is.EqualTo((32, 5, 0)));
+        Assert.That((captain.maxHp, captain.baseAttack, captain.creditsReward), Is.EqualTo((16, 3, 0)));
+        Assert.That((knight.maxHp, knight.baseAttack, knight.creditsReward), Is.EqualTo((32, 5, 0)));
     }
 
     [Test]
@@ -148,8 +148,8 @@ public sealed class Phase2EliteCombatTests
         var goblinType = CreateEnemyType("Goblin", 100, 2);
         var captain = new EnemyRuntime(captainType);
         var goblins = new[] { new EnemyRuntime(goblinType), new EnemyRuntime(goblinType) };
-        var retaliation = UnityEditor.AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/RetaliationEmblem.asset");
-        Assert.That(_cards.BuyArtifact(retaliation, 0), Is.True);
+        var retaliation = UnityEditor.AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/RetaliationEmblem.asset");
+        Assert.That(_cards.BuyGear(retaliation, 0), Is.True);
         _combat.StartEncounter(new[] { captain, goblins[0], goblins[1] });
         var attack = _field.cardsHolder.GetComponentsInChildren<CardView>()
             .Where(view => view.data != null && _cards.hand.Contains(view.data))

@@ -18,7 +18,7 @@ public sealed class Phase8QuestOfferTests
         GameplayInputGate.Clear();
         _cardsObject = new GameObject("Phase8 Quest CardManager");
         _cards = _cardsObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _combatObject = new GameObject("Phase8 Quest CombatManager");
         _combatObject.AddComponent<CombatManager>().ConfigurePlayer(30);
         _runObject = new GameObject("Phase8 Quest RunManager");
@@ -40,7 +40,7 @@ public sealed class Phase8QuestOfferTests
     [Test]
     public void ShopContractCostsTwentyAndOffersReachableEliteObjective()
     {
-        _cards.gold = 50;
+        _cards.credits = 50;
         var shop = new PathNode { id = 1, mapIndex = 0, kind = MapNodeType.Shop };
         shop.next.Add(2);
         var elite = new PathNode { id = 2, mapIndex = 0, kind = MapNodeType.Elite };
@@ -50,20 +50,20 @@ public sealed class Phase8QuestOfferTests
         SetQuestFixtureServices();
         var contract = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Contract);
         Assert.That(contract.price, Is.EqualTo(20));
-        Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.EqualTo("Purchase another Shop item first"));
+        Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.EqualTo("Purchase another Black Market item first"));
         var investment = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Investment);
         Assert.That(_run.PurchaseShopOffer(investment.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(45));
+        Assert.That(_cards.credits, Is.EqualTo(45));
         Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.Empty);
 
         RunEventDefinition shown = null;
         _run.OnShowEvent += definition => shown = definition;
         Assert.That(_run.PurchaseShopOffer(contract.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(45), "The fee is not charged while choosing an objective.");
+        Assert.That(_cards.credits, Is.EqualTo(45), "The fee is not charged while choosing an objective.");
         Assert.That(shown, Is.Not.Null);
         Assert.That(_run.GetEventOptionUnavailableReason(1), Is.Empty);
         Assert.That(_run.ChooseEventOption(1), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(25));
+        Assert.That(_cards.credits, Is.EqualTo(25));
         Assert.That(_run.ActiveContract.objective, Is.EqualTo(RunContractObjective.DefeatEliteThisMap));
         Assert.That(_run.ActiveContract.startedAtNodeId, Is.EqualTo(shop.id));
     }
@@ -71,7 +71,7 @@ public sealed class Phase8QuestOfferTests
     [Test]
     public void FailedAndFreeShopPurchasesDoNotUnlockContractOffer()
     {
-        _cards.gold = 50;
+        _cards.credits = 50;
         var shop = new PathNode { id = 1, mapIndex = 0, kind = MapNodeType.Shop };
         _run.currentPath.Add(shop);
         SetPrivate(_run, "_activeNode", shop);
@@ -80,24 +80,24 @@ public sealed class Phase8QuestOfferTests
         var contract = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Contract);
         var investment = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Investment);
         Assert.That(_run.PurchaseShopOffer("missing-offer"), Is.False);
-        var freeArtifact = ScriptableObject.CreateInstance<RelicData>();
+        var freeGear = ScriptableObject.CreateInstance<GearData>();
         try
         {
-            freeArtifact.id = "quest-free-fixture";
-            _cards.relicCatalog.Add(freeArtifact);
-            var freeOffer = new ShopOffer { kind = ShopOfferKind.Artifact, artifact = freeArtifact, price = 0 };
+            freeGear.id = "quest-free-fixture";
+            _cards.gearCatalog.Add(freeGear);
+            var freeOffer = new ShopOffer { kind = ShopOfferKind.Gear, gear = freeGear, price = 0 };
             ((List<ShopOffer>)_run.GetCurrentShopOffers()).Add(freeOffer);
             Assert.That(_run.PurchaseShopOffer(freeOffer.StableId), Is.True);
-            Assert.That(_cards.gold, Is.EqualTo(50));
-            Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.EqualTo("Purchase another Shop item first"));
+            Assert.That(_cards.credits, Is.EqualTo(50));
+            Assert.That(_run.GetShopOfferUnavailableReason(contract.StableId), Is.EqualTo("Purchase another Black Market item first"));
         }
-        finally { Object.DestroyImmediate(freeArtifact); }
+        finally { Object.DestroyImmediate(freeGear); }
     }
 
     [Test]
-    public void ContractSelectionCancelKeepsGoldAndReturnsToCurrentShop()
+    public void ContractSelectionCancelKeepsCreditsAndReturnsToCurrentShop()
     {
-        _cards.gold = 50;
+        _cards.credits = 50;
         var shop = new PathNode { id = 1, mapIndex = 0, kind = MapNodeType.Shop };
         _run.currentPath.Add(shop);
         SetPrivate(_run, "_activeNode", shop);
@@ -106,15 +106,15 @@ public sealed class Phase8QuestOfferTests
         var investment = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Investment);
         var contract = System.Linq.Enumerable.First(_run.GetCurrentShopOffers(), offer => offer.kind == ShopOfferKind.Contract);
         Assert.That(_run.PurchaseShopOffer(investment.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(45));
+        Assert.That(_cards.credits, Is.EqualTo(45));
 
         int showShopCount = 0;
         _run.OnShowEvent += _ => { };
         _run.OnShowShop += () => showShopCount++;
         Assert.That(_run.PurchaseShopOffer(contract.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(45));
+        Assert.That(_cards.credits, Is.EqualTo(45));
         Assert.That(_run.ChooseEventOption(3), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(45));
+        Assert.That(_cards.credits, Is.EqualTo(45));
         Assert.That(_run.ActiveContract, Is.Null);
         Assert.That(_run.ActiveEvent, Is.Null);
         Assert.That(_run.ActiveNode, Is.SameAs(shop));
@@ -125,13 +125,13 @@ public sealed class Phase8QuestOfferTests
     public void EliteObjectiveIsDisabledWhenNoRemainingEliteIsReachable()
     {
         var shop = new PathNode { id = 1, mapIndex = 0, kind = MapNodeType.Shop };
-        _cards.gold = 20;
+        _cards.credits = 20;
         _run.currentPath.Add(shop);
         SetPrivate(_run, "_activeNode", shop);
         _run.OnShowEvent += _ => { };
         Assert.That(InvokePrivateResult<bool>(_run, "ShowContractSelection", 20), Is.True);
         Assert.That(_run.CanChooseEventOption(1), Is.False);
-        Assert.That(_run.GetEventOptionUnavailableReason(1), Is.EqualTo("No reachable Elite remains on this map"));
+        Assert.That(_run.GetEventOptionUnavailableReason(1), Is.EqualTo("No reachable Enforcer remains in this District"));
     }
 
     void SetQuestFixtureServices()

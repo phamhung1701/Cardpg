@@ -13,7 +13,7 @@ Combat currently includes persistent player HP, optional defense by discarding c
 ## Where to look
 
 - Start with the files related to the requested change and their tests. Read broader documentation only when the task needs it.
-- `CARDPG_DEVELOPMENT.md` records historical implementation milestones and architecture; verify its claims against the current repository and use the confirmed Dealbreak GameData workbook for player-facing content names and terms.
+- `DEALBREAK_DEVELOPMENT.md` records historical implementation milestones and architecture; verify its claims against the current repository and use the confirmed Dealbreak GameData workbook for player-facing content names and terms.
 - `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx` is the current source of truth for canonical content names and terminology. Workbook statuses distinguish implemented content from drafts; the workbook’s legacy-ID crosswalk does not authorize changing Unity or save IDs.
 - Important areas to locate as needed: `Assets/Scripts/Managers/CombatManager.cs`, `RunManager.cs`, `CardManager.cs`; card/runtime models under `Assets/Scripts/Data/`; randomness under `Assets/Scripts/Randomness/`; tests under `Assets/Tests/`.
 - For current behavior, the code, authored assets, and passing tests are primary evidence. For intended changes, follow the explicit task prompt and record ambiguities instead of guessing.
@@ -25,7 +25,7 @@ Combat currently includes persistent player HP, optional defense by discarding c
 3. Keep gameplay behavior deterministic. Preserve existing random streams and consumption order; previews must not change state or consume RNG. Do not use scene hierarchy, C# event subscription order, hash iteration, or Unity instance IDs to determine gameplay order.
 4. Keep runtime state on runtime objects, not shared ScriptableObject definitions. Preserve serialized fields, GUIDs, `.meta` files, and scene/prefab references. For asset changes, use Unity APIs or careful verified edits.
 5. Keep card ownership and zone transitions authoritative. A UI `CardView` may validate an interaction, but combat resolution should use the committed `CardInstance` and exact `EnemyRuntime` target.
-6. Avoid content-ID checks in central managers. Prefer existing typed Artifact, Enhancement, and `EnemyAbility` authoring structures with focused behavior code. One mechanic must have one active execution path.
+6. Avoid content-ID checks in central managers. Prefer existing typed `GearData`, `CardEnhancementData`, and `EnemyAbility` authoring structures with focused behavior code. One mechanic must have one active execution path.
 7. Compile and run relevant EditMode tests after meaningful changes. Use PlayMode tests or an explicit Unity smoke check when scenes, prefabs, input, or presentation are affected. Report what actually ran, its result, and what could not be run.
 8. At the end, report changed files, behavior changes, tests, unresolved decisions, and risks. Do not claim a phase is complete based only on code inspection or historical test counts.
 

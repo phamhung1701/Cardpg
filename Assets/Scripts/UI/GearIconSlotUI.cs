@@ -4,17 +4,18 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-/// <summary>One glyph-only artifact slot. The rail supplies its tooltip and detail actions.</summary>
-public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
+/// <summary>One glyph-only Gear slot. The rail supplies its tooltip and detail actions.</summary>
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ArtifactIconSlotUI")]
+public sealed class GearIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
     [SerializeField] TMP_Text iconLabel;
     Image _authoredIcon;
 
-    RelicData _artifact;
-    Action<RelicData> _hover;
-    Action<RelicData> _leave;
-    Action<RelicData> _select;
-    Action<long, RelicData> _mergeSelect;
+    GearData _gear;
+    Action<GearData> _hover;
+    Action<GearData> _leave;
+    Action<GearData> _select;
+    Action<long, GearData> _mergeSelect;
     long _instanceId;
     Sprite _occupiedSlotSprite;
     Sprite _emptySlotSprite;
@@ -24,7 +25,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
     bool _mergeMode;
     bool _mergeEligible = true;
 
-    public RelicData Artifact => _artifact;
+    public GearData Gear => _gear;
     public long InstanceId => _instanceId;
     public bool IsDetailSelected => _detailSelected;
 
@@ -38,7 +39,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
 
     public void SetDetailSelected(bool selected)
     {
-        _detailSelected = selected && _artifact != null;
+        _detailSelected = selected && _gear != null;
         var outline = GetComponent<Outline>();
         if (outline)
         {
@@ -51,7 +52,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
 
     public void BindEmpty()
     {
-        _artifact = null;
+        _gear = null;
         _hover = null;
         _leave = null;
         _select = null;
@@ -70,11 +71,11 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         RefreshSlotBackground();
     }
 
-    public void Bind(RelicData artifact, Action<RelicData> hover, Action<RelicData> leave,
-        Action<RelicData> select, long instanceId, Action<long, RelicData> mergeSelect, bool mergeSelected,
+    public void Bind(GearData gear, Action<GearData> hover, Action<GearData> leave,
+        Action<GearData> select, long instanceId, Action<long, GearData> mergeSelect, bool mergeSelected,
         bool mergeMode = false, bool mergeEligible = true, bool detailSelected = false)
     {
-        _artifact = artifact;
+        _gear = gear;
         _hover = hover;
         _leave = leave;
         _select = select;
@@ -98,11 +99,11 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         if (image) image.preserveAspect = true;
         RefreshSlotBackground();
         if (!iconLabel) iconLabel = GetComponentInChildren<TMP_Text>();
-        bool hasAuthoredIcon = artifact != null && artifact.iconSprite;
+        bool hasAuthoredIcon = gear != null && gear.iconSprite;
         if (hasAuthoredIcon)
         {
             EnsureAuthoredIcon();
-            _authoredIcon.sprite = artifact.iconSprite;
+            _authoredIcon.sprite = gear.iconSprite;
             _authoredIcon.gameObject.SetActive(true);
         }
         else if (_authoredIcon)
@@ -110,8 +111,8 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
         if (iconLabel)
         {
             iconLabel.color = _mergeSelected ? new Color(0.11f, 0.13f, 0.2f) : new Color(0.96f, 0.92f, 0.78f);
-            iconLabel.text = artifact != null && !string.IsNullOrWhiteSpace(artifact.icon)
-                ? artifact.icon : "?";
+            iconLabel.text = gear != null && !string.IsNullOrWhiteSpace(gear.icon)
+                ? gear.icon : "?";
             iconLabel.gameObject.SetActive(!hasAuthoredIcon);
         }
     }
@@ -134,7 +135,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
     {
         var image = GetComponent<Image>();
         if (image == null) return;
-        var sprite = _artifact == null ? _emptySlotSprite
+        var sprite = _gear == null ? _emptySlotSprite
             : (_mergeSelected || _detailSelected) && _selectedSlotSprite != null ? _selectedSlotSprite : _occupiedSlotSprite;
         if (sprite != null)
         {
@@ -144,7 +145,7 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
             image.color = Color.white;
         }
         else
-            image.color = _artifact == null ? new Color(0.12f, 0.16f, 0.22f, 0.55f)
+            image.color = _gear == null ? new Color(0.12f, 0.16f, 0.22f, 0.55f)
                 : _mergeSelected ? new Color(0.25f, 0.58f, 0.34f, 0.95f)
                 : _detailSelected ? new Color(0.2f, 0.45f, 0.62f, 0.95f)
                 : new Color(0.16f, 0.20f, 0.27f, 0.78f);
@@ -152,30 +153,30 @@ public sealed class ArtifactIconSlotUI : MonoBehaviour, IPointerEnterHandler, IP
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (_artifact) _hover?.Invoke(_artifact);
+        if (_gear) _hover?.Invoke(_gear);
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        if (_artifact) _leave?.Invoke(_artifact);
+        if (_gear) _leave?.Invoke(_gear);
     }
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (_artifact && !GameplayInputGate.IsBlocked &&
+        if (_gear && !GameplayInputGate.IsBlocked &&
             CardManager.Instance?.IsHandEnhancementTargeting != true && CardManager.Instance?.IsEnemyTargeting != true &&
             eventData.button == PointerEventData.InputButton.Left)
         {
             if (_mergeMode)
             {
-                if (_mergeEligible || _mergeSelected) _mergeSelect?.Invoke(_instanceId, _artifact);
+                if (_mergeEligible || _mergeSelected) _mergeSelect?.Invoke(_instanceId, _gear);
             }
-            else _select?.Invoke(_artifact);
+            else _select?.Invoke(_gear);
         }
     }
 
     void OnDisable()
     {
-        if (_artifact) _leave?.Invoke(_artifact);
+        if (_gear) _leave?.Invoke(_gear);
     }
 }

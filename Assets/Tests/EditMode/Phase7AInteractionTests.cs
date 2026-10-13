@@ -25,7 +25,7 @@ public sealed class Phase7AInteractionTests
         _cardPrefab = CreateCardView("Phase7A Card Prefab");
 
         _cards = CreateComponent<CardManager>("Phase7A CardManager");
-        _cards.Configure(_field, _dragCanvas, _cardPrefab, System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>());
+        _cards.Configure(_field, _dragCanvas, _cardPrefab, System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>());
         _cards.BuildDeck();
         _cards.DealHand();
 
@@ -70,10 +70,10 @@ public sealed class Phase7AInteractionTests
         var enemies = new[] { new EnemyRuntime(type, 1, 2), new EnemyRuntime(type, 2, 2) };
         _combat.StartEncounter(enemies);
         Assert.That(_combat.TryPlayCards(new[] { HandViews()[0] }, enemies[0]), Is.True);
-        var bonus = ScriptableObject.CreateInstance<RelicData>();
+        var bonus = ScriptableObject.CreateInstance<GearData>();
         bonus.defenseBonus = 3;
         _created.Add(bonus);
-        _cards.ownedArtifacts.Add(bonus);
+        _cards.ownedGear.Add(bonus);
 
         var candidates = HandViews().Where(view => _combat.CalculateCardDefense(view.data) >= 3).Take(3).ToArray();
         Assert.That(candidates.Length, Is.EqualTo(3));
@@ -110,10 +110,10 @@ public sealed class Phase7AInteractionTests
         Assert.That(_cards.discardPile.Count, Is.EqualTo(1));
         Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
 
-        var bonus = ScriptableObject.CreateInstance<RelicData>();
+        var bonus = ScriptableObject.CreateInstance<GearData>();
         bonus.defenseBonus = 5;
         _created.Add(bonus);
-        _cards.ownedArtifacts.Add(bonus);
+        _cards.ownedGear.Add(bonus);
         var defender = HandViews().First(view => _combat.CalculateCardDefense(view.data) >= 5);
         int discardBeforeBlock = _cards.discardPile.Count;
         int deckBeforeBlock = _cards.deck.Count;

@@ -35,7 +35,7 @@ public sealed class Phase7EEnhancementTargetTests
         var prefabObject = new GameObject("Card View", typeof(RectTransform), typeof(Image), typeof(CardView));
         _objects.Add(prefabObject);
         _cards.Configure(handField, canvas, prefabObject.GetComponent<CardView>(),
-            System.Array.Empty<RelicData>(), new[] { _enhancement });
+            System.Array.Empty<GearData>(), new[] { _enhancement });
         var combat = Make<CombatManager>("Combat");
         combat.ConfigurePlayer(30);
         _run = Make<RunManager>("Run");
@@ -62,23 +62,23 @@ public sealed class Phase7EEnhancementTargetTests
     public void Shop_AppliesToChosenInstanceOnly_AndChargesCachedPriceExactlyOnce()
     {
         var offer = OpenShopOffer();
-        _cards.AddGold(50);
+        _cards.AddCredits(50);
         var chosen = _cards.hand[0];
         var untouched = _cards.hand[1];
         var notInHand = _cards.ownedCards.First(card => !_cards.hand.Contains(card));
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, notInHand.Id), Is.False,
             "Acquisition targeting must not expand from the hand to the rest of the owned deck.");
-        Assert.That(_cards.gold, Is.EqualTo(50));
+        Assert.That(_cards.credits, Is.EqualTo(50));
         int price = offer.price;
         offer.enhancement.price += 200;
         Assert.That(_run.PurchaseShopOffer(offer.StableId), Is.False, "Implicit target cannot purchase");
-        Assert.That(_cards.gold, Is.EqualTo(50));
+        Assert.That(_cards.credits, Is.EqualTo(50));
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, chosen.Id), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(50 - price));
+        Assert.That(_cards.credits, Is.EqualTo(50 - price));
         Assert.That(chosen.Enhancement, Is.SameAs(_enhancement));
         Assert.That(untouched.Enhancement, Is.Null);
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, chosen.Id), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(50 - price));
+        Assert.That(_cards.credits, Is.EqualTo(50 - price));
         Assert.That(_cards.ownedCards.Count, Is.EqualTo(40));
     }
 
@@ -86,7 +86,7 @@ public sealed class Phase7EEnhancementTargetTests
     public void Shop_RequiresExplicitReplacementConfirmation_AndChargesOnlyAfterIt()
     {
         var offer = OpenShopOffer();
-        _cards.AddGold(40);
+        _cards.AddCredits(40);
         var invalid = _cards.hand[0];
         var replacement = ScriptableObject.CreateInstance<CardEnhancementData>();
         replacement.id = "old-sharp";
@@ -108,7 +108,7 @@ public sealed class Phase7EEnhancementTargetTests
             "Reapplying the exact Enhancement reference is a no-op.");
         Assert.That(invalid.EffectState.GetCounter(0), Is.EqualTo(7));
         Assert.That(invalid.EffectState.GetEncounterCounter(0), Is.EqualTo(4));
-        Assert.That(_cards.gold, Is.EqualTo(40));
+        Assert.That(_cards.credits, Is.EqualTo(40));
         var newEnhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
         newEnhancement.id = "new-sharp";
         newEnhancement.displayName = "New Sharp";
@@ -121,14 +121,14 @@ public sealed class Phase7EEnhancementTargetTests
         Assert.That(invalid.EffectState.GetEncounterCounter(0), Is.Zero);
         Assert.That(invalid.PermanentAttackBonus, Is.EqualTo(3));
         Assert.That(invalid.Suit, Is.EqualTo(preservedSuit));
-        Assert.That(_cards.gold, Is.EqualTo(40 - offer.price));
+        Assert.That(_cards.credits, Is.EqualTo(40 - offer.price));
         invalid.EffectState.SetCounter(0, 9);
         invalid.EffectState.SetEncounterCounter(0, 6);
-        int goldAfterReplacement = _cards.gold;
+        int creditsAfterReplacement = _cards.credits;
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, invalid.Id, true), Is.False);
         Assert.That(_run.GetEnhancementAcquisitionTargetUnavailableReason(invalid.Id, newEnhancement),
             Is.EqualTo("Card already has this Mod"));
-        Assert.That(_cards.gold, Is.EqualTo(goldAfterReplacement));
+        Assert.That(_cards.credits, Is.EqualTo(creditsAfterReplacement));
         Assert.That(invalid.EffectState.GetCounter(0), Is.EqualTo(9));
         Assert.That(invalid.EffectState.GetEncounterCounter(0), Is.EqualTo(6));
     }
@@ -137,7 +137,7 @@ public sealed class Phase7EEnhancementTargetTests
     public void RemovedOwnedCard_IsRejectedAtConfirmation_WithoutSpendingOrLosingOffer()
     {
         var offer = OpenShopOffer();
-        _cards.AddGold(40);
+        _cards.AddCredits(40);
         int removedId = _cards.hand[0].Id;
         var collection = (CardCollection)typeof(CardManager)
             .GetField("_cards", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
@@ -145,44 +145,44 @@ public sealed class Phase7EEnhancementTargetTests
         collection.Initialize(_cards.ownedCards.Where(card => card.Id != removedId).ToArray());
         Assert.That(_cards.FindOwnedCard(removedId), Is.Null);
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, removedId), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(40));
+        Assert.That(_cards.credits, Is.EqualTo(40));
         Assert.That(_run.GetCurrentShopOffers(), Does.Contain(offer));
         Assert.That(_cards.ownedCards.Count, Is.EqualTo(39));
         _cards.DealHand();
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, _cards.hand[0].Id), Is.True);
         Assert.That(_cards.ownedCards.Count, Is.EqualTo(39));
-        Assert.That(_cards.gold, Is.EqualTo(40 - offer.price));
+        Assert.That(_cards.credits, Is.EqualTo(40 - offer.price));
     }
 
     [Test]
     public void Shop_RejectsRemovedOfferInvalidPriceAndClosedNode()
     {
         var offer = OpenShopOffer();
-        _cards.AddGold(40);
+        _cards.AddCredits(40);
         int cardId = _cards.hand[0].Id;
         offer.price = -1;
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, cardId), Is.False);
         offer.price = 9;
         ((List<ShopOffer>)_run.GetCurrentShopOffers()).Remove(offer);
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, cardId), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(40));
+        Assert.That(_cards.credits, Is.EqualTo(40));
         Assert.That(_cards.FindOwnedCard(cardId).Enhancement, Is.Null);
         _run.OnShopDone();
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, cardId), Is.False);
     }
 
     [Test]
-    public void Upgrade_AppliesToPlayerChosenCard_OnlyOnce_WithoutChargingGold()
+    public void Upgrade_AppliesToPlayerChosenCard_OnlyOnce_WithoutChargingCredits()
     {
         var offer = OpenUpgradeOffer();
         var chosen = _cards.hand[0];
         var other = _cards.hand[1];
-        _cards.AddGold(18);
+        _cards.AddCredits(18);
         Assert.That(_run.ChooseUpgradeOffer(0), Is.False);
         Assert.That(_run.ChooseUpgradeOffer(0, chosen.Id), Is.True);
         Assert.That(chosen.Enhancement, Is.SameAs(offer.enhancement));
         Assert.That(other.Enhancement, Is.Null);
-        Assert.That(_cards.gold, Is.EqualTo(18));
+        Assert.That(_cards.credits, Is.EqualTo(18));
         Assert.That(_run.ActiveNode, Is.Null);
         Assert.That(_run.ChooseUpgradeOffer(0, other.Id), Is.False);
     }
@@ -226,7 +226,7 @@ public sealed class Phase7EEnhancementTargetTests
     public void EqualSuitRankInstances_RemainIndependent_WhenOnlyOneIsChosen()
     {
         var offer = OpenShopOffer();
-        _cards.AddGold(40);
+        _cards.AddCredits(40);
         var original = _cards.hand[0];
         var duplicate = new CardInstance(original.Definition, 9000);
         // Establish a second owned instance of the same definition through the model, not a card view.
@@ -248,7 +248,7 @@ public sealed class Phase7EEnhancementTargetTests
         var first = OpenShopOffer();
         var offerIds = string.Join(",", _run.GetCurrentShopOffers().Select(o => o.StableId));
         string mapSignature = string.Join(",", _run.GenerateMapForIndex(4).Select(n => $"{n.id}:{n.kind}:{n.contentId}"));
-        _cards.AddGold(40);
+        _cards.AddCredits(40);
         Assert.That(_run.PurchaseShopEnhancement(first.StableId, _cards.hand[0].Id), Is.True);
         string afterChoice = string.Join(",", _run.GenerateMapForIndex(4).Select(n => $"{n.id}:{n.kind}:{n.contentId}"));
         Assert.That(afterChoice, Is.EqualTo(mapSignature));
@@ -282,7 +282,7 @@ public sealed class Phase7EEnhancementTargetTests
     public void HandFieldClick_ArmsRealCardView_RequiresExplicitReplacementAndChargesOnce()
     {
         var offer = OpenShopOffer();
-        _cards.AddGold(40);
+        _cards.AddCredits(40);
         var oldEnhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
         oldEnhancement.id = "old";
         oldEnhancement.displayName = "Old Sharp";
@@ -301,24 +301,24 @@ public sealed class Phase7EEnhancementTargetTests
             .Single(card => card.data == target);
         view.OnPointerClick(new PointerEventData(_eventSystem) { button = PointerEventData.InputButton.Left });
         Assert.That(_picker.SelectedCardId, Is.EqualTo(target.Id));
-        int goldBefore = _cards.gold;
+        int creditsBefore = _cards.credits;
         _picker.confirmButton.onClick.Invoke();
         Assert.That(_picker.feedbackLabel.text, Does.Contain("Confirm again"));
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore), "First confirmation only authorizes replacement.");
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore), "First confirmation only authorizes replacement.");
         Assert.That(target.Enhancement, Is.SameAs(oldEnhancement));
         _picker.confirmButton.onClick.Invoke();
         Assert.That(target.Enhancement, Is.SameAs(_enhancement));
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore - offer.price));
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore - offer.price));
         Assert.That(_cards.IsHandEnhancementTargeting, Is.False);
         _picker.confirmButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore - offer.price), "Repeated confirmation cannot charge twice.");
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore - offer.price), "Repeated confirmation cannot charge twice.");
     }
 
     [Test]
     public void HandFieldTarget_CancelAndRestartClearPendingChoiceWithoutPayment()
     {
         var offer = OpenShopOffer();
-        _cards.AddGold(40);
+        _cards.AddCredits(40);
         var shopUI = Make<ShopUI>("Shop UI");
         var sourceModal = new GameObject("Shop Modal", typeof(RectTransform));
         _objects.Add(sourceModal);
@@ -337,7 +337,7 @@ public sealed class Phase7EEnhancementTargetTests
         Assert.That(_picker.titleLabel.rectTransform.parent.GetComponent<RectTransform>().sizeDelta,
             Is.EqualTo(new Vector2(920f, 760f)), "The authored card layout is restored after targeting.");
         Assert.That(_picker.cardsContainer.GetComponentInParent<ScrollRect>(true).gameObject.activeSelf, Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(40));
+        Assert.That(_cards.credits, Is.EqualTo(40));
 
         _picker.OpenShop(offer.StableId);
         Assert.That(sourceModal.activeSelf, Is.False);
@@ -347,7 +347,7 @@ public sealed class Phase7EEnhancementTargetTests
         _run.RestartRun();
         Assert.That(_cards.IsHandEnhancementTargeting, Is.False);
         Assert.That(_picker.panel.activeSelf, Is.False);
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(_cards.ownedCards.All(card => card.Enhancement == null), Is.True);
     }
 

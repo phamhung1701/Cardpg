@@ -34,7 +34,7 @@ public sealed class DrawDeckStackUITests
         ((RectTransform)template.transform).anchoredPosition = new Vector2(5000f, 5000f);
         template.GetComponent<Image>().enabled = false;
         _cardPrefab = template.GetComponent<CardView>();
-        _cards.Configure(_field, _canvas, _cardPrefab, System.Array.Empty<RelicData>());
+        _cards.Configure(_field, _canvas, _cardPrefab, System.Array.Empty<GearData>());
         var host = Create("Deck Stack", typeof(RectTransform));
         _root = (RectTransform)host.transform;
         _root.sizeDelta = new Vector2(90f, 120f);
@@ -143,7 +143,7 @@ public sealed class DrawDeckStackUITests
     }
 
     [Test]
-    public void RecycleAndBossRewardMutations_ImmediatelyRefreshCount()
+    public void RecycleAndHeadlinerRewardMutations_ImmediatelyRefreshCount()
     {
         _cards.BuildDeck();
         Assert.That(_cards.DrawToHand(3), Is.EqualTo(3));
@@ -156,9 +156,9 @@ public sealed class DrawDeckStackUITests
         Assert.That(_stack.DisplayedCount, Is.EqualTo(38));
         Assert.That(_stack.DisplayedDepth, Is.EqualTo(4));
 
-        var sourceBossCard = CardData.Create(CardData.Suit.Spades, CardData.Rank.King);
-        _created.Add(sourceBossCard);
-        Assert.That(_cards.AddBossReward(sourceBossCard), Is.Not.Null);
+        var sourceHeadlinerCard = CardData.Create(CardData.Suit.Spades, CardData.Rank.King);
+        _created.Add(sourceHeadlinerCard);
+        Assert.That(_cards.AddHeadlinerReward(sourceHeadlinerCard), Is.Not.Null);
         Assert.That(_stack.DisplayedCount, Is.EqualTo(39));
 
         _cards.Reset();

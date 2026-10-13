@@ -20,7 +20,7 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
     ConsumableData _knife;
     ConsumableData _other;
     ConsumableData[] _extras;
-    RelicData _stackRelic;
+    GearData _stackGear;
 
     [SetUp]
     public void SetUp()
@@ -54,12 +54,12 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
             item.healAmount = 1;
             return item;
         }).ToArray();
-        _stackRelic = ScriptableObject.CreateInstance<RelicData>();
-        _created.Add(_stackRelic);
-        _stackRelic.id = "test_stack_relic";
-        _stackRelic.displayName = "Test Stack Pack";
-        _stackRelic.price = 0;
-        _stackRelic.specialRule = ArtifactSpecialRule.TravelerPackRare;
+        _stackGear = ScriptableObject.CreateInstance<GearData>();
+        _created.Add(_stackGear);
+        _stackGear.id = "test_stack_relic";
+        _stackGear.displayName = "Test Stack Pack";
+        _stackGear.price = 0;
+        _stackGear.specialRule = GearSpecialRule.TravelerPackRare;
 
         var fieldRoot = Create("Targeting Test Hand", typeof(RectTransform), typeof(Field));
         var field = fieldRoot.GetComponent<Field>();
@@ -68,10 +68,10 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         var cardPrefabObject = Create("Targeting Test Card Prefab", typeof(RectTransform), typeof(Image), typeof(CardView));
         _cards = Create("Targeting Test Cards", typeof(CardManager)).GetComponent<CardManager>();
         _cards.Configure(field, dragCanvasObject.GetComponent<Canvas>(), cardPrefabObject.GetComponent<CardView>(),
-            new[] { _stackRelic }, System.Array.Empty<CardEnhancementData>(), new[] { _knife, _heal, _other }.Concat(_extras).ToArray());
+            new[] { _stackGear }, System.Array.Empty<CardEnhancementData>(), new[] { _knife, _heal, _other }.Concat(_extras).ToArray());
         _cards.ConfigureRandom(new DeterministicRandom(540021));
         _cards.BuildDeck();
-        Assert.That(_cards.BuyArtifact(_stackRelic, 0), Is.True);
+        Assert.That(_cards.BuyGear(_stackGear, 0), Is.True);
 
         _combat = Create("Targeting Test Combat", typeof(CombatManager)).GetComponent<CombatManager>();
         _combat.ConfigurePlayer(30);
@@ -115,7 +115,7 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         sell.onClick.Invoke();
 
         Assert.That(_cards.GetConsumableAtSlot(0), Is.Null);
-        Assert.That(_cards.gold, Is.EqualTo(5), "The selected instance is sold and paid exactly once.");
+        Assert.That(_cards.credits, Is.EqualTo(5), "The selected instance is sold and paid exactly once.");
         Assert.That(_actions.transform.Find("Selected Consumable Actions").gameObject.activeSelf, Is.False);
 
         Assert.That(_cards.AddConsumable(_heal), Is.True);
@@ -358,7 +358,7 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         Assert.That(_cards.GetConsumableInstanceAtSlot(0), Is.SameAs(retained));
         Assert.That(retained.RemainingCharges, Is.EqualTo(_heal.uses));
         Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(_cards.BackpackCapacity), "Discarding from a stack does not free its slot.");
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
     }
 
     [Test]

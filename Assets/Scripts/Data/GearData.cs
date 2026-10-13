@@ -1,12 +1,14 @@
 using UnityEngine;
 
-public enum ArtifactCapacityCategory
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ArtifactCapacityCategory")]
+public enum GearCapacityCategory
 {
     Persistent = 0,
     NonSlot = 1
 }
 
-public enum ArtifactSpecialRule
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ArtifactSpecialRule")]
+public enum GearSpecialRule
 {
     None = 0,
     RareClub = 1,
@@ -61,22 +63,23 @@ public enum ArtifactSpecialRule
     MasterThief = 50
 }
 
-[CreateAssetMenu(fileName = "Artifact", menuName = "Game/Gear Data")]
-public class RelicData : ScriptableObject
+[CreateAssetMenu(fileName = "Gear", menuName = "Game/Gear Data")]
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RelicData")]
+public class GearData : ScriptableObject
 {
     public string id;
     public string displayName;
     public string icon;
-    [Tooltip("Optional authored artifact icon. The existing icon text is used when this is unassigned.")]
+    [Tooltip("Optional authored Gear icon. The existing icon text is used when this is unassigned.")]
     public Sprite iconSprite;
     [TextArea] public string description;
     [Min(0)] public int price;
 
     [Header("Capacity")]
-    // Existing authored Artifacts default to Persistent; future temporary/system/quest
-    // Artifacts may be marked NonSlot without relying on names or creating a new inventory.
-    public ArtifactCapacityCategory capacityCategory = ArtifactCapacityCategory.Persistent;
-    public bool OccupiesCapacitySlot => capacityCategory == ArtifactCapacityCategory.Persistent;
+    // Existing authored Gear defaults to Persistent; future temporary/system/quest
+    // Gear may be marked NonSlot without relying on names or creating a new inventory.
+    public GearCapacityCategory capacityCategory = GearCapacityCategory.Persistent;
+    public bool OccupiesCapacitySlot => capacityCategory == GearCapacityCategory.Persistent;
 
     [Header("Canonical Content Metadata")]
     public string canonicalId;
@@ -87,7 +90,7 @@ public class RelicData : ScriptableObject
     [Header("Typed Gameplay Effects")]
     public GameplayEffectDefinition[] effects = System.Array.Empty<GameplayEffectDefinition>();
     public GameplayRuleModifierData[] ruleModifiers = System.Array.Empty<GameplayRuleModifierData>();
-    public ArtifactSpecialRule specialRule;
+    public GearSpecialRule specialRule;
 
     [Header("Legacy Prototype Hooks (used only without typed effects)")]
     public bool restrictToSuit;
@@ -104,7 +107,7 @@ public class RelicData : ScriptableObject
 
     [Header("Encounter Hooks")]
     [Min(0)] public int healAfterVictory;
-    [Min(0)] public int bonusGold;
+    [Min(0)] public int bonusCredits;
 
     public bool Matches(CardInstance card)
     {
@@ -114,8 +117,8 @@ public class RelicData : ScriptableObject
     }
 
     public int ModifyAttack(CardInstance card, int currentDamage) =>
-        GameplayEffectResolver.ModifyWithSingleArtifact(this, card, currentDamage, false);
+        GameplayEffectResolver.ModifyWithSingleGear(this, card, currentDamage, false);
 
     public int ModifyDefense(CardInstance card, int currentDefense) =>
-        GameplayEffectResolver.ModifyWithSingleArtifact(this, card, currentDefense, true);
+        GameplayEffectResolver.ModifyWithSingleGear(this, card, currentDefense, true);
 }

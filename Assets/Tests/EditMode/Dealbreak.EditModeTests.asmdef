@@ -1,11 +1,13 @@
 {
-  "name": "CardPG.PlayModeTests",
+  "name": "Dealbreak.EditModeTests",
   "rootNamespace": "",
   "references": [
-    "CardPG.Runtime",
+    "Dealbreak.Runtime",
     "Unity.TextMeshPro"
   ],
-  "includePlatforms": [],
+  "includePlatforms": [
+    "Editor"
+  ],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,

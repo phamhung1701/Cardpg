@@ -49,7 +49,7 @@ public sealed class Phase4DeterminismTests
 
         Assert.That(Signature(first), Is.EqualTo(Signature(second)));
         Assert.That(first.Count, Is.EqualTo(RunMapGenerator.RowCount * RunMapGenerator.RouteColumnCount + 1));
-        Assert.That(first.Count(node => node.kind == MapNodeType.Boss), Is.EqualTo(1));
+        Assert.That(first.Count(node => node.kind == MapNodeType.Headliner), Is.EqualTo(1));
         Assert.That(first.Any(node => node.next.Count > 1), Is.True, "Expected at least one fork.");
 
         var incoming = first.SelectMany(node => node.next).GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
@@ -86,9 +86,9 @@ public sealed class Phase4DeterminismTests
         CreateEnemy("Knight", 25, 8, 10)
     };
 
-    EnemyTypeData CreateEnemy(string name, int hp, int attack, int gold)
+    EnemyTypeData CreateEnemy(string name, int hp, int attack, int credits)
     {
-        var enemy = EnemyTypeData.Create(name, hp, attack, gold);
+        var enemy = EnemyTypeData.Create(name, hp, attack, credits);
         enemy.name = name;
         _assets.Add(enemy);
         return enemy;
@@ -127,10 +127,10 @@ public sealed class Phase4RunIntegrationTests
         _cards = _cardObject.AddComponent<CardManager>();
         _cards.Configure(null, null, null, new[]
         {
-            CreateRelic("relic_a"),
-            CreateRelic("relic_b"),
-            CreateRelic("relic_c"),
-            CreateRelic("relic_d")
+            CreateGear("relic_a"),
+            CreateGear("relic_b"),
+            CreateGear("relic_c"),
+            CreateGear("relic_d")
         });
         _combatObject = new GameObject("Phase4 CombatManager");
         _combat = _combatObject.AddComponent<CombatManager>();
@@ -154,10 +154,10 @@ public sealed class Phase4RunIntegrationTests
     }
 
     [Test]
-    public void SameSeed_ReproducesBossesDeckAndMap()
+    public void SameSeed_ReproducesHeadlinersDeckAndMap()
     {
         _run.StartRunWithSeed("REPEATABLE");
-        string firstBosses = BossSignature();
+        string firstHeadliners = HeadlinerSignature();
         string firstDeck = DeckSignature();
         string firstMap = MapSignature(_run.currentPath);
 
@@ -166,7 +166,7 @@ public sealed class Phase4RunIntegrationTests
 
         _run.StartRunWithSeed("REPEATABLE");
 
-        Assert.That(BossSignature(), Is.EqualTo(firstBosses));
+        Assert.That(HeadlinerSignature(), Is.EqualTo(firstHeadliners));
         Assert.That(DeckSignature(), Is.EqualTo(firstDeck));
         Assert.That(MapSignature(_run.currentPath), Is.EqualTo(firstMap));
         Assert.That(MapSignature(_run.GenerateMapForIndex(22)), Is.EqualTo(arbitraryMapAfterCardConsumption));
@@ -176,10 +176,10 @@ public sealed class Phase4RunIntegrationTests
     public void DifferentSeed_ChangesGeneratedRun()
     {
         _run.StartRunWithSeed("SEED-A");
-        string first = $"{BossSignature()}::{DeckSignature()}::{MapSignature(_run.currentPath)}";
+        string first = $"{HeadlinerSignature()}::{DeckSignature()}::{MapSignature(_run.currentPath)}";
 
         _run.StartRunWithSeed("SEED-B");
-        string second = $"{BossSignature()}::{DeckSignature()}::{MapSignature(_run.currentPath)}";
+        string second = $"{HeadlinerSignature()}::{DeckSignature()}::{MapSignature(_run.currentPath)}";
 
         Assert.That(second, Is.Not.EqualTo(first));
     }
@@ -197,7 +197,7 @@ public sealed class Phase4RunIntegrationTests
             effects = new[]
             {
                 new RunEffect { type = RunEffectType.LoseHealth, amount = 5 },
-                new RunEffect { type = RunEffectType.GainGold, amount = 10 }
+                new RunEffect { type = RunEffectType.GainCredits, amount = 10 }
             }
         };
 
@@ -205,7 +205,7 @@ public sealed class Phase4RunIntegrationTests
         Assert.That(RunEffectResolver.Apply(lethal, _cards, _combat), Is.False);
         Assert.That(RunEffectResolver.Apply(safe, _cards, _combat), Is.True);
         Assert.That(_combat.player.currentHealth, Is.EqualTo(25));
-        Assert.That(_cards.gold, Is.EqualTo(10));
+        Assert.That(_cards.credits, Is.EqualTo(10));
     }
 
     [Test]
@@ -253,24 +253,24 @@ public sealed class Phase4RunIntegrationTests
         Assert.That(player.currentHealth, Is.EqualTo(27));
     }
 
-    string BossSignature() => string.Join(",", _run.bossDeck.Select(boss => boss.sourceCard.DisplayName));
+    string HeadlinerSignature() => string.Join(",", _run.headlinerDeck.Select(headliner => headliner.sourceCard.DisplayName));
     string DeckSignature() => string.Join(",", _cards.deck.Select(card => card.DisplayName));
     static string MapSignature(IEnumerable<PathNode> nodes) => string.Join("|", nodes.Select(node =>
         $"{node.id}:{node.kind}:{node.contentId}:{node.hidden}:{string.Join(",", node.next)}"));
 
-    RelicData CreateRelic(string id)
+    GearData CreateGear(string id)
     {
-        var relic = ScriptableObject.CreateInstance<RelicData>();
-        relic.id = id;
-        relic.displayName = id;
-        relic.price = 10;
-        _assets.Add(relic);
-        return relic;
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = id;
+        gear.displayName = id;
+        gear.price = 10;
+        _assets.Add(gear);
+        return gear;
     }
 
-    EnemyTypeData CreateEnemy(string name, int hp, int attack, int gold)
+    EnemyTypeData CreateEnemy(string name, int hp, int attack, int credits)
     {
-        var enemy = EnemyTypeData.Create(name, hp, attack, gold);
+        var enemy = EnemyTypeData.Create(name, hp, attack, credits);
         enemy.name = name;
         _assets.Add(enemy);
         return enemy;

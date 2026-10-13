@@ -19,7 +19,7 @@ public enum CombatReactionPhase
 public enum CombatReactionSourceCategory
 {
     Core,
-    Artifact,
+    Gear,
     Enhancement,
     EnemyAbility
 }

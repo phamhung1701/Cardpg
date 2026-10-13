@@ -17,7 +17,7 @@ public sealed class PassPlayerTurnUITests
     {
         GameplayInputGate.Clear();
         _cards = Make<CardManager>("Pass UI Cards");
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>());
         _cards.BuildDeck();
         _cards.DealHand();
         _combat = Make<CombatManager>("Pass UI Combat");

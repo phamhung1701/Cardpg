@@ -85,14 +85,14 @@ public sealed class RunProgressionTests
     }
 
     [Test]
-    public void AddBossReward_AddsExactFaceCardOnce_WithUniqueId_AndRejectsInvalidRewards()
+    public void AddHeadlinerReward_AddsExactFaceCardOnce_WithUniqueId_AndRejectsInvalidRewards()
     {
         _cardManager.BuildDeck();
         var sourceCard = CreateCard(CardData.Suit.Diamonds, CardData.Rank.Queen);
         var nonFaceCard = CreateCard(CardData.Suit.Spades, CardData.Rank.Ten);
         var idsBefore = _cardManager.ownedCards.Select(card => card.Id).ToHashSet();
 
-        var reward = _cardManager.AddBossReward(sourceCard);
+        var reward = _cardManager.AddHeadlinerReward(sourceCard);
 
         Assert.That(reward, Is.Not.Null);
         Assert.That(reward.Suit, Is.EqualTo(CardData.Suit.Diamonds));
@@ -106,36 +106,36 @@ public sealed class RunProgressionTests
         Assert.That(_cardManager.ownedCards.Select(card => card.Id).Distinct().Count(), Is.EqualTo(41));
         AssertCardStateIsConserved();
 
-        Assert.That(_cardManager.AddBossReward(sourceCard), Is.Null);
-        Assert.That(_cardManager.AddBossReward(nonFaceCard), Is.Null);
-        Assert.That(_cardManager.AddBossReward(null), Is.Null);
+        Assert.That(_cardManager.AddHeadlinerReward(sourceCard), Is.Null);
+        Assert.That(_cardManager.AddHeadlinerReward(nonFaceCard), Is.Null);
+        Assert.That(_cardManager.AddHeadlinerReward(null), Is.Null);
         Assert.That(_cardManager.ownedCards, Has.Count.EqualTo(41));
         Assert.That(_cardManager.deck, Has.Count.EqualTo(41));
         AssertCardStateIsConserved();
     }
 
     [Test]
-    public void StartRun_BuildsTwelveBosses_InRankGroupsWithFourUniqueSuitsAndSourceCards()
+    public void StartRun_BuildsTwelveHeadliners_InRankGroupsWithFourUniqueSuitsAndSourceCards()
     {
         _runManager.StartRun();
 
-        Assert.That(_runManager.bossDeck, Has.Count.EqualTo(12));
-        AssertBossGroup(0, CardData.Rank.Jack);
-        AssertBossGroup(4, CardData.Rank.Queen);
-        AssertBossGroup(8, CardData.Rank.King);
-        Assert.That(_runManager.bossDeck.Select(boss => boss.sourceCard).Distinct().Count(), Is.EqualTo(12));
+        Assert.That(_runManager.headlinerDeck, Has.Count.EqualTo(12));
+        AssertHeadlinerGroup(0, CardData.Rank.Jack);
+        AssertHeadlinerGroup(4, CardData.Rank.Queen);
+        AssertHeadlinerGroup(8, CardData.Rank.King);
+        Assert.That(_runManager.headlinerDeck.Select(headliner => headliner.sourceCard).Distinct().Count(), Is.EqualTo(12));
     }
 
     [Test]
-    public void BossVictory_RecordsCompletedMapSplitAndStartsFreshNextMapTimer()
+    public void HeadlinerVictory_RecordsCompletedMapSplitAndStartsFreshNextMapTimer()
     {
         _runManager.StartRunWithSeed("TIMING-SPLIT");
         _runManager.Timing.Advance(42.5d);
 
-        typeof(RunManager).GetMethod("HandleBossVictory", BindingFlags.Instance | BindingFlags.NonPublic)
+        typeof(RunManager).GetMethod("HandleHeadlinerVictory", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.Invoke(_runManager, null);
 
-        Assert.That(_runManager.bossIndex, Is.EqualTo(1));
+        Assert.That(_runManager.headlinerIndex, Is.EqualTo(1));
         Assert.That(_runManager.Timing.CompletedSplits, Has.Count.EqualTo(1));
         Assert.That(_runManager.Timing.CompletedSplits[0].MapNumber, Is.EqualTo(1));
         Assert.That(_runManager.Timing.CompletedSplits[0].ElapsedSeconds, Is.EqualTo(42.5d));
@@ -245,7 +245,7 @@ public sealed class RunProgressionTests
         Assert.That(_runManager.ActiveNode, Is.Null);
         Assert.That(selectedNode.completed, Is.False);
         Assert.That(_runManager.Timing.IsActive, Is.False);
-        Assert.That(_cardManager.gold, Is.Zero);
+        Assert.That(_cardManager.credits, Is.Zero);
         Assert.That(_combatManager.ForceDefeatForDevelopment(), Is.False);
         Assert.That(resultCount, Is.EqualTo(1), "A faulted encounter must report a single terminal result.");
     }
@@ -322,15 +322,15 @@ public sealed class RunProgressionTests
         Assert.That(_combatManager.currentEnemy, Is.Not.Null);
     }
 
-    void AssertBossGroup(int startIndex, CardData.Rank expectedRank)
+    void AssertHeadlinerGroup(int startIndex, CardData.Rank expectedRank)
     {
-        var group = _runManager.bossDeck.Skip(startIndex).Take(4).ToArray();
+        var group = _runManager.headlinerDeck.Skip(startIndex).Take(4).ToArray();
         var expectedSuits = Enum.GetValues(typeof(CardData.Suit)).Cast<CardData.Suit>().ToArray();
 
         Assert.That(group, Has.Length.EqualTo(4));
-        Assert.That(group.All(boss => boss != null && boss.sourceCard != null), Is.True);
-        Assert.That(group.All(boss => boss.sourceCard.rank == expectedRank), Is.True);
-        CollectionAssert.AreEquivalent(expectedSuits, group.Select(boss => boss.sourceCard.suit));
+        Assert.That(group.All(headliner => headliner != null && headliner.sourceCard != null), Is.True);
+        Assert.That(group.All(headliner => headliner.sourceCard.rank == expectedRank), Is.True);
+        CollectionAssert.AreEquivalent(expectedSuits, group.Select(headliner => headliner.sourceCard.suit));
     }
 
     void AssertCardStateIsConserved()
@@ -345,9 +345,9 @@ public sealed class RunProgressionTests
         CollectionAssert.AreEquivalent(_cardManager.ownedCards, zoneCards);
     }
 
-    EnemyTypeData CreateEnemyType(string name, int hp, int attack, int gold)
+    EnemyTypeData CreateEnemyType(string name, int hp, int attack, int credits)
     {
-        var enemyType = EnemyTypeData.Create(name, hp, attack, gold);
+        var enemyType = EnemyTypeData.Create(name, hp, attack, credits);
         _testOwnedAssets.Add(enemyType);
         return enemyType;
     }

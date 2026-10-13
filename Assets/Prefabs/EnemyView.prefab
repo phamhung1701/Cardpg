@@ -658,7 +658,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 547a25851e549194aa460a97b677dfd4, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::EnemyDisplayUI
+  m_EditorClassIdentifier: Dealbreak.Runtime::EnemyDisplayUI
   nameText: {fileID: 8310254426586631340}
   hpText: {fileID: 5205712116732325411}
   atkText: {fileID: 6873636896237579398}
@@ -676,7 +676,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 363a2902bc0b2ee489aa592d587a17c7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::CardActionDropTarget
+  m_EditorClassIdentifier: Dealbreak.Runtime::CardActionDropTarget
   enemyDisplay: {fileID: 4997970000244621656}
   feedbackGraphic: {fileID: 5700980103458425381}
   guidanceLabel: {fileID: 989751603016062306}

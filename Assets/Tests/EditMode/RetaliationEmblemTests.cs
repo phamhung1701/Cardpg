@@ -11,13 +11,13 @@ public sealed class RetaliationEmblemTests
     CardManager _cards;
     CombatManager _combat;
     Field _field;
-    RelicData _retaliation;
+    GearData _retaliation;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _retaliation = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/RetaliationEmblem.asset");
+        _retaliation = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/RetaliationEmblem.asset");
         Assert.That(_retaliation, Is.Not.Null);
 
         var canvas = CreateComponent<Canvas>("Retaliation Hand Canvas");
@@ -41,7 +41,7 @@ public sealed class RetaliationEmblemTests
         _cards.DealHand();
         _combat = CreateComponent<CombatManager>("Retaliation Combat Manager");
         _combat.ConfigurePlayer(30);
-        Assert.That(_cards.BuyArtifact(_retaliation, 0), Is.True);
+        Assert.That(_cards.BuyGear(_retaliation, 0), Is.True);
     }
 
     [TearDown]
@@ -58,10 +58,10 @@ public sealed class RetaliationEmblemTests
     {
         Assert.That(_retaliation.id, Is.EqualTo("rel_016"));
         Assert.That(_retaliation.canonicalId, Is.EqualTo("rel_016"));
-        Assert.That(_retaliation.displayName, Is.EqualTo("Retaliation Emblem"));
+        Assert.That(_retaliation.displayName, Is.EqualTo("Payback Chip"));
         Assert.That(_retaliation.rarity, Is.EqualTo("Common"));
         Assert.That(_retaliation.tier, Is.EqualTo(1));
-        Assert.That(_retaliation.capacityCategory, Is.EqualTo(ArtifactCapacityCategory.Persistent));
+        Assert.That(_retaliation.capacityCategory, Is.EqualTo(GearCapacityCategory.Persistent));
         Assert.That(_retaliation.price, Is.EqualTo(20), "Temporary prototype price; workbook price is blank.");
         Assert.That(_retaliation.effects, Has.Length.EqualTo(1));
         Assert.That(_retaliation.effects[0].kind, Is.EqualTo(GameplayEffectKind.CounterDamage));

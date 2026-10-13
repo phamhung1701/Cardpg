@@ -1,5 +1,7 @@
 # Dealbreak Development Handoff
 
+> **Internal rename update (2026-10-13):** The runtime assembly is now `Dealbreak.Runtime`; Gear uses `GearData`/`GearRuntimeInstance`, and progression APIs use Headliner. This document is a historical implementation snapshot; see `Docs/Dealbreak_Internal_Rebranding_Report.md` for the current API and compatibility boundary.
+
 > Historical implementation and architecture notes. The confirmed Dealbreak GameData workbook is authoritative for player-facing content names and terms; identifiers and mechanics below reflect the documented implementation snapshot and are not automatically migrated by workbook renames.
 
 Current implementation baseline when this handoff was created: branch `main`, commit `3c1e643` (`feat: complete phase 3 boss progression`). Unity project: Unity 6000.3.24f1, URP, New Input System.
@@ -292,13 +294,13 @@ Implemented and verified on **September 24, 2026**. Clicking an offer now select
 
 Implemented and verified on **September 24, 2026**. Run Setup now opens with blank optional seed entry; blank (including whitespace) generates a new seed only on Start, not the fixed `CARDPG` fallback. Explicit custom seeds retain the established trim-only normalization, and the existing Randomize button still supplies a generated seed when requested. The existing one-shot `GameFlowService` → `FrontendLaunchContext` → `RunManager.StartRunWithSeed` handoff remains unchanged. The Game scene's persistent seed label and updater are disabled without removing run seed data. Victory and Defeat results still read the actual `RunManager.RunSeed`; Retry Same Seed uses `RestartRun`, while New Run returns to blank setup.
 
-- Files changed for this follow-up: `Assets/Scripts/Frontend/RunSetupUI.cs`, `Assets/Scenes/Game.unity` (seed label/updater flags only relative to this follow-up), `Assets/Tests/EditMode/Phase7FrontendTests.cs`, `CARDPG_DEVELOPMENT.md`, and both roadmap handoff documents. All pre-existing dirty-worktree changes remained user-owned; no gameplay/RNG architecture was changed.
+- Files changed for this follow-up: `Assets/Scripts/Frontend/RunSetupUI.cs`, `Assets/Scenes/Game.unity` (seed label/updater flags only relative to this follow-up), `Assets/Tests/EditMode/Phase7FrontendTests.cs`, `DEALBREAK_DEVELOPMENT.md`, and both roadmap handoff documents. All pre-existing dirty-worktree changes remained user-owned; no gameplay/RNG architecture was changed.
 - Focused frontend EditMode **8/8**; relevant frontend/seeded-run/timing/Phase 5/critical regression **39/39**, zero failures/skips. Tests cover blank/fresh seeds, custom normalization and deterministic replay, one-shot handoff, generated-seed Victory and Defeat text, same-seed retry, and a subsequent blank new run not reusing the previous seed. A separate full EditMode suite was not run for this follow-up; the prior Phase 7E full-suite checkpoint remains 150/150.
 - Main Menu → blank setup → Game Play Mode smoke produced `D3B53FC8` with the gameplay label hidden; accelerated Combat defeat displayed that seed in Results, Retry retained it, then New Run returned to blank setup and produced `D47D3507`. Explicit `  Share-7E  ` started as `Share-7E`, appeared on Defeat Results and survived Retry. Results were reached through an accelerated encounter defeat, not a complete twelve-map victory playthrough; Victory result seed was checked in EditMode. The Console showed zero warnings/errors at the Play Mode smoke check, but a later final check found one unrelated Unity AI Toolkit account-service warning (`Account API did not become accessible within 30 seconds`); therefore a warning-free final Console cannot be claimed. Earlier combat-input and twelve-map pacing playtests remain Pending and outside this follow-up.
 
 ### Final Prototype Regression and Handoff — September 24, 2026
 
-**Scope:** approved Phase 7D, Phase 7E Slices 1–4, and frontend seed follow-up are implemented; this pass changed **documentation only** (`CARDPG_DEVELOPMENT.md`, `Locus/knowledge/plan/cardpg-remaining-roadmap-implementation.md`, `Locus/knowledge/plan/cardpg-roadmap-resume.md`). The initial dirty tree, scenes, assets, gameplay code, balance and RNG architecture were not intentionally changed; no files were staged or committed. The remaining roadmap implementation plan is complete **for the currently approved scope**, not for future content or polish.
+**Scope:** approved Phase 7D, Phase 7E Slices 1–4, and frontend seed follow-up are implemented; this pass changed **documentation only** (`DEALBREAK_DEVELOPMENT.md`, `Locus/knowledge/plan/cardpg-remaining-roadmap-implementation.md`, `Locus/knowledge/plan/cardpg-roadmap-resume.md`). The initial dirty tree, scenes, assets, gameplay code, balance and RNG architecture were not intentionally changed; no files were staged or committed. The remaining roadmap implementation plan is complete **for the currently approved scope**, not for future content or polish.
 
 **Automated:** Unity Test Framework discovered **152 EditMode** tests; full run **152/152 passed**, 0 failed/skipped/inconclusive. It discovered exactly **one PlayMode** test, `Phase7B5CombatPlayModeTests.ShieldedMultiHit_ResolvesAsIndependentRuntimeHits`, **1/1 passed**; no existing PlayMode tests directly cover Ace-pair input, Shop/Enhancement targeting, Artifact capacity or frontend handoff. The suite includes card collection/zones/identity and 40-card setup, twelve-boss J/Q/K progression and exact rewards, deterministic run/map/shop/crit streams, single/paired card and defense rules, multi-enemy behavior, Shield/hit lifecycle, build/Shop/Enhancement capacity and target guards, timing/reset, and blank/custom/one-shot frontend seed behavior. This is test/code evidence, not a fresh twelve-map playthrough.
 
@@ -659,7 +661,7 @@ Retain this storage envelope, content-ID registry and owner contracts. Add a new
 
 ## 10. Instructions for Future Locus Sessions
 
-1. Read `CARDPG_DEVELOPMENT.md` before beginning substantial project work.
+1. Read `DEALBREAK_DEVELOPMENT.md` before beginning substantial project work.
 2. Treat the current repository state as the implementation source of truth.
 3. This document provides historical/design context but does not override working code when they disagree. Investigate discrepancies rather than blindly trusting either source.
 4. Do not broadly re-audit completed phases unless there is evidence of a regression, inconsistency, or architectural issue.

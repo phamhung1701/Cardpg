@@ -27,7 +27,7 @@ public sealed class TargetedConsumableTests
         Assert.That(new UnityEngine.Object[] { _knife, _whetstone, _bomb, _heartRune, _sharpened, _blacksmith }, Has.All.Not.Null);
 
         _cards = Make<CardManager>("Targeted Consumable Cards");
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>(),
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>(),
             System.Array.Empty<CardEnhancementData>(), new[] { _knife, _whetstone, _bomb, _heartRune });
         _cards.ConfigureRandom(new DeterministicRandom(3207));
         _cards.BuildDeck();
@@ -327,9 +327,9 @@ public sealed class TargetedConsumableTests
         Assert.That(_bomb.eventAvailable, Is.True);
     }
 
-    EnemyTypeData Enemy(string name, int hp, int attack, int gold)
+    EnemyTypeData Enemy(string name, int hp, int attack, int credits)
     {
-        var type = EnemyTypeData.Create(name, hp, attack, gold);
+        var type = EnemyTypeData.Create(name, hp, attack, credits);
         _created.Add(type);
         return type;
     }

@@ -12,7 +12,7 @@ aiEditMode: inherit
 
 Implemented one active checkpoint save under `Application.persistentDataPath/active-run.json`, with versioned DTOs, integrity validation, atomic replacement, backup recovery, safe autosaving, direct restoration, Continue and New Run replacement confirmation. No gameplay balance or authored effect definition changed.
 
-The architecture, checkpoint rules and Phase 8B boundary are documented in `CARDPG_DEVELOPMENT.md` under **Phase 8A — Persistent Run Save/Load**.
+The architecture, checkpoint rules and Phase 8B boundary are documented in `DEALBREAK_DEVELOPMENT.md` under **Phase 8A — Persistent Run Save/Load**.
 
 ## Ownership and persistence
 
@@ -100,7 +100,7 @@ The last pre-move Console check after the UI fix had **0 errors and 1 unrelated 
 - `Assets/Scripts/UI/BoardPanelTransition.cs`
 - `Assets/Tests/EditMode/PersistentRunSaveTests.cs`
 - `Assets/Tests/PlayMode/SaveLoadSceneTransitionTests.cs`
-- `CARDPG_DEVELOPMENT.md`
+- `DEALBREAK_DEVELOPMENT.md`
 - `Locus/knowledge/plan/phase8a-persistent-run-save-load-report.md`
 
 Include Unity-generated `.meta` files for new assets/scripts/folders. Existing scene/prefab GUIDs and references were preserved. The unrelated README edit, TMP fallback font, Plastic/Locus metadata, untracked technical reference, workbook and Docs files remain outside the Phase 8A commit.

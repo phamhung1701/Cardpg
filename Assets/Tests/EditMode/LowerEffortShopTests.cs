@@ -15,7 +15,7 @@ public sealed class LowerEffortShopTests
     {
         GameplayInputGate.Clear();
         _cards = Make<CardManager>("Shop Feature Cards");
-        _cards.Configure(null, null, null, System.Array.Empty<RelicData>());
+        _cards.Configure(null, null, null, System.Array.Empty<GearData>());
         _combat = Make<CombatManager>("Shop Feature Combat");
         _combat.ConfigurePlayer(30);
         _run = Make<RunManager>("Shop Feature Run");
@@ -53,7 +53,7 @@ public sealed class LowerEffortShopTests
         var third = Shop(4, 0);
         _run.currentPath.Clear();
         _run.currentPath.AddRange(new[] { first, second, third });
-        _cards.AddGold(5);
+        _cards.AddCredits(5);
         _run.OnPathChosen(first.id);
         var investment = FindOffer(ShopOfferKind.Investment);
 
@@ -68,7 +68,7 @@ public sealed class LowerEffortShopTests
         transactionField.SetValue(_run, false);
         Assert.That(investment.investmentStake, Is.EqualTo(5));
         Assert.That(_run.PurchaseShopOffer(investment.StableId), Is.True);
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(_run.PendingInvestmentCount, Is.EqualTo(1));
         Assert.That(_run.CanPurchaseShopOffer(investment.StableId), Is.False, "Investment is one purchase per shop visit.");
         int resultNotifications = 0;
@@ -78,28 +78,28 @@ public sealed class LowerEffortShopTests
         _run.OnPathChosen(second.id);
 
         var expectedRandom = new RunRandomContext(Seed).CreateStream("shop-investment-payout", unchecked(second.mapIndex * 7919 ^ second.id));
-        int expectedGold = expectedRandom.NextInt(0, 2) == 0 ? 15 : 0;
-        Assert.That(_cards.gold, Is.EqualTo(expectedGold));
+        int expectedCredits = expectedRandom.NextInt(0, 2) == 0 ? 15 : 0;
+        Assert.That(_cards.credits, Is.EqualTo(expectedCredits));
         Assert.That(resultNotifications, Is.EqualTo(1));
-        Assert.That(resultMessage, Does.Contain(expectedGold > 0 ? "1 success" : "1 loss").IgnoreCase);
+        Assert.That(resultMessage, Does.Contain(expectedCredits > 0 ? "1 success" : "1 loss").IgnoreCase);
         Assert.That(_run.PendingInvestmentCount, Is.Zero);
-        int resolvedGold = _cards.gold;
+        int resolvedCredits = _cards.credits;
         _run.OnShopDone();
         _run.OnPathChosen(third.id);
-        Assert.That(_cards.gold, Is.EqualTo(resolvedGold), "A settled investment must not resolve twice.");
+        Assert.That(_cards.credits, Is.EqualTo(resolvedCredits), "A settled investment must not resolve twice.");
         Assert.That(_run.PendingInvestmentCount, Is.Zero);
         Assert.That(resultNotifications, Is.EqualTo(1), "The investment result is announced only once.");
     }
 
     [Test]
-    public void Guidance_CostsFiveGoldRevealsOneReachableHiddenEventOrRiskAndIsOneTime()
+    public void Guidance_CostsFiveCreditsRevealsOneReachableHiddenEventOrRiskAndIsOneTime()
     {
         var shop = Shop(3, 0, 2, 3);
         var farther = new PathNode { id = 2, mapIndex = 0, kind = MapNodeType.Event, hidden = true, col = 2, row = 0 };
         var nearer = new PathNode { id = 3, mapIndex = 0, kind = MapNodeType.Risk, hidden = true, col = 1, row = 0 };
         _run.currentPath.Clear();
         _run.currentPath.AddRange(new[] { shop, farther, nearer });
-        _cards.AddGold(5);
+        _cards.AddCredits(5);
         _run.OnPathChosen(shop.id);
         int notifications = 0;
         _run.OnMapRevealChanged += () => notifications++;
@@ -107,7 +107,7 @@ public sealed class LowerEffortShopTests
 
         Assert.That(_run.PurchaseShopOffer(guidance.StableId), Is.True);
 
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(nearer.revealed, Is.True);
         Assert.That(farther.revealed, Is.False);
         Assert.That(notifications, Is.EqualTo(1));
@@ -120,13 +120,13 @@ public sealed class LowerEffortShopTests
         var shop = Shop(3, 0);
         _run.currentPath.Clear();
         _run.currentPath.Add(shop);
-        _cards.AddGold(5);
+        _cards.AddCredits(5);
         _run.OnPathChosen(shop.id);
         var guidance = FindOffer(ShopOfferKind.Guidance);
 
         Assert.That(_run.GetShopOfferUnavailableReason(guidance.StableId), Is.EqualTo("No eligible hidden node to reveal"));
         Assert.That(_run.PurchaseShopOffer(guidance.StableId), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(5));
+        Assert.That(_cards.credits, Is.EqualTo(5));
     }
 
     void OpenShop(PathNode shop)

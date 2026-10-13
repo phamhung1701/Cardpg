@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ConfirmationDialogUI")]
 public sealed class ConfirmationDialogUI : MonoBehaviour
 {
     public GameObject panel;

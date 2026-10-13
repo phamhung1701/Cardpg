@@ -17,22 +17,22 @@ public static class RunEffectResolver
     {
         if (choice == null || cards == null || combat == null) return "Choice unavailable";
 
-        bool infiniteGold = cards.HasInfiniteMoney;
+        bool infiniteCredits = cards.HasInfiniteMoney;
         bool infiniteHealth = combat.HasInfiniteHealthForDev;
-        int simulatedGold = infiniteGold ? int.MaxValue : cards.gold;
+        int simulatedCredits = infiniteCredits ? int.MaxValue : cards.credits;
         int simulatedHealth = infiniteHealth ? int.MaxValue : combat.player.currentHealth;
         int simulatedMaxHealth = infiniteHealth ? int.MaxValue : combat.player.maxHealth;
         foreach (var effect in choice.effects ?? Array.Empty<RunEffect>())
         {
             switch (effect.type)
             {
-                case RunEffectType.GainGold:
-                    if (!infiniteGold) simulatedGold += effect.amount;
+                case RunEffectType.GainCredits:
+                    if (!infiniteCredits) simulatedCredits += effect.amount;
                     break;
-                case RunEffectType.LoseGold:
-                    if (!infiniteGold && simulatedGold < effect.amount)
-                        return $"Need {effect.amount} Credits (have {simulatedGold} Credits)";
-                    if (!infiniteGold) simulatedGold -= effect.amount;
+                case RunEffectType.LoseCredits:
+                    if (!infiniteCredits && simulatedCredits < effect.amount)
+                        return $"Need {effect.amount} Credits (have {simulatedCredits} Credits)";
+                    if (!infiniteCredits) simulatedCredits -= effect.amount;
                     break;
                 case RunEffectType.Heal:
                     if (!infiniteHealth) simulatedHealth = Math.Min(simulatedMaxHealth, simulatedHealth + effect.amount);
@@ -60,7 +60,7 @@ public static class RunEffectResolver
                     if (!cards.CanAddConsumable(consumable, slotCount))
                         return "Backpack Full";
                     break;
-                case RunEffectType.RandomArtifactEnhancementOrNothing:
+                case RunEffectType.RandomGearEnhancementOrNothing:
                     if (run == null) return "Reward unavailable";
                     break;
             }
@@ -79,11 +79,11 @@ public static class RunEffectResolver
         {
             switch (effect.type)
             {
-                case RunEffectType.GainGold:
-                    cards.AddGold(effect.amount);
+                case RunEffectType.GainCredits:
+                    cards.AddCredits(effect.amount);
                     break;
-                case RunEffectType.LoseGold:
-                    cards.SpendGold(effect.amount);
+                case RunEffectType.LoseCredits:
+                    cards.SpendCredits(effect.amount);
                     break;
                 case RunEffectType.Heal:
                     combat.HealPlayer(effect.amount);
@@ -105,7 +105,7 @@ public static class RunEffectResolver
                     if (consumable == null || !cards.AddConsumable(consumable, Math.Max(1, effect.amount)))
                         return false;
                     break;
-                case RunEffectType.RandomArtifactEnhancementOrNothing:
+                case RunEffectType.RandomGearEnhancementOrNothing:
                     if (run == null || !run.TryGrantRandomSwampReward()) return false;
                     break;
             }

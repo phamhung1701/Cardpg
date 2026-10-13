@@ -37,14 +37,14 @@ public sealed class Phase7DMapVisibilityTests
             var combat = new PathNode { kind = MapNodeType.Combat, contentId = "Goblin" };
             var elite = new PathNode { kind = MapNodeType.Elite, contentId = "Knight" };
 
-            Assert.That(run.GetNodeLabel(combat), Is.EqualTo("Combat"));
-            Assert.That(run.GetNodeLabel(elite), Is.EqualTo("Elite"));
+            Assert.That(run.GetNodeLabel(combat), Is.EqualTo("Street Fight"));
+            Assert.That(run.GetNodeLabel(elite), Is.EqualTo("Enforcer Fight"));
             var headingMethod = typeof(PathScreenUI).GetMethod("GetNodeHeading", BindingFlags.Static | BindingFlags.NonPublic);
             Assert.That(headingMethod, Is.Not.Null);
-            Assert.That((string)headingMethod.Invoke(null, new object[] { combat, run }), Is.EqualTo("Combat"));
-            Assert.That((string)headingMethod.Invoke(null, new object[] { elite, run }), Is.EqualTo("Elite"));
-            Assert.That(run.GetNodeDesc(combat), Is.EqualTo("Normal encounter"));
-            Assert.That(run.GetNodeDesc(elite), Is.EqualTo("Hard fight • better gold"));
+            Assert.That((string)headingMethod.Invoke(null, new object[] { combat, run }), Is.EqualTo("Street Fight"));
+            Assert.That((string)headingMethod.Invoke(null, new object[] { elite, run }), Is.EqualTo("Enforcer Fight"));
+            Assert.That(run.GetNodeDesc(combat), Is.EqualTo("Street Fight"));
+            Assert.That(run.GetNodeDesc(elite), Is.EqualTo("Hard fight • better Credits"));
         }
         finally
         {
@@ -92,7 +92,7 @@ public sealed class Phase7DMapVisibilityTests
     }
 
     [Test]
-    public void PathNodeButtonUI_PreservesBossIdentityWithoutDescription()
+    public void PathNodeButtonUI_PreservesHeadlinerIdentityWithoutDescription()
     {
         var runObject = new GameObject("Path node boss label test");
         var root = new GameObject("Path node boss button");
@@ -102,9 +102,9 @@ public sealed class Phase7DMapVisibilityTests
         {
             var run = runObject.AddComponent<RunManager>();
             var ui = root.AddComponent<PathNodeButtonUI>();
-            var node = new PathNode { kind = MapNodeType.Boss, revealed = true };
+            var node = new PathNode { kind = MapNodeType.Headliner, revealed = true };
             ui.SetNode(node, run);
-            Assert.That(labelObject.GetComponent<TextMeshProUGUI>().text, Is.EqualTo("BOSS"));
+            Assert.That(labelObject.GetComponent<TextMeshProUGUI>().text, Is.EqualTo("HEADLINER FIGHT"));
         }
         finally
         {
@@ -228,7 +228,7 @@ public sealed class Phase7DMapVisibilityTests
                 replay.Select(node => $"{node.id}:{string.Join(",", node.next)}"),
                 "Restoring the prior link rule must remain deterministic for a fixed seed.");
 
-            foreach (var node in nodes.Where(node => node.kind != MapNodeType.Boss))
+            foreach (var node in nodes.Where(node => node.kind != MapNodeType.Headliner))
                 foreach (int nextId in node.next)
                     Assert.That(byId[nextId].col - node.col, Is.InRange(0.5f, 1f),
                         "Route links advance one depth or cross a zero-depth checkpoint.");
@@ -259,7 +259,7 @@ public sealed class Phase7DMapVisibilityTests
             for (int depth = 0; depth < RunMapGenerator.RouteColumnCount; depth++)
                 Assert.That(nodes.Where(node => Mathf.Approximately(node.col, depth))
                     .Select(node => node.row).Distinct().Count(), Is.EqualTo(RunMapGenerator.RowCount));
-            Assert.That(nodes.Single(node => node.kind == MapNodeType.Boss).col,
+            Assert.That(nodes.Single(node => node.kind == MapNodeType.Headliner).col,
                 Is.EqualTo(RunMapGenerator.RouteColumnCount));
         }
 

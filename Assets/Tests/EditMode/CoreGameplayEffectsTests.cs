@@ -11,17 +11,17 @@ public sealed class CoreGameplayEffectsTests
     readonly List<UnityEngine.Object> _created = new();
     CardManager _cards;
     CombatManager _combat;
-    RelicData _club, _heart, _diamond, _spade;
+    GearData _club, _heart, _diamond, _spade;
     CardEnhancementData _sharpened, _hardened, _mending, _quickdraw;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _club = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/ClubPower.asset");
-        _heart = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/HeartPower.asset");
-        _diamond = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/DiamondPower.asset");
-        _spade = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/SpadePower.asset");
+        _club = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/ClubPower.asset");
+        _heart = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/HeartPower.asset");
+        _diamond = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/DiamondPower.asset");
+        _spade = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/SpadePower.asset");
         _sharpened = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Sharpened.asset");
         _hardened = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Reinforced.asset");
         _mending = AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Mending.asset");
@@ -66,17 +66,17 @@ public sealed class CoreGameplayEffectsTests
     [Test]
     public void CoreAssets_HaveCanonicalMetadataAndOnlyOneTypedEffectPath()
     {
-        var artifacts = new[] { _club, _heart, _diamond, _spade };
+        var gearItems = new[] { _club, _heart, _diamond, _spade };
         var enhancements = new[] { _sharpened, _hardened, _mending, _quickdraw };
         for (int i = 0; i < 4; i++)
         {
-            Assert.That(artifacts[i].canonicalId, Is.EqualTo($"rel_{i + 1:000}"));
-            Assert.That(artifacts[i].effects, Has.Length.EqualTo(1));
-            Assert.That(artifacts[i].tier, Is.EqualTo(1));
-            Assert.That(artifacts[i].rarity, Is.EqualTo("Common"));
-            Assert.That(artifacts[i].capacityCategory, Is.EqualTo(ArtifactCapacityCategory.Persistent));
-            Assert.That(artifacts[i].reduceEnemyAttackByCardValue || artifacts[i].recycleDiscardByCardValue ||
-                artifacts[i].drawByCardValue, Is.False);
+            Assert.That(gearItems[i].canonicalId, Is.EqualTo($"rel_{i + 1:000}"));
+            Assert.That(gearItems[i].effects, Has.Length.EqualTo(1));
+            Assert.That(gearItems[i].tier, Is.EqualTo(1));
+            Assert.That(gearItems[i].rarity, Is.EqualTo("Common"));
+            Assert.That(gearItems[i].capacityCategory, Is.EqualTo(GearCapacityCategory.Persistent));
+            Assert.That(gearItems[i].reduceEnemyAttackByCardValue || gearItems[i].recycleDiscardByCardValue ||
+                gearItems[i].drawByCardValue, Is.False);
             Assert.That(enhancements[i].canonicalId, Is.EqualTo($"enh_{i + 1:000}"));
             Assert.That(enhancements[i].effects, Has.Length.EqualTo(1));
             Assert.That(enhancements[i].tier, Is.EqualTo(1));
@@ -84,14 +84,14 @@ public sealed class CoreGameplayEffectsTests
             Assert.That(enhancements[i].healOnPlay + enhancements[i].drawOnPlay +
                 enhancements[i].attackBonus + enhancements[i].defenseBonus, Is.Zero);
         }
-        Assert.That(_hardened.displayName, Is.EqualTo("Hardened"));
+        Assert.That(_hardened.displayName, Is.EqualTo("Plated"));
         Assert.That(_hardened.id, Is.EqualTo("reinforced"), "Keep stable legacy Shop IDs and GUIDs.");
     }
 
     [Test]
     public void ClubAndSharpened_AffectOnlyMatchingCardBeforeAcePairSum()
     {
-        Assert.That(_cards.BuyArtifact(_club, 0), Is.True);
+        Assert.That(_cards.BuyGear(_club, 0), Is.True);
         var club = FindCard(c => c.Suit == CardData.Suit.Clubs && c.Rank != CardData.Rank.Ace);
         var ace = FindCard(c => c.Rank == CardData.Rank.Ace && c.Suit != CardData.Suit.Clubs, club.data);
         var unrelated = FindCard(c => c.Suit == CardData.Suit.Hearts && c.Rank != CardData.Rank.Ace, club.data, ace.data);
@@ -113,7 +113,7 @@ public sealed class CoreGameplayEffectsTests
     [Test]
     public void Heart_HealsOncePerCommittedCardAndClampsAtMax()
     {
-        Assert.That(_cards.BuyArtifact(_heart, 0), Is.True);
+        Assert.That(_cards.BuyGear(_heart, 0), Is.True);
         var ace = FindCard(c => c.Suit == CardData.Suit.Hearts && c.Rank == CardData.Rank.Ace);
         var other = FindCard(c => c.Suit == CardData.Suit.Hearts && c.Rank != CardData.Rank.Ace, ace.data);
         var target = Target(100, 0);
@@ -138,7 +138,7 @@ public sealed class CoreGameplayEffectsTests
     [Test]
     public void Diamond_DrawsFixedTwoRegardlessOfRankAndRespectsHandLimit()
     {
-        Assert.That(_cards.BuyArtifact(_diamond, 0), Is.True);
+        Assert.That(_cards.BuyGear(_diamond, 0), Is.True);
         var highDiamond = FindCard(c => c.Suit == CardData.Suit.Diamonds && c.Rank >= CardData.Rank.Eight);
         var target = Target(100, 0);
         _combat.StartEnemy(target);
@@ -157,7 +157,7 @@ public sealed class CoreGameplayEffectsTests
     [Test]
     public void SpadeAndHardened_BlockUsesCardFlatBeforeSuitMultiplier_AndDoesNotReduceAttack()
     {
-        Assert.That(_cards.BuyArtifact(_spade, 0), Is.True);
+        Assert.That(_cards.BuyGear(_spade, 0), Is.True);
         var spade = FindCard(c => c.Suit == CardData.Suit.Spades && c.Rank >= CardData.Rank.Two);
         var other = FindCard(c => c.Suit != CardData.Suit.Spades, spade.data);
         Assert.That(_cards.ApplyEnhancement(spade.data.Id, _hardened), Is.True);
@@ -217,22 +217,22 @@ public sealed class CoreGameplayEffectsTests
     [Test]
     public void SharedSources_UseAuthoredOrderWithoutNamesOrHierarchy_AndRuntimeStateResets()
     {
-        var first = NewArtifact("first", "First", new GameplayEffectDefinition { kind = GameplayEffectKind.Heal,
+        var first = NewGear("first", "First", new GameplayEffectDefinition { kind = GameplayEffectKind.Heal,
             trigger = GameplayEffectTrigger.CardCommitted, amount = 1 });
-        var second = NewArtifact("second", "Second", new GameplayEffectDefinition { kind = GameplayEffectKind.Heal,
+        var second = NewGear("second", "Second", new GameplayEffectDefinition { kind = GameplayEffectKind.Heal,
             trigger = GameplayEffectTrigger.CardCommitted, amount = 2 });
         var enhancement = NewEnhancement("third", "Third", new GameplayEffectDefinition { kind = GameplayEffectKind.Heal,
             trigger = GameplayEffectTrigger.CardCommitted, amount = 3 });
-        _cards.BuyArtifact(first, 0);
-        _cards.BuyArtifact(second, 0);
+        _cards.BuyGear(first, 0);
+        _cards.BuyGear(second, 0);
         var view = Views()[0];
         int cardId = view.data.Id;
         Assert.That(_cards.ApplyEnhancement(cardId, enhancement), Is.True);
         view.transform.SetAsLastSibling(); // Presentation order is not an effect-source ordering authority.
-        var instance = _cards.GetArtifactInstance(first);
+        var instance = _cards.GetGearInstance(first);
         instance.State.SetCounter(0, 5);
         view.data.EffectState.SetCounter(0, 4);
-        string artifactJson = JsonUtility.ToJson(first);
+        string gearJson = JsonUtility.ToJson(first);
         string enhancementJson = JsonUtility.ToJson(enhancement);
         var logs = new List<string>();
         _combat.OnCombatLog += logs.Add;
@@ -249,21 +249,21 @@ public sealed class CoreGameplayEffectsTests
         Assert.That(_combat.player.currentHealth, Is.EqualTo(26));
         first.displayName = "First";
         enhancement.displayName = "Third";
-        Assert.That(JsonUtility.ToJson(first), Is.EqualTo(artifactJson));
+        Assert.That(JsonUtility.ToJson(first), Is.EqualTo(gearJson));
         Assert.That(JsonUtility.ToJson(enhancement), Is.EqualTo(enhancementJson));
         _cards.Reset();
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
+        Assert.That(_cards.ownedGear, Is.Empty);
         Assert.That(_cards.FindOwnedCard(cardId), Is.Null);
-        _cards.BuyArtifact(first, 0);
-        Assert.That(_cards.GetArtifactInstance(first).State.GetCounter(0), Is.Zero);
+        _cards.BuyGear(first, 0);
+        Assert.That(_cards.GetGearInstance(first).State.GetCounter(0), Is.Zero);
         Assert.That(instance.State.GetCounter(0), Is.EqualTo(5), "Old run state is detached, not saved on the definition.");
         _cards.BuildDeck();
         Assert.That(_cards.ownedCards[0].EffectState.GetCounter(0), Is.Zero);
     }
 
-    RelicData NewArtifact(string id, string name, params GameplayEffectDefinition[] effects)
+    GearData NewGear(string id, string name, params GameplayEffectDefinition[] effects)
     {
-        var value = ScriptableObject.CreateInstance<RelicData>();
+        var value = ScriptableObject.CreateInstance<GearData>();
         value.id = id;
         value.displayName = name;
         value.effects = effects;

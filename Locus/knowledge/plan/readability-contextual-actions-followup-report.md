@@ -10,7 +10,7 @@ aiEditMode: inherit
 
 ## Baseline and scope
 
-The requested phase was already substantially implemented in HEAD `abb840d` (`Improve readability and contextual targeting UX`), following `97682ec` (direct hand targeting). This task audited and refined that committed implementation instead of introducing duplicate targeting systems. Read `AGENTS.md`, the relevant architecture/UI sections of `CARDPG_DEVELOPMENT.md`, and `plan/direct-targeting-ux-report.md`; inspected the live Game scene, major TMP labels, card/enemy/offer/node prefabs, managers, contextual presenters, selling authority and relevant tests.
+The requested phase was already substantially implemented in HEAD `abb840d` (`Improve readability and contextual targeting UX`), following `97682ec` (direct hand targeting). This task audited and refined that committed implementation instead of introducing duplicate targeting systems. Read `AGENTS.md`, the relevant architecture/UI sections of `DEALBREAK_DEVELOPMENT.md`, and `plan/direct-targeting-ux-report.md`; inspected the live Game scene, major TMP labels, card/enemy/offer/node prefabs, managers, contextual presenters, selling authority and relevant tests.
 
 No gameplay/effect definitions, economy, damage, eligibility, card ownership, selection rules, Ace pairing, routes or RNG were changed. Nothing staged, committed or pushed.
 

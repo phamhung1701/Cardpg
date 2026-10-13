@@ -26,12 +26,12 @@ public sealed class PersistentRunSaveTests
         var authoredCatalog = SaveContentCatalog.Load(); Assert.That(authoredCatalog, Is.Not.Null);
         catalog = Object.Instantiate(authoredCatalog); assets.Add(catalog);
         cards = Make<CardManager>();
-        cards.Configure(null, null, null, catalog.artifacts, catalog.enhancements, catalog.consumables);
+        cards.Configure(null, null, null, catalog.gearItems, catalog.enhancements, catalog.consumables);
         combat = Make<CombatManager>(); combat.ConfigurePlayer(30);
         run = Make<RunManager>(); run.contentCatalog = catalog.runContent;
         run.thiefType = catalog.fallbackEnemies[0]; run.goblinType = catalog.fallbackEnemies[1]; run.knightType = catalog.fallbackEnemies[2];
         run.StartRunWithSeed("PERSISTENT-RUN-TEST");
-        directory = System.IO.Path.Combine(Application.temporaryCachePath, "CardPGSaveTests", Guid.NewGuid().ToString("N"));
+        directory = System.IO.Path.Combine(Application.temporaryCachePath, "DealbreakSaveTests", Guid.NewGuid().ToString("N"));
         store = new RunSaveStore(System.IO.Path.Combine(directory, "active-run.json"));
     }
     [TearDown]
@@ -177,30 +177,30 @@ public sealed class PersistentRunSaveTests
     }
 
     [Test]
-    public void MapBossesAndTiming_RestoreWithoutGenerationOrProgressionEvents()
+    public void MapHeadlinersAndTiming_RestoreWithoutGenerationOrProgressionEvents()
     {
         var saved = run.CaptureSave(); saved.bossIndex = 3; saved.timing.mapIndex = 3;
         saved.timing.totalElapsed = 222; saved.timing.mapElapsed = 21;
         foreach (var node in saved.nodes) node.mapIndex = 3;
         saved.nodes[0].completed = true; saved.nodes[0].accessible = false; saved.completedNodeCount = 7;
         int rewards = 0, results = 0;
-        run.OnBossRewardGranted += _ => rewards++;
+        run.OnHeadlinerRewardGranted += _ => rewards++;
         combat.OnEncounterResult += _ => results++;
         run.RestoreSave(JsonClone(saved), catalog); run.PresentRestoredSave();
         Assert.That(run.CurrentMapIndex, Is.EqualTo(3)); Assert.That(run.CompletedNodeCount, Is.EqualTo(7));
         Assert.That(run.currentPath[0].completed, Is.True);
-        Assert.That(run.CurrentBoss.sourceCard.suit, Is.EqualTo((CardData.Suit)saved.bosses[3].suit));
+        Assert.That(run.CurrentHeadliner.sourceCard.suit, Is.EqualTo((CardData.Suit)saved.bosses[3].suit));
         Assert.That(run.Timing.TotalElapsedSeconds, Is.EqualTo(222));
         Assert.That(rewards, Is.Zero); Assert.That(results, Is.Zero);
     }
 
     [Test]
-    public void ArtifactsAndConsumables_RestoreAcquisitionOrderIdsCountersAndCharges()
+    public void GearAndConsumables_RestoreAcquisitionOrderIdsCountersAndCharges()
     {
-        cards.BuyArtifact(catalog.artifacts[0], 0); cards.BuyArtifact(catalog.artifacts[1], 0);
-        var artifact = cards.GetArtifactInstanceAt(0); artifact.State.SetCounter(-991, 42);
-        artifact.State.SetEncounterCounter(4, 3);
-        artifact.PreparedDwarfSourceCard = cards.ownedCards[0];
+        cards.BuyGear(catalog.gearItems[0], 0); cards.BuyGear(catalog.gearItems[1], 0);
+        var gear = cards.GetGearInstanceAt(0); gear.State.SetCounter(-991, 42);
+        gear.State.SetEncounterCounter(4, 3);
+        gear.PreparedDwarfSourceCard = cards.ownedCards[0];
         var rune = ScriptableObject.CreateInstance<ConsumableData>(); assets.Add(rune);
         rune.id = "save-charge-fixture"; rune.uses = 3;
         catalog.consumables = catalog.consumables.Concat(new[] { rune }).ToArray();
@@ -208,32 +208,32 @@ public sealed class PersistentRunSaveTests
         Assert.That(cards.AddConsumable(rune), Is.True); cards.GetConsumableInstanceAtSlot(0).SpendCharge();
         var saved = run.CaptureSave();
         run.RestoreSave(JsonClone(saved), catalog);
-        Assert.That(cards.GetArtifactInstanceAt(0).Id, Is.EqualTo(artifact.Id));
-        Assert.That(cards.GetArtifactInstanceAt(0).State.GetCounter(-991), Is.EqualTo(42));
-        Assert.That(cards.GetArtifactInstanceAt(0).State.GetEncounterCounter(4), Is.EqualTo(3));
-        Assert.That(cards.GetArtifactInstanceAt(0).PreparedDwarfSourceCard.Id, Is.EqualTo(saved.cards.owned[0].id));
+        Assert.That(cards.GetGearInstanceAt(0).Id, Is.EqualTo(gear.Id));
+        Assert.That(cards.GetGearInstanceAt(0).State.GetCounter(-991), Is.EqualTo(42));
+        Assert.That(cards.GetGearInstanceAt(0).State.GetEncounterCounter(4), Is.EqualTo(3));
+        Assert.That(cards.GetGearInstanceAt(0).PreparedDwarfSourceCard.Id, Is.EqualTo(saved.cards.owned[0].id));
         Assert.That(cards.GetConsumableInstanceAtSlot(0).RemainingCharges, Is.EqualTo(rune.uses - 1));
-        Assert.That(cards.BuyArtifact(catalog.artifacts[2], 0), Is.True);
-        Assert.That(cards.GetArtifactInstanceAt(2).Id, Is.EqualTo(saved.cards.artifactIdWatermark + 1));
+        Assert.That(cards.BuyGear(catalog.gearItems[2], 0), Is.True);
+        Assert.That(cards.GetGearInstanceAt(2).Id, Is.EqualTo(saved.cards.artifactIdWatermark + 1));
     }
 
     [Test]
     public void ShopInventoryRefreshPurchaseAndServiceState_RestoreWithoutDuplicatePaymentOrSettlement()
     {
-        cards.AddGold(200);
+        cards.AddCredits(200);
         var shop = run.currentPath.First(n => n.kind == MapNodeType.Shop); shop.accessible = true; run.OnPathChosen(shop.id);
-        var artifact = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Artifact);
-        Assert.That(run.PurchaseShopOffer(artifact.StableId), Is.True);
+        var gear = run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Gear);
+        Assert.That(run.PurchaseShopOffer(gear.StableId), Is.True);
         Assert.That(run.RefreshGoods(0), Is.True);
         var saved = run.CaptureSave();
         saved.investmentStakes.Add(5);
         saved.shops.Single().usedServices.Add((int)ShopOfferKind.Supply);
-        int gold = cards.gold, settlements = 0; run.OnInvestmentResult += _ => settlements++;
+        int credits = cards.credits, settlements = 0; run.OnInvestmentResult += _ => settlements++;
         run.RestoreSave(JsonClone(saved), catalog); run.PresentRestoredSave();
-        Assert.That(cards.gold, Is.EqualTo(gold)); Assert.That(settlements, Is.Zero);
+        Assert.That(cards.credits, Is.EqualTo(credits)); Assert.That(settlements, Is.Zero);
         Assert.That(run.PendingInvestmentCount, Is.EqualTo(1)); Assert.That(run.GoodsRefreshCount, Is.EqualTo(1));
         Assert.That(run.GoodsRefreshPrice, Is.EqualTo(5));
-        Assert.That(run.PurchaseShopOffer(artifact.StableId), Is.False);
+        Assert.That(run.PurchaseShopOffer(gear.StableId), Is.False);
         Assert.That(run.RefreshGoods(0), Is.False);
         Assert.That(run.PurchaseSupply("supply", 1), Is.False);
         Assert.That(JsonUtility.ToJson(run.CaptureSave()), Is.EqualTo(JsonUtility.ToJson(saved)));
@@ -242,7 +242,7 @@ public sealed class PersistentRunSaveTests
     [Test]
     public void QuestConfirmation_CompletesShopStateAndProducesAValidCheckpoint()
     {
-        cards.AddGold(100);
+        cards.AddCredits(100);
         var node = run.currentPath.First(n => n.kind == MapNodeType.Shop); node.accessible = true; run.OnPathChosen(node.id);
         var offers = (List<ShopOffer>)run.GetCurrentShopOffers(); offers.RemoveAll(o => o.IsService);
         offers.Add(new ShopOffer { kind = ShopOfferKind.Investment, price = 5, basePrice = 5, investmentStake = 5 });
@@ -279,7 +279,7 @@ public sealed class PersistentRunSaveTests
     public void CombatAndTemporaryPrompts_CannotReplaceSafeCheckpoint()
     {
         var saved = run.CaptureSave(); Write(saved);
-        GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, true);
+        GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, true);
         Assert.That(run.CanCaptureSave, Is.False);
         Assert.Throws<InvalidOperationException>(() => run.CaptureSave());
         GameplayInputGate.Clear();
@@ -300,7 +300,7 @@ public sealed class PersistentRunSaveTests
     public void CorruptedPrimary_RecoversLastValidBackup()
     {
         var first = run.CaptureSave(); Write(first);
-        cards.AddGold(9); Write(run.CaptureSave());
+        cards.AddCredits(9); Write(run.CaptureSave());
         File.WriteAllText(store.Path, "{broken");
         Assert.That(Read().cards.gold, Is.EqualTo(first.cards.gold));
         Assert.That(store.RecoveredFromBackup, Is.True);

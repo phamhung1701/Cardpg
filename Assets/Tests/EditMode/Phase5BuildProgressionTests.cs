@@ -12,27 +12,27 @@ public sealed class Phase5BuildProgressionTests
     CardManager _cards;
     CombatManager _combat;
     RunManager _run;
-    RelicData[] _artifacts;
+    GearData[] _gears;
     CardEnhancementData[] _enhancements;
     ConsumableData[] _enhancementConsumables;
 
     [SetUp]
     public void SetUp()
     {
-        _artifacts = new[]
+        _gears = new[]
         {
-            CreateArtifact("clubs", 10, artifact =>
+            CreateGear("clubs", 10, gear =>
             {
-                artifact.restrictToSuit = true;
-                artifact.affectedSuit = CardData.Suit.Clubs;
-                artifact.damageMultiplier = 2;
+                gear.restrictToSuit = true;
+                gear.affectedSuit = CardData.Suit.Clubs;
+                gear.damageMultiplier = 2;
             }),
-            CreateArtifact("artisan", 12, artifact =>
+            CreateGear("artisan", 12, gear =>
             {
-                artifact.requiresEnhancedCard = true;
-                artifact.flatDamageBonus = 3;
+                gear.requiresEnhancedCard = true;
+                gear.flatDamageBonus = 3;
             }),
-            CreateArtifact("victory", 14, artifact => artifact.healAfterVictory = 2)
+            CreateGear("victory", 14, gear => gear.healAfterVictory = 2)
         };
         _enhancements = new[]
         {
@@ -46,7 +46,7 @@ public sealed class Phase5BuildProgressionTests
 
         _cardObject = new GameObject("Phase5 CardManager");
         _cards = _cardObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, _artifacts, _enhancements, _enhancementConsumables);
+        _cards.Configure(null, null, null, _gears, _enhancements, _enhancementConsumables);
 
         _combatObject = new GameObject("Phase5 CombatManager");
         _combat = _combatObject.AddComponent<CombatManager>();
@@ -86,18 +86,18 @@ public sealed class Phase5BuildProgressionTests
     }
 
     [Test]
-    public void ArtifactHooks_AreAuthoredAndRespectSuitAndEnhancementFilters()
+    public void GearHooks_AreAuthoredAndRespectSuitAndEnhancementFilters()
     {
         var club = new CardInstance(CreateCard(CardData.Suit.Clubs, CardData.Rank.Four), 1);
         var heart = new CardInstance(CreateCard(CardData.Suit.Hearts, CardData.Rank.Four), 2);
 
-        Assert.That(_artifacts[0].ModifyAttack(club, club.AttackValue), Is.EqualTo(8));
-        Assert.That(_artifacts[0].ModifyAttack(heart, heart.AttackValue), Is.EqualTo(4));
-        Assert.That(_artifacts[1].ModifyAttack(club, club.AttackValue), Is.EqualTo(4));
+        Assert.That(_gears[0].ModifyAttack(club, club.AttackValue), Is.EqualTo(8));
+        Assert.That(_gears[0].ModifyAttack(heart, heart.AttackValue), Is.EqualTo(4));
+        Assert.That(_gears[1].ModifyAttack(club, club.AttackValue), Is.EqualTo(4));
 
         Assert.That(club.TryApplyEnhancement(_enhancements[1]), Is.True);
-        Assert.That(_artifacts[1].ModifyAttack(club, club.AttackValue), Is.EqualTo(7));
-        Assert.That(_artifacts[1].ModifyDefense(club, club.DefenseValue), Is.EqualTo(7));
+        Assert.That(_gears[1].ModifyAttack(club, club.AttackValue), Is.EqualTo(7));
+        Assert.That(_gears[1].ModifyDefense(club, club.DefenseValue), Is.EqualTo(7));
     }
 
     [Test]
@@ -118,7 +118,7 @@ public sealed class Phase5BuildProgressionTests
 
         Assert.That(first, Is.Not.Empty);
         Assert.That(repeated, Is.EqualTo(first));
-        Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Artifact), Is.True);
+        Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Gear), Is.True);
         Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Enhancement), Is.False);
         Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Consumable &&
             offer.consumable != null && offer.consumable.effectType == ConsumableEffectType.ApplyEnhancement), Is.True);
@@ -128,23 +128,23 @@ public sealed class Phase5BuildProgressionTests
     public void ShopPurchases_DeductOnceAndRejectDuplicateOffers()
     {
         _run.StartRunWithSeed("PHASE5-BUY");
-        _cards.AddGold(100);
+        _cards.AddCredits(100);
         var shop = _run.currentPath.First(node => node.kind == MapNodeType.Shop);
         shop.accessible = true;
         _run.OnPathChosen(shop.id);
 
-        var artifactOffer = _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Artifact);
-        int beforeArtifact = _cards.gold;
-        Assert.That(_run.PurchaseShopOffer(artifactOffer.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(beforeArtifact - artifactOffer.price));
-        Assert.That(_cards.HasArtifact(artifactOffer.artifact), Is.True);
-        Assert.That(_run.PurchaseShopOffer(artifactOffer.StableId), Is.False);
+        var gearOffer = _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Gear);
+        int beforeGear = _cards.credits;
+        Assert.That(_run.PurchaseShopOffer(gearOffer.StableId), Is.True);
+        Assert.That(_cards.credits, Is.EqualTo(beforeGear - gearOffer.price));
+        Assert.That(_cards.HasGear(gearOffer.gear), Is.True);
+        Assert.That(_run.PurchaseShopOffer(gearOffer.StableId), Is.False);
 
         var enhancementConsumableOffer = _run.GetCurrentShopOffers().First(offer =>
             offer.kind == ShopOfferKind.Consumable && offer.consumable.effectType == ConsumableEffectType.ApplyEnhancement);
-        int beforeConsumable = _cards.gold;
+        int beforeConsumable = _cards.credits;
         Assert.That(_run.PurchaseShopOffer(enhancementConsumableOffer.StableId), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(beforeConsumable - enhancementConsumableOffer.price));
+        Assert.That(_cards.credits, Is.EqualTo(beforeConsumable - enhancementConsumableOffer.price));
         Assert.That(_cards.GetConsumableCount(enhancementConsumableOffer.consumable), Is.EqualTo(1));
         Assert.That(_cards.hand.All(card => card.Enhancement == null), Is.True,
             "Shop purchase adds the mapped Consumable; it does not apply its Enhancement immediately.");
@@ -170,18 +170,18 @@ public sealed class Phase5BuildProgressionTests
     }
 
     [Test]
-    public void Restart_ClearsArtifactsEnhancementsAndEconomyWhileConservingBaselineCards()
+    public void Restart_ClearsGearEnhancementsAndEconomyWhileConservingBaselineCards()
     {
         _run.StartRunWithSeed("PHASE5-RESET");
-        _cards.AddGold(100);
-        Assert.That(_cards.BuyArtifact(_artifacts[0]), Is.True);
+        _cards.AddCredits(100);
+        Assert.That(_cards.BuyGear(_gears[0]), Is.True);
         Assert.That(_cards.ApplyEnhancement(_cards.ownedCards[0].Id, _enhancements[0]), Is.True);
 
         _run.RestartRun();
 
-        Assert.That(_cards.gold, Is.Zero);
-        Assert.That(_cards.ownedArtifacts, Is.Empty);
-        Assert.That(_cards.relics, Is.Empty);
+        Assert.That(_cards.credits, Is.Zero);
+        Assert.That(_cards.ownedGear, Is.Empty);
+        Assert.That(_cards.gearIds, Is.Empty);
         Assert.That(_cards.ownedCards.Count, Is.EqualTo(40));
         Assert.That(_cards.ownedCards.All(card => card.Enhancement == null), Is.True);
         Assert.That(_cards.ownedCards.Select(card => card.Id).Distinct().Count(), Is.EqualTo(40));
@@ -204,16 +204,16 @@ public sealed class Phase5BuildProgressionTests
         return consumable;
     }
 
-    RelicData CreateArtifact(string id, int price, System.Action<RelicData> configure)
+    GearData CreateGear(string id, int price, System.Action<GearData> configure)
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = id;
-        artifact.displayName = id;
-        artifact.price = price;
-        artifact.damageMultiplier = 1;
-        configure?.Invoke(artifact);
-        _assets.Add(artifact);
-        return artifact;
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = id;
+        gear.displayName = id;
+        gear.price = price;
+        gear.damageMultiplier = 1;
+        configure?.Invoke(gear);
+        _assets.Add(gear);
+        return gear;
     }
 
     CardEnhancementData CreateEnhancement(string id, int price, int attack = 0, int defense = 0, int heal = 0)
@@ -229,9 +229,9 @@ public sealed class Phase5BuildProgressionTests
         return enhancement;
     }
 
-    EnemyTypeData CreateEnemy(string name, int hp, int attack, int gold)
+    EnemyTypeData CreateEnemy(string name, int hp, int attack, int credits)
     {
-        var enemy = EnemyTypeData.Create(name, hp, attack, gold);
+        var enemy = EnemyTypeData.Create(name, hp, attack, credits);
         enemy.name = name;
         _assets.Add(enemy);
         return enemy;

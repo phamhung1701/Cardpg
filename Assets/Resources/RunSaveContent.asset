@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2c17ba9ae54e9a741aba64de33a26aef, type: 3}
   m_Name: RunSaveContent
-  m_EditorClassIdentifier: CardPG.Runtime::SaveContentCatalog
+  m_EditorClassIdentifier: Dealbreak.Runtime::SaveContentCatalog
   artifacts:
   - {fileID: 11400000, guid: 70efe9d722824464ead2685f20a9aaca, type: 2}
   - {fileID: 11400000, guid: f3fed06e48b10dc48b94d009058740ae, type: 2}

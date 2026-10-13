@@ -32,7 +32,7 @@ public sealed class Phase7B5CombatPlayModeTests
         var cardManagerObject = new GameObject("Selection PlayMode CardManager");
         objects.Add(cardManagerObject);
         var cards = cardManagerObject.AddComponent<CardManager>();
-        cards.Configure(field, dragCanvasObject.GetComponent<Canvas>(), prefab, System.Array.Empty<RelicData>());
+        cards.Configure(field, dragCanvasObject.GetComponent<Canvas>(), prefab, System.Array.Empty<GearData>());
         cards.BuildDeck();
         cards.DealHand();
         var combatObject = new GameObject("Selection PlayMode CombatManager");
@@ -95,16 +95,16 @@ public sealed class Phase7B5CombatPlayModeTests
         var prefab = prefabObject.AddComponent<CardView>();
         prefab.face = prefabObject.GetComponent<Image>();
         prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
-        var overflow = ScriptableObject.CreateInstance<RelicData>();
+        var overflow = ScriptableObject.CreateInstance<GearData>();
         overflow.id = "rel_015"; overflow.canonicalId = "rel_015"; overflow.displayName = "Overflow";
-        overflow.rarity = "Common"; overflow.specialRule = ArtifactSpecialRule.OverflowCommon;
+        overflow.rarity = "Common"; overflow.specialRule = GearSpecialRule.OverflowCommon;
         var cardsObject = new GameObject("Overflow PlayMode CardManager");
         objects.Add(cardsObject);
         var cards = cardsObject.AddComponent<CardManager>();
         cards.Configure(field, dragObject.GetComponent<Canvas>(), prefab, new[] { overflow });
         cards.BuildDeck();
         cards.DealHand();
-        Assert.That(cards.BuyArtifact(overflow, 0), Is.True);
+        Assert.That(cards.BuyGear(overflow, 0), Is.True);
         var combatObject = new GameObject("Overflow PlayMode CombatManager");
         objects.Add(combatObject);
         var combat = combatObject.AddComponent<CombatManager>();
@@ -156,7 +156,7 @@ public sealed class Phase7B5CombatPlayModeTests
         var cardsObject = new GameObject("Enemy Fade CardManager");
         objects.Add(cardsObject);
         var cards = cardsObject.AddComponent<CardManager>();
-        cards.Configure(field, dragObject.GetComponent<Canvas>(), cardPrefab, System.Array.Empty<RelicData>());
+        cards.Configure(field, dragObject.GetComponent<Canvas>(), cardPrefab, System.Array.Empty<GearData>());
         cards.BuildDeck();
         cards.DealHand();
 

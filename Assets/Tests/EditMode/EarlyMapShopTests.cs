@@ -29,10 +29,10 @@ public sealed class EarlyMapShopTests
             Assert.That(shops.Length, Is.EqualTo(2));
             Assert.That(shops.All(n => n.isShopCheckpoint && n.revealed), Is.True);
             Assert.That(shops.Select(n => n.col), Is.EqualTo(new[] { 1.5f, 4.5f }));
-            Assert.That(map.Count(n => !n.isShopCheckpoint && n.kind != MapNodeType.Boss), Is.EqualTo(15));
+            Assert.That(map.Count(n => !n.isShopCheckpoint && n.kind != MapNodeType.Headliner), Is.EqualTo(15));
             foreach (var node in map.Where(n => n.col == 1 || n.col == 4))
                 Assert.That(node.next, Is.EqualTo(new[] { shops[node.col == 1 ? 0 : 1].id }));
-            Assert.That(shops[1].next, Is.EqualTo(new[] { map.Single(n => n.kind == MapNodeType.Boss).id }));
+            Assert.That(shops[1].next, Is.EqualTo(new[] { map.Single(n => n.kind == MapNodeType.Headliner).id }));
         }
     }
 }

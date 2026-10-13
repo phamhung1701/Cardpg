@@ -167,7 +167,7 @@ public sealed class DevModeWindow : EditorWindow
             return;
         }
 
-        if (selected.kind == ShopOfferKind.Artifact)
+        if (selected.kind == ShopOfferKind.Gear)
         {
             if (GUILayout.Button("Buy Selected Gear"))
             {

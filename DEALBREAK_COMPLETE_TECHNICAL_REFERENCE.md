@@ -1,5 +1,7 @@
 # Dealbreak Complete Technical Reference
 
+> **Internal rename update (2026-10-13):** The runtime assembly is now `Dealbreak.Runtime`; Gear uses `GearData`/`GearRuntimeInstance`, and progression APIs use Headliner. This document is a historical implementation snapshot; see `Docs/Dealbreak_Internal_Rebranding_Report.md` for the current API and compatibility boundary.
+
 - **Purpose:** Source-grounded engineering reference for maintaining and extending the Dealbreak Unity project.
 - **Repository snapshot:** `main` at `97682ecad7e8b8db6b04830bdc92b40e686793f6` (`Refactor contextual card targeting UX`, October 9, 2026; tracking `origin/main`).
 - **Unity:** 6000.3.24f1 (`4e7b9b5b6244`), URP 17.3.0.
@@ -30,11 +32,11 @@ The current source/content includes:
 ### 1.3 Technologies and configuration
 
 - Unity 6000.3.24f1, C#, URP 17.3.0, Input System 1.20.0, UGUI 2.0.0, TextMesh Pro, Unity Test Framework 1.6.0/NUnit.
-- Runtime assembly: `Assets/Scripts/CardPG.Runtime.asmdef`; tests: `Assets/Tests/EditMode/CardPG.EditModeTests.asmdef` and `Assets/Tests/PlayMode/CardPG.PlayModeTests.asmdef`.
+- Runtime assembly: `Assets/Scripts/Dealbreak.Runtime.asmdef`; tests: `Assets/Tests/EditMode/Dealbreak.EditModeTests.asmdef` and `Assets/Tests/PlayMode/Dealbreak.PlayModeTests.asmdef`.
 - Active input handler is the New Input System (`ProjectSettings/ProjectSettings.asset`, `ProjectSettings/EditorBuildSettings.asset`, `Assets/Settings/InputSystem_Actions.inputactions`). The Game scene uses `InputSystemUIInputModule`.
 - Display defaults in `ProjectSettings/ProjectSettings.asset`: 1920×1080, product `Cardpg`, linear color space. MainMenu, Game, and Bootstrap scenes are enabled in Build Settings; SampleScene is disabled (`ProjectSettings/EditorBuildSettings.asset`).
 - Package manifest has Unity 2D tooling and other editor/services packages in addition to runtime-used UI/Input System/URP/Test Framework. Package presence alone is not evidence that AI, analytics, navigation, multiplayer, timeline, or Visual Scripting is part of CardPG gameplay. See `Packages/manifest.json` and `Packages/packages-lock.json`.
-- No save/resume, profile/metaprogression, online play, cloud seed sharing, or cross-version determinism guarantee is implemented. No release Windows build result for the current snapshot was found. An earlier Dev Mode build attempt failed in Unity's player compilation/Bee pipeline before producing an executable (`CARDPG_DEVELOPMENT.md:555–565`).
+- No save/resume, profile/metaprogression, online play, cloud seed sharing, or cross-version determinism guarantee is implemented. No release Windows build result for the current snapshot was found. An earlier Dev Mode build attempt failed in Unity's player compilation/Bee pipeline before producing an executable (`DEALBREAK_DEVELOPMENT.md:555–565`).
 
 ### 1.4 Status vocabulary and documentation conflicts
 
@@ -44,7 +46,7 @@ Use these labels in future work:
 - **Implemented / acceptance pending:** tracker documents implementation and focused verification, but owner phase acceptance is not recorded. Includes much of the 2026 expansion work: Artifact tiers and batches, backpack/reward tray/economy content, Master Thief/growth artifacts, Blood Ritual, Contracts, and Infinite Mode (`Locus/knowledge/plan/early-access-gamedata-implementation.md`, dated entries and status table).
 - **Unverified in this audit:** source is present or a report describes a check, but no current audit-time execution or complete human validation. Human mouse feel, meaningful natural 12-map play, and a current test rerun are unverified.
 - **Draft/deferred:** workbook-only values, unused/unregistered assets, draft boss-ability rows, unspecified placeholder entries, or explicitly deferred features. Do not silently treat them as runtime rules.
-- **Deprecated/stale documentation:** `PROJECT_TECHNICAL_SUMMARY.md` last changed September 18, 2026; `README.md` and `CARDPG_DEVELOPMENT.md` last changed September 28; `AGENTS.md` last changed September 25. These predate substantial October 3–9 implementation. README still states Milestones 5–7 are unimplemented while current commits/source contain later work. The portfolio GDD under `Docs/GameDesign/` says October 9 edits are uncommitted; this no longer matches the current HEAD and must not be treated as an implementation authority. Runtime code, current serialized assets, tests, and latest dated reports outrank those snapshots.
+- **Deprecated/stale documentation:** `PROJECT_TECHNICAL_SUMMARY.md` last changed September 18, 2026; `README.md` and `DEALBREAK_DEVELOPMENT.md` last changed September 28; `AGENTS.md` last changed September 25. These predate substantial October 3–9 implementation. README still states Milestones 5–7 are unimplemented while current commits/source contain later work. The portfolio GDD under `Docs/GameDesign/` says October 9 edits are uncommitted; this no longer matches the current HEAD and must not be treated as an implementation authority. Runtime code, current serialized assets, tests, and latest dated reports outrank those snapshots.
 
 ## 2. REPOSITORY STRUCTURE
 
@@ -602,7 +604,7 @@ Dates/claims below are based on `git log` and dated docs; motivation is given on
 |---|---|---|
 | Sep 15, 2026 | `8880703` | Initial Git/LFS Unity repository. |
 | Sep 16 | `2f68b70`, `679f22e` | Captured prototype, documented Phase 0 combat rules. |
-| Sep 16 | `ebaf3c3`, `1424381`, `3c1e643` | Card state/zone foundation, persistent health/defense/Recover, twelve-boss exact face-card progression. `CARDPG_DEVELOPMENT.md` uses this as historical baseline. |
+| Sep 16 | `ebaf3c3`, `1424381`, `3c1e643` | Card state/zone foundation, persistent health/defense/Recover, twelve-boss exact face-card progression. `DEALBREAK_DEVELOPMENT.md` uses this as historical baseline. |
 | Sep 18 | `9b25286` | Phase 7A interaction/card assets. |
 | Sep 25–26 | `edf5b00`, `7d7839c`, `2ef6b3e` | Typed effect foundation and Artifact/enhancement content expansion. |
 | Sep 27 | `371ffc6`, `13ab91f`, `01dcc43` | UI/hand interaction revamp, combat presentation barrier, reaction runaway safety. |
@@ -617,11 +619,11 @@ Dates/claims below are based on `git log` and dated docs; motivation is given on
 
 ### 9.1 Snapshot dirty state
 
-At audit start `git status --short --branch` was `## main...origin/main`; HEAD and origin/main were both `97682ec...`. Existing dirty paths: modified `.plastic/plastic.changes`, `.plastic/plastic.wktree`, `Locus/workspace-trees/default.json`; untracked `Directory.Build.props` and `Docs/` (already contained prior portfolio documents). The new requested reference adds `CARDPG_COMPLETE_TECHNICAL_REFERENCE.md`. The audit did not edit any of these pre-existing files, stage, commit, push, reset or clean anything. `Directory.Build.props` is Locus-generated and includes a machine-local analyzer DLL absolute path; its header says Unity ignores it and Locus may recreate it.
+At audit start `git status --short --branch` was `## main...origin/main`; HEAD and origin/main were both `97682ec...`. Existing dirty paths: modified `.plastic/plastic.changes`, `.plastic/plastic.wktree`, `Locus/workspace-trees/default.json`; untracked `Directory.Build.props` and `Docs/` (already contained prior portfolio documents). The new requested reference adds `DEALBREAK_COMPLETE_TECHNICAL_REFERENCE.md`. The audit did not edit any of these pre-existing files, stage, commit, push, reset or clean anything. `Directory.Build.props` is Locus-generated and includes a machine-local analyzer DLL absolute path; its header says Unity ignores it and Locus may recreate it.
 
 ### 9.2 Documentation chronology/discrepancies
 
-`CARDPG_DEVELOPMENT.md` and `README.md` were last changed September 28; `PROJECT_TECHNICAL_SUMMARY.md` September 18; `AGENTS.md` September 25. They remain useful for historical rationale and earlier test numbers but stop before current early-access milestones. README explicitly lists older Milestones 5–7 as unimplemented and stale counts; current implementation contradicts those statements. `Locus/knowledge/plan/early-access-gamedata-implementation.md` was last committed October 3 and is the most detailed Phase 5–8 tracker, with implementation separated from owner acceptance. `Locus/knowledge/plan/direct-targeting-ux-report.md` was committed October 9 and is the most recent specific UI/test evidence. Root `AGENTS.md` contains a “current planned work” section about Phase 7B.5 despite that work already being implemented; treat it as stale historical instruction, not current roadmap.
+`DEALBREAK_DEVELOPMENT.md` and `README.md` were last changed September 28; `PROJECT_TECHNICAL_SUMMARY.md` September 18; `AGENTS.md` September 25. They remain useful for historical rationale and earlier test numbers but stop before current early-access milestones. README explicitly lists older Milestones 5–7 as unimplemented and stale counts; current implementation contradicts those statements. `Locus/knowledge/plan/early-access-gamedata-implementation.md` was last committed October 3 and is the most detailed Phase 5–8 tracker, with implementation separated from owner acceptance. `Locus/knowledge/plan/direct-targeting-ux-report.md` was committed October 9 and is the most recent specific UI/test evidence. Root `AGENTS.md` contains a “current planned work” section about Phase 7B.5 despite that work already being implemented; treat it as stale historical instruction, not current roadmap.
 
 ## 10. SYSTEM INTERACTION MAP
 
@@ -839,4 +841,4 @@ No tests or build were run during this audit. The latest test counts come from t
 No major source area in the requested project scope is intentionally omitted: runtime gameplay, UI/frontend, Editor tools, assets/catalogs, tests, settings/packages, history and extension points are represented. Individual third-party package internals, every serialized field on every 141 ScriptableObjects, every workbook content row/effect numeric, and Unity-generated/cached files are not exhaustively transcribed; those are explicitly outside this reference's asset-by-asset detail and should be inspected for a concrete content change.
 
 ### Snapshot and modifications
-This audit created only `CARDPG_COMPLETE_TECHNICAL_REFERENCE.md`. Existing dirty `.plastic` metadata, Locus workspace tree, untracked `Directory.Build.props`, and pre-existing `Docs/` were preserved; no gameplay code, Unity data/assets, scenes, prefabs, tests, docs other than this requested file, settings, Git staging, commit or push was performed.
+This audit created only `DEALBREAK_COMPLETE_TECHNICAL_REFERENCE.md`. Existing dirty `.plastic` metadata, Locus workspace tree, untracked `Directory.Build.props`, and pre-existing `Docs/` were preserved; no gameplay code, Unity data/assets, scenes, prefabs, tests, docs other than this requested file, settings, Git staging, commit or push was performed.

@@ -33,7 +33,7 @@ public sealed class DirectHandTargetingUITests
         var prefabObject = Make("Direct target card prefab", typeof(RectTransform), typeof(Image), typeof(CardView));
         _cards = Make("Direct target cards", typeof(CardManager)).GetComponent<CardManager>();
         _cards.Configure(field, canvasObject.GetComponent<Canvas>(), prefabObject.GetComponent<CardView>(),
-            System.Array.Empty<RelicData>(), System.Array.Empty<CardEnhancementData>(), new[] { _mirror, _torch, _spade });
+            System.Array.Empty<GearData>(), System.Array.Empty<CardEnhancementData>(), new[] { _mirror, _torch, _spade });
         _cards.ConfigureRandom(new DeterministicRandom(62019));
         _cards.BuildDeck();
         _combat = Make("Direct target combat", typeof(CombatManager)).GetComponent<CombatManager>();
@@ -167,23 +167,23 @@ public sealed class DirectHandTargetingUITests
     }
 
     [Test]
-    public void ArtifactMergeMode_RoutesEligibleClicksOnlyToMergeCallback()
+    public void GearMergeMode_RoutesEligibleClicksOnlyToMergeCallback()
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.name = "Merge test artifact";
-        _created.Add(artifact);
-        var slotObject = Make("Merge test artifact slot", typeof(RectTransform), typeof(Image), typeof(ArtifactIconSlotUI));
-        var slot = slotObject.GetComponent<ArtifactIconSlotUI>();
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.name = "Merge test artifact";
+        _created.Add(gear);
+        var slotObject = Make("Merge test artifact slot", typeof(RectTransform), typeof(Image), typeof(GearIconSlotUI));
+        var slot = slotObject.GetComponent<GearIconSlotUI>();
         int detailClicks = 0;
         int mergeClicks = 0;
-        slot.Bind(artifact, null, null, _ => detailClicks++, 42, (_, _) => mergeClicks++,
+        slot.Bind(gear, null, null, _ => detailClicks++, 42, (_, _) => mergeClicks++,
             mergeSelected: false, mergeMode: true, mergeEligible: true);
 
         slot.OnPointerClick(new PointerEventData(_eventSystem) { button = PointerEventData.InputButton.Left });
         Assert.That(detailClicks, Is.Zero);
         Assert.That(mergeClicks, Is.EqualTo(1));
 
-        slot.Bind(artifact, null, null, _ => detailClicks++, 42, (_, _) => mergeClicks++,
+        slot.Bind(gear, null, null, _ => detailClicks++, 42, (_, _) => mergeClicks++,
             mergeSelected: false, mergeMode: true, mergeEligible: false);
         slot.OnPointerClick(new PointerEventData(_eventSystem) { button = PointerEventData.InputButton.Left });
         Assert.That(detailClicks, Is.Zero);

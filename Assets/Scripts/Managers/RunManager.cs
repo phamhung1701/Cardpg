@@ -17,9 +17,10 @@ public class PathNode
     public bool isShopCheckpoint;
 }
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RunManager")]
 public partial class RunManager : Singleton<RunManager>
 {
-    public const int FirstMapBossHp = 20;
+    public const int FirstMapHeadlinerHp = 20;
     [Header("Enemy Type Assets")]
     public EnemyTypeData thiefType;
     public EnemyTypeData goblinType;
@@ -30,12 +31,15 @@ public partial class RunManager : Singleton<RunManager>
 
     [Header("Black Market Goods slots: Gear / Mod / Trick")]
     public Vector3Int midShopGoods = new(2, 2, 1);
-    public Vector3Int preBossShopGoods = new(1, 1, 3);
+    [UnityEngine.Serialization.FormerlySerializedAs("preBossShopGoods")]
+    public Vector3Int preHeadlinerShopGoods = new(1, 1, 3);
 
     [Header("Runtime State")]
     [SerializeField] string runSeed;
-    public List<EnemyTypeData> bossDeck = new();
-    public int bossIndex;
+    [UnityEngine.Serialization.FormerlySerializedAs("bossDeck")]
+    public List<EnemyTypeData> headlinerDeck = new();
+    [UnityEngine.Serialization.FormerlySerializedAs("bossIndex")]
+    public int headlinerIndex;
     public List<PathNode> currentPath = new();
 
     public event Action OnShowPathScreen;
@@ -50,11 +54,11 @@ public partial class RunManager : Singleton<RunManager>
     public event Action<string> OnRunStarted;
     public event Action<string> OnCycleStarted;
     public event Action OnMapRevealChanged;
-    public event Action<CardInstance> OnBossRewardGranted;
+    public event Action<CardInstance> OnHeadlinerRewardGranted;
     public event Action OnShopOffersChanged;
     public event Action<string> OnInvestmentResult;
     public event Action OnConsumableRewardChanged;
-    public event Action<string, string, IReadOnlyList<CardInstance>, Action<int>> OnShowArtifactDiscardChoice;
+    public event Action<string, string, IReadOnlyList<CardInstance>, Action<int>> OnShowGearDiscardChoice;
 
     readonly List<EnemyTypeData> _generatedEnemyTypes = new();
     readonly List<EnemyAbility> _generatedEnemyAbilities = new();
@@ -76,8 +80,8 @@ public partial class RunManager : Singleton<RunManager>
     bool _pendingHammerReward;
     bool _hammerRetryPending;
     RunEventDefinition _pendingBloodRitualEvent;
-    RelicData _pendingBloodRitualArtifact;
-    RelicData[] _pendingBloodRitualReplacements = Array.Empty<RelicData>();
+    GearData _pendingBloodRitualGear;
+    GearData[] _pendingBloodRitualReplacements = Array.Empty<GearData>();
     int _pendingBloodRitualCost;
     bool _pendingBloodRitualSetMaxHealth;
     bool _pendingBloodRitualReward;
@@ -100,13 +104,13 @@ public partial class RunManager : Singleton<RunManager>
 
     public RunTimingStatistics Timing { get; } = new();
 
-    public int CurrentCycle => BossTotal > 0 ? Math.Max(1, bossIndex == int.MaxValue ? int.MaxValue : bossIndex + 1) : 0;
-    public int BossTotal => bossDeck.Count;
+    public int CurrentCycle => HeadlinerTotal > 0 ? Math.Max(1, headlinerIndex == int.MaxValue ? int.MaxValue : headlinerIndex + 1) : 0;
+    public int HeadlinerTotal => headlinerDeck.Count;
     public bool IsInfiniteMode { get; private set; }
     public bool IsRunCompleted { get; private set; }
-    public bool CanContinueInfiniteMode => IsRunCompleted && !IsInfiniteMode && bossDeck.Count == 12 && bossIndex == 12;
+    public bool CanContinueInfiniteMode => IsRunCompleted && !IsInfiniteMode && headlinerDeck.Count == 12 && headlinerIndex == 12;
     public string RunSeed => runSeed;
-    public int CurrentMapIndex => bossIndex;
+    public int CurrentMapIndex => headlinerIndex;
     public int CompletedNodeCount => _completedNodeCount;
     public int PendingInvestmentCount => _pendingInvestmentStakes.Count;
     public int PaidItemPurchaseCount => _paidItemPurchaseCount;
@@ -115,18 +119,18 @@ public partial class RunManager : Singleton<RunManager>
     public ConsumableRewardOffer PendingConsumableReward =>
         _pendingConsumableRewards.Count > 0 ? _pendingConsumableRewards.Peek() : null;
 
-    public bool RequestArtifactDiscardChoice(string title, string description,
+    public bool RequestGearDiscardChoice(string title, string description,
         IReadOnlyList<CardInstance> choices, Action<int> onResolved)
     {
-        if (OnShowArtifactDiscardChoice == null || choices == null || choices.Count == 0 || onResolved == null)
+        if (OnShowGearDiscardChoice == null || choices == null || choices.Count == 0 || onResolved == null)
             return false;
         bool resolved = false;
-        GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, true);
-        OnShowArtifactDiscardChoice.Invoke(title, description, choices, cardId =>
+        GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, true);
+        OnShowGearDiscardChoice.Invoke(title, description, choices, cardId =>
         {
             if (resolved) return;
             resolved = true;
-            GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, false);
+            GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, false);
             onResolved(cardId);
         });
         return true;
@@ -136,9 +140,9 @@ public partial class RunManager : Singleton<RunManager>
     public bool CanSellItems => IsActiveShopForSale();
     public RunEventDefinition ActiveEvent => _activeEvent;
     public bool IsPendingHammerReward => _pendingHammerReward;
-    public EnemyTypeData CurrentBoss => bossDeck.Count == 0 || bossIndex < 0
+    public EnemyTypeData CurrentHeadliner => headlinerDeck.Count == 0 || headlinerIndex < 0
         ? null
-        : bossDeck[bossIndex % bossDeck.Count];
+        : headlinerDeck[headlinerIndex % headlinerDeck.Count];
 
     protected override void Awake()
     {
@@ -197,7 +201,7 @@ public partial class RunManager : Singleton<RunManager>
         CardManager.Instance.ConfigureRandom(_randomContext.CreateStream("cards"));
         CardManager.Instance.BuildDeck();
         CardManager.Instance.DealHand();
-        BuildBossDeck();
+        BuildHeadlinerDeck();
         Timing.StartNewRun(CurrentMapIndex);
         OnRunStarted?.Invoke(runSeed);
         NextCycle();
@@ -213,33 +217,33 @@ public partial class RunManager : Singleton<RunManager>
             CardManager.Instance != null && CombatManager.Instance != null;
     }
 
-    void BuildBossDeck()
+    void BuildHeadlinerDeck()
     {
-        bossDeck.Clear();
-        bossIndex = 0;
+        headlinerDeck.Clear();
+        headlinerIndex = 0;
         foreach (var rank in new[] { CardData.Rank.Jack, CardData.Rank.Queen, CardData.Rank.King })
         {
-            var rankBosses = new List<EnemyTypeData>();
+            var rankHeadliners = new List<EnemyTypeData>();
             foreach (CardData.Suit suit in Enum.GetValues(typeof(CardData.Suit)))
             {
                 var card = CardData.Create(suit, rank);
-                rankBosses.Add(CreateBossType(card));
+                rankHeadliners.Add(CreateHeadlinerType(card));
             }
-            rankBosses.Shuffle(_randomContext.CreateStream("boss-order", (int)rank));
-            bossDeck.AddRange(rankBosses);
+            rankHeadliners.Shuffle(_randomContext.CreateStream("boss-order", (int)rank));
+            headlinerDeck.AddRange(rankHeadliners);
         }
     }
 
-    EnemyTypeData CreateBossType(CardData card)
+    EnemyTypeData CreateHeadlinerType(CardData card)
     {
-        int gold = card.rank switch
+        int credits = card.rank switch
         {
             CardData.Rank.Jack => 10,
             CardData.Rank.Queen => 15,
             _ => 20,
         };
-        var boss = EnemyTypeData.Create(GetCanonicalHeadlinerName(card), 30, 6, gold);
-        boss.sourceCard = card;
+        var headliner = EnemyTypeData.Create(GetCanonicalHeadlinerName(card), 30, 6, credits);
+        headliner.sourceCard = card;
         var random = _randomContext.CreateStream("boss-ability", (int)card.rank * 10 + (int)card.suit);
         EnemyAbility[] abilities;
         if (card.rank != CardData.Rank.King)
@@ -273,9 +277,9 @@ public partial class RunManager : Singleton<RunManager>
                         EnemyAbilityEffect.HeavySwing, EnemyAbilityEffect.Desperation)) };
             }
         }
-        boss.abilities = abilities;
-        _generatedEnemyTypes.Add(boss);
-        return boss;
+        headliner.abilities = abilities;
+        _generatedEnemyTypes.Add(headliner);
+        return headliner;
     }
 
     static string GetCanonicalHeadlinerName(CardData card)
@@ -336,21 +340,21 @@ public partial class RunManager : Singleton<RunManager>
         return ability;
     }
 
-    public string CurrentBossDescription
+    public string CurrentHeadlinerDescription
     {
         get
         {
-            var boss = CurrentBoss;
-            if (boss == null) return string.Empty;
-            string abilities = boss.abilities == null ? string.Empty :
-                string.Join(" • ", boss.abilities.Where(ability => ability != null).Select(ability =>
+            var headliner = CurrentHeadliner;
+            if (headliner == null) return string.Empty;
+            string abilities = headliner.abilities == null ? string.Empty :
+                string.Join(" • ", headliner.abilities.Where(ability => ability != null).Select(ability =>
                     string.IsNullOrEmpty(ability.description) ? ability.displayName : $"{ability.displayName}: {ability.description}"));
 
-            int bossHp = CurrentMapIndex == 0 ? FirstMapBossHp : boss.maxHp;
-            var stats = ScaleEncounterStats(bossHp, boss.baseAttack, CurrentMapIndex);
+            int headlinerHp = CurrentMapIndex == 0 ? FirstMapHeadlinerHp : headliner.maxHp;
+            var stats = ScaleEncounterStats(headlinerHp, headliner.baseAttack, CurrentMapIndex);
             return string.IsNullOrEmpty(abilities)
-                ? $"{boss.enemyName} • {stats.hp} HP / {stats.attack} ATK"
-                : $"{boss.enemyName} • {stats.hp} HP / {stats.attack} ATK • {abilities}";
+                ? $"{headliner.enemyName} • {stats.hp} HP / {stats.attack} ATK"
+                : $"{headliner.enemyName} • {stats.hp} HP / {stats.attack} ATK • {abilities}";
         }
     }
 
@@ -366,7 +370,7 @@ public partial class RunManager : Singleton<RunManager>
         QueueAlchemistRewardForCurrentMap();
         OnCycleStarted?.Invoke(IsInfiniteMode
             ? $"District {CurrentCycle} / Infinite"
-            : $"District {CurrentCycle} / {BossTotal}");
+            : $"District {CurrentCycle} / {HeadlinerTotal}");
     }
 
     public IReadOnlyList<PathNode> GenerateMapForIndex(int mapIndex)
@@ -494,7 +498,7 @@ public partial class RunManager : Singleton<RunManager>
             Debug.LogError("RunManager: route selection rejected while the previous encounter is not resolved.", this);
             return;
         }
-        if ((node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss) && !combat.CanStartEncounter)
+        if ((node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Headliner) && !combat.CanStartEncounter)
         {
             Debug.LogError($"RunManager: cannot start {node.kind} node {node.id} from combat state {combat.currentState}.", this);
             return;
@@ -517,7 +521,7 @@ public partial class RunManager : Singleton<RunManager>
         {
             case MapNodeType.Combat:
             case MapNodeType.Elite:
-            case MapNodeType.Boss:
+            case MapNodeType.Headliner:
                 if (!TryStartEncounter(node))
                 {
                     RollbackNodeStart(node, columnNodes, accessibleBefore, revealedBefore,
@@ -581,7 +585,7 @@ public partial class RunManager : Singleton<RunManager>
 
         var enemyType = node.kind switch
         {
-            MapNodeType.Boss => CurrentBoss,
+            MapNodeType.Headliner => CurrentHeadliner,
             MapNodeType.Elite => FindAuthoredElite(node.contentId) ?? CreateEliteType(FindEnemy(node.contentId)),
             _ => FindEnemy(node.contentId)
         };
@@ -638,10 +642,10 @@ public partial class RunManager : Singleton<RunManager>
     {
         if (node == null) return (0, 0);
         var authoredElite = node.kind == MapNodeType.Elite ? FindAuthoredElite(node.contentId) : null;
-        var source = authoredElite ?? (node.kind == MapNodeType.Boss ? CurrentBoss : FindEnemy(node.contentId));
+        var source = authoredElite ?? (node.kind == MapNodeType.Headliner ? CurrentHeadliner : FindEnemy(node.contentId));
         if (source == null) return (0, 0);
-        int baseHp = node.kind == MapNodeType.Boss && node.mapIndex == 0
-            ? FirstMapBossHp : source.maxHp;
+        int baseHp = node.kind == MapNodeType.Headliner && node.mapIndex == 0
+            ? FirstMapHeadlinerHp : source.maxHp;
         var stats = ScaleEncounterStats(baseHp, source.baseAttack, node.mapIndex);
         return node.kind == MapNodeType.Elite && authoredElite == null
             ? (Mathf.CeilToInt(stats.hp * 1.5f), stats.attack + 2)
@@ -655,7 +659,7 @@ public partial class RunManager : Singleton<RunManager>
             $"Enforcer {source.enemyName}",
             Mathf.CeilToInt(source.maxHp * 1.5f),
             source.baseAttack + 2,
-            source.goldReward * 2);
+            source.creditsReward * 2);
         var ability = contentCatalog != null ? contentCatalog.eliteAbility : null;
         elite.abilities = ability != null ? new[] { ability } : Array.Empty<EnemyAbility>();
         _generatedEnemyTypes.Add(elite);
@@ -712,7 +716,7 @@ public partial class RunManager : Singleton<RunManager>
             MapNodeType.Event => "Incident",
             MapNodeType.Upgrade => "Training",
             MapNodeType.Risk => "Risk / Reward",
-            MapNodeType.Boss => CurrentBoss != null ? $"Headliner Fight: {CurrentBoss.enemyName}" : "Headliner Fight",
+            MapNodeType.Headliner => CurrentHeadliner != null ? $"Headliner Fight: {CurrentHeadliner.enemyName}" : "Headliner Fight",
             _ => "Unknown"
         };
     }
@@ -721,7 +725,7 @@ public partial class RunManager : Singleton<RunManager>
     {
         if (node == null) return string.Empty;
         bool showStats = node.accessible && node.revealed &&
-            (node.kind == MapNodeType.Combat || node.kind == MapNodeType.Elite || node.kind == MapNodeType.Boss);
+            (node.kind == MapNodeType.Combat || node.kind == MapNodeType.Elite || node.kind == MapNodeType.Headliner);
         var stats = showStats ? GetEncounterStats(node) : (hp: 0, attack: 0);
         showStats &= stats.hp > 0;
         return node.kind switch
@@ -736,7 +740,7 @@ public partial class RunManager : Singleton<RunManager>
             MapNodeType.Event => "An Incident choice with immediate effects",
             MapNodeType.Upgrade => "Choose a free card Mod",
             MapNodeType.Risk => "Trade safety for a stronger reward",
-            MapNodeType.Boss => showStats
+            MapNodeType.Headliner => showStats
                 ? $"Major Headliner fight • {stats.hp} HP / {stats.attack} ATK"
                 : "Major Headliner fight",
             _ => string.Empty
@@ -847,7 +851,7 @@ public partial class RunManager : Singleton<RunManager>
         var cards = CardManager.Instance;
         int mapIndex = CurrentMapIndex;
         if (cards == null || _randomContext == null ||
-            !cards.HasArtifactSpecialRule(ArtifactSpecialRule.AlchemistsKit)) return;
+            !cards.HasGearSpecialRule(GearSpecialRule.AlchemistsKit)) return;
         if (!_alchemistChoicesByMap.TryGetValue(mapIndex, out var choices))
         {
             var candidates = cards.consumableCatalog
@@ -861,16 +865,16 @@ public partial class RunManager : Singleton<RunManager>
         QueueConsumableReward($"alchemist:{mapIndex}", "Alchemist’s Kit", choices);
     }
 
-    public bool SellArtifact(long artifactInstanceId, int expectedAuthoredPrice)
+    public bool SellGear(long gearInstanceId, int expectedAuthoredPrice)
     {
         if (!IsActiveShopForSale() || GameplayInputGate.IsBlocked) return false;
         var cards = CardManager.Instance;
-        var instance = cards != null ? cards.GetArtifactInstanceById(artifactInstanceId) : null;
+        var instance = cards != null ? cards.GetGearInstanceById(gearInstanceId) : null;
         if (instance == null || instance.Definition == null || instance.Definition.price < 0 ||
             instance.Definition.price != expectedAuthoredPrice) return false;
         int payout = expectedAuthoredPrice / 2;
-        if (!cards.RemoveArtifactInstance(artifactInstanceId)) return false;
-        if (payout > 0) cards.AddGold(payout);
+        if (!cards.RemoveGearInstance(gearInstanceId)) return false;
+        if (payout > 0) cards.AddCredits(payout);
         SaveGameService.Checkpoint(this);
         return true;
     }
@@ -884,7 +888,7 @@ public partial class RunManager : Singleton<RunManager>
             definition.price != expectedAuthoredPrice) return false;
         int payout = expectedAuthoredPrice / 2;
         if (!cards.RemoveConsumableInstanceAtSlot(slotIndex, expectedInstance)) return false;
-        if (payout > 0) cards.AddGold(payout);
+        if (payout > 0) cards.AddCredits(payout);
         SaveGameService.Checkpoint(this);
         return true;
     }
@@ -907,13 +911,13 @@ public partial class RunManager : Singleton<RunManager>
         if (offer.price < 0) return "Invalid price";
         if (offer.purchased) return "Already purchased at this Black Market";
 
-        if (offer.kind == ShopOfferKind.Artifact)
+        if (offer.kind == ShopOfferKind.Gear)
         {
-            if (offer.artifact != null && (cards.HasArtifact(offer.artifact) ||
-                cards.ownedArtifacts.Any(owned => owned != null &&
-                    string.Equals(owned.id, offer.artifact.id, StringComparison.Ordinal))))
+            if (offer.gear != null && (cards.HasGear(offer.gear) ||
+                cards.ownedGear.Any(owned => owned != null &&
+                    string.Equals(owned.id, offer.gear.id, StringComparison.Ordinal))))
                 return "Already owned";
-            string reason = cards.GetArtifactAcquisitionUnavailableReason(offer.artifact);
+            string reason = cards.GetGearAcquisitionUnavailableReason(offer.gear);
             if (!string.IsNullOrEmpty(reason)) return reason;
         }
         else if (offer.kind == ShopOfferKind.Contract)
@@ -945,17 +949,17 @@ public partial class RunManager : Singleton<RunManager>
         else if (offer.kind == ShopOfferKind.Investment || offer.kind == ShopOfferKind.Guidance)
         {
             if (_usedSpecialShopOffers.Contains(offer.kind)) return "Already purchased during this Black Market visit";
-            if (offer.kind == ShopOfferKind.Investment && (offer.investmentStake <= 0 || offer.investmentStake > cards.gold))
+            if (offer.kind == ShopOfferKind.Investment && (offer.investmentStake <= 0 || offer.investmentStake > cards.credits))
                 return "Stake must be between 1 and your current Credits";
             if (offer.kind == ShopOfferKind.Guidance && !CanRevealEligibleHiddenNode())
                 return "No eligible hidden node to reveal";
         }
         else return "Offer unavailable";
 
-        int requiredGold = offer.kind == ShopOfferKind.Investment ? offer.investmentStake : offer.price;
-        return cards.CanAfford(requiredGold)
+        int requiredCredits = offer.kind == ShopOfferKind.Investment ? offer.investmentStake : offer.price;
+        return cards.CanAfford(requiredCredits)
             ? string.Empty
-            : $"Need {requiredGold} Credits (have {cards.gold} Credits)";
+            : $"Need {requiredCredits} Credits (have {cards.credits} Credits)";
     }
 
     public string GetEnhancementTargetUnavailableReason(int cardId)
@@ -975,7 +979,7 @@ public partial class RunManager : Singleton<RunManager>
             ? "Card already has this Mod" : string.Empty;
     }
 
-    // Artifact purchases need no target. Enhancement purchases require an explicit card ID.
+    // Gear purchases need no target. Enhancement purchases require an explicit card ID.
     public bool PurchaseShopOffer(string stableId)
     {
         if (GameplayInputGate.IsBlocked || !CanPurchaseShopOffer(stableId)) return false;
@@ -1000,7 +1004,7 @@ public partial class RunManager : Singleton<RunManager>
 
     static string GoodsIdentity(ShopOffer offer) => offer.kind switch
     {
-        ShopOfferKind.Artifact => "artifact:" + offer.artifact?.id,
+        ShopOfferKind.Gear => "artifact:" + offer.gear?.id,
         ShopOfferKind.Enhancement => "enhancement:" + offer.enhancement?.id,
         ShopOfferKind.Consumable => "consumable:" + offer.consumable?.id,
         _ => string.Empty
@@ -1009,12 +1013,12 @@ public partial class RunManager : Singleton<RunManager>
     bool PurchaseShopOfferCore(ShopOffer offer)
     {
         var cards = CardManager.Instance;
-        bool cashbackOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.CashbackToken);
-        bool giftOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.MerchantsGift);
-        int goldBefore = cards.gold;
+        bool cashbackOwned = cards.HasGearSpecialRule(GearSpecialRule.CashbackToken);
+        bool giftOwned = cards.HasGearSpecialRule(GearSpecialRule.MerchantsGift);
+        int creditsBefore = cards.credits;
         bool success;
-        if (offer.kind == ShopOfferKind.Artifact)
-            success = cards.BuyArtifact(offer.artifact, offer.price);
+        if (offer.kind == ShopOfferKind.Gear)
+            success = cards.BuyGear(offer.gear, offer.price);
         else if (offer.kind == ShopOfferKind.Contract)
         {
             success = ShowContractSelection(offer.price);
@@ -1026,7 +1030,7 @@ public partial class RunManager : Singleton<RunManager>
         }
         else if (offer.kind == ShopOfferKind.Investment)
         {
-            success = cards.SpendGold(offer.investmentStake);
+            success = cards.SpendCredits(offer.investmentStake);
             if (success)
             {
                 _pendingInvestmentStakes.Add(offer.investmentStake);
@@ -1035,10 +1039,10 @@ public partial class RunManager : Singleton<RunManager>
         }
         else if (offer.kind == ShopOfferKind.Guidance)
         {
-            if (!CanRevealEligibleHiddenNode() || !cards.SpendGold(offer.price)) return false;
+            if (!CanRevealEligibleHiddenNode() || !cards.SpendCredits(offer.price)) return false;
             if (!TryRevealHiddenNodeFromEvent())
             {
-                cards.AddGold(offer.price);
+                cards.AddCredits(offer.price);
                 return false;
             }
             _usedSpecialShopOffers.Add(offer.kind);
@@ -1049,7 +1053,7 @@ public partial class RunManager : Singleton<RunManager>
         if (offer.kind != ShopOfferKind.Contract && offer.price > 0)
             _madeSuccessfulPurchaseInCurrentShop = true;
         if (IsEligiblePaidItem(offer.kind))
-            CompletePaidItemPurchase(goldBefore - cards.gold, cashbackOwned, giftOwned);
+            CompletePaidItemPurchase(creditsBefore - cards.credits, cashbackOwned, giftOwned);
         RepriceActiveShopOffers();
         return true;
     }
@@ -1061,14 +1065,14 @@ public partial class RunManager : Singleton<RunManager>
         if (offer.kind != ShopOfferKind.Enhancement ||
             !string.IsNullOrEmpty(GetEnhancementAcquisitionTargetUnavailableReason(cardId, offer.enhancement))) return false;
         var cards = CardManager.Instance;
-        bool cashbackOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.CashbackToken);
-        bool giftOwned = cards.HasArtifactSpecialRule(ArtifactSpecialRule.MerchantsGift);
-        int goldBefore = cards.gold;
+        bool cashbackOwned = cards.HasGearSpecialRule(GearSpecialRule.CashbackToken);
+        bool giftOwned = cards.HasGearSpecialRule(GearSpecialRule.MerchantsGift);
+        int creditsBefore = cards.credits;
         _shopTransaction = true;
         try
         {
             if (!cards.BuyEnhancement(cardId, offer.enhancement, offer.price, replaceExisting)) return false;
-            CompletePaidItemPurchase(goldBefore - cards.gold, cashbackOwned, giftOwned);
+            CompletePaidItemPurchase(creditsBefore - cards.credits, cashbackOwned, giftOwned);
             if (offer.price > 0) _madeSuccessfulPurchaseInCurrentShop = true;
             MarkShopPurchase(offer);
             return true;
@@ -1080,7 +1084,7 @@ public partial class RunManager : Singleton<RunManager>
     {
         var cards = CardManager.Instance;
         if (cards == null || !IsActiveShopForSale()) return 0;
-        return Math.Max(0, Math.Min(cards.gold / 3, Math.Min(cards.deck.Count, cards.HandCapacity - cards.HandCount)));
+        return Math.Max(0, Math.Min(cards.credits / 3, Math.Min(cards.deck.Count, cards.HandCapacity - cards.HandCount)));
     }
 
     public bool SetSupplyQuantity(string stableId, int quantity)
@@ -1114,7 +1118,7 @@ public partial class RunManager : Singleton<RunManager>
     }
 
     static bool IsEligiblePaidItem(ShopOfferKind kind) => kind is
-        ShopOfferKind.Artifact or ShopOfferKind.Enhancement or ShopOfferKind.Consumable;
+        ShopOfferKind.Gear or ShopOfferKind.Enhancement or ShopOfferKind.Consumable;
 
     static int RoundPercentage(int value, int percent)
     {
@@ -1124,15 +1128,15 @@ public partial class RunManager : Singleton<RunManager>
 
     static int IncrementToMaximum(int value) => value < int.MaxValue ? value + 1 : int.MaxValue;
 
-    void CompletePaidItemPurchase(int actualGoldSpent, bool cashbackOwned, bool giftOwned)
+    void CompletePaidItemPurchase(int actualCreditsSpent, bool cashbackOwned, bool giftOwned)
     {
-        actualGoldSpent = Math.Max(0, actualGoldSpent);
-        if (actualGoldSpent <= 0) return;
+        actualCreditsSpent = Math.Max(0, actualCreditsSpent);
+        if (actualCreditsSpent <= 0) return;
         var cards = CardManager.Instance;
         if (cashbackOwned && cards != null)
         {
-            int refund = Math.Min(actualGoldSpent, RoundPercentage(actualGoldSpent, 15));
-            if (refund > 0) cards.AddGold(refund);
+            int refund = Math.Min(actualCreditsSpent, RoundPercentage(actualCreditsSpent, 15));
+            if (refund > 0) cards.AddCredits(refund);
         }
         if (!giftOwned) return;
         _paidItemPurchaseCount = IncrementToMaximum(_paidItemPurchaseCount);
@@ -1147,7 +1151,7 @@ public partial class RunManager : Singleton<RunManager>
         basePrice = Math.Max(0, basePrice);
         var cards = CardManager.Instance;
         return IsEligiblePaidItem(kind) && cards != null &&
-            cards.HasArtifactSpecialRule(ArtifactSpecialRule.MerchantsBadge)
+            cards.HasGearSpecialRule(GearSpecialRule.MerchantsBadge)
                 ? RoundPercentage(basePrice, 80) : basePrice;
     }
 
@@ -1193,7 +1197,7 @@ public partial class RunManager : Singleton<RunManager>
         if (GameplayInputGate.IsBlocked || _shopTransaction || !IsActiveShopForSale()) return false;
         var offer = _activeShopOffers.FirstOrDefault(candidate => candidate != null && candidate.StableId == stableId);
         var cards = CardManager.Instance;
-        if (offer == null || offer.kind != ShopOfferKind.Investment || cards == null || stake <= 0 || stake > cards.gold)
+        if (offer == null || offer.kind != ShopOfferKind.Investment || cards == null || stake <= 0 || stake > cards.credits)
             return false;
         offer.investmentStake = stake;
         return true;
@@ -1217,7 +1221,7 @@ public partial class RunManager : Singleton<RunManager>
         }
         int losses = _pendingInvestmentStakes.Count - wins;
         _pendingInvestmentStakes.Clear();
-        if (payout > 0) CardManager.Instance.AddGold((int)payout);
+        if (payout > 0) CardManager.Instance.AddCredits((int)payout);
         OnInvestmentResult?.Invoke(
             $"Stake results: {wins} success(es), {losses} loss(es); payout {payout} Credits, stakes at risk {totalStake} Credits.");
     }
@@ -1255,23 +1259,23 @@ public partial class RunManager : Singleton<RunManager>
         var cards = CardManager.Instance;
         var result = new List<ShopOffer>();
         int context = unchecked((_activeNode.mapIndex * 397 ^ _activeNode.id) + generation * 104729);
-        var slots = _activeNode.isShopCheckpoint && _activeNode.col > 4 ? preBossShopGoods : midShopGoods;
-        int artifactSlots = Mathf.Clamp(slots.x, 1, 20);
+        var slots = _activeNode.isShopCheckpoint && _activeNode.col > 4 ? preHeadlinerShopGoods : midShopGoods;
+        int gearSlots = Mathf.Clamp(slots.x, 1, 20);
         int enhancementSlots = Mathf.Clamp(slots.y, 1, 20);
         int consumableSlots = Mathf.Clamp(slots.z, 1, 20);
         bool WasBought(ShopOfferKind kind, string id) => _activeShopState != null &&
-            _activeShopState.PurchasedGoods.Contains(kind.ToString().ToLowerInvariant() + ":" + id);
-        var artifacts = cards.relicCatalog.Where(value => value != null &&
-            !WasBought(ShopOfferKind.Artifact, value.id) &&
-            string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(value)))
+            _activeShopState.PurchasedGoods.Contains(ShopOffer.PersistentGoodsPrefix(kind) + ":" + id);
+        var gearItems = cards.gearCatalog.Where(value => value != null &&
+            !WasBought(ShopOfferKind.Gear, value.id) &&
+            string.IsNullOrEmpty(cards.GetGearAcquisitionUnavailableReason(value)))
             .OrderBy(value => value.id, StringComparer.Ordinal).ToList();
-        artifacts.Shuffle(_randomContext.CreateStream("shop-artifacts", context));
+        gearItems.Shuffle(_randomContext.CreateStream("shop-artifacts", context));
         // Preserve the existing eligible-upgrade preference.
-        var upgrade = artifacts.FirstOrDefault(value => value.tier > 1);
-        if (upgrade != null) { artifacts.Remove(upgrade); artifacts.Insert(0, upgrade); }
-        foreach (var artifact in artifacts.Take(artifactSlots))
-            result.Add(new ShopOffer { kind = ShopOfferKind.Artifact, artifact = artifact,
-                basePrice = artifact.price, price = CalculateEffectiveShopPrice(ShopOfferKind.Artifact, artifact.price), generation = generation });
+        var upgrade = gearItems.FirstOrDefault(value => value.tier > 1);
+        if (upgrade != null) { gearItems.Remove(upgrade); gearItems.Insert(0, upgrade); }
+        foreach (var gear in gearItems.Take(gearSlots))
+            result.Add(new ShopOffer { kind = ShopOfferKind.Gear, gear = gear,
+                basePrice = gear.price, price = CalculateEffectiveShopPrice(ShopOfferKind.Gear, gear.price), generation = generation });
         var enhancementItems = cards.consumableCatalog.Where(value => value != null && value.shopAvailable &&
             value.effectType == ConsumableEffectType.ApplyEnhancement && value.enhancementToApply != null &&
             !WasBought(ShopOfferKind.Consumable, value.id) && !_purchasedConsumablesInShop.Contains(value.id))
@@ -1303,7 +1307,7 @@ public partial class RunManager : Singleton<RunManager>
         {
             int next = GoodsRefreshCount + 1;
             var replacement = GenerateShopGoods(next);
-            if (!CardManager.Instance.SpendGold(GoodsRefreshPrice)) return false;
+            if (!CardManager.Instance.SpendCredits(GoodsRefreshPrice)) return false;
             _activeShopState.RefreshCount = next;
             _activeShopOffers.RemoveAll(offer => !offer.IsService);
             _activeShopOffers.InsertRange(0, replacement);
@@ -1334,17 +1338,17 @@ public partial class RunManager : Singleton<RunManager>
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     void PrepareAllDevShopOffers(CardManager cards)
     {
-        foreach (var artifact in cards.relicCatalog
+        foreach (var gear in cards.gearCatalog
             .Where(value => value != null &&
-                string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(value)))
+                string.IsNullOrEmpty(cards.GetGearAcquisitionUnavailableReason(value)))
             .OrderBy(value => value.id, StringComparer.Ordinal))
         {
             _activeShopOffers.Add(new ShopOffer
             {
-                kind = ShopOfferKind.Artifact,
-                artifact = artifact,
-                basePrice = artifact.price,
-                price = CalculateEffectiveShopPrice(ShopOfferKind.Artifact, artifact.price)
+                kind = ShopOfferKind.Gear,
+                gear = gear,
+                basePrice = gear.price,
+                price = CalculateEffectiveShopPrice(ShopOfferKind.Gear, gear.price)
             });
         }
 
@@ -1424,10 +1428,10 @@ public partial class RunManager : Singleton<RunManager>
         var combat = CombatManager.Instance;
         if (cards == null || combat == null) return "Ritual unavailable";
         if (choiceIndex == 0)
-            return GetRitualArtifactCandidates("Legendary").Length > 0
+            return GetRitualGearCandidates("Legendary").Length > 0
                 ? string.Empty : "No eligible Legendary Gear reward";
         if (choiceIndex == 1)
-            return combat.player.currentHealth > 15 && GetRitualArtifactCandidates("Epic").Length > 0
+            return combat.player.currentHealth > 15 && GetRitualGearCandidates("Epic").Length > 0
                 ? string.Empty : combat.player.currentHealth <= 15
                     ? "Requires more than 15 HP" : "No eligible Epic Gear reward";
         if (choiceIndex == 2)
@@ -1437,26 +1441,26 @@ public partial class RunManager : Singleton<RunManager>
         return "Choice unavailable";
     }
 
-    RelicData[] GetRitualArtifactCandidates(string rarity)
+    GearData[] GetRitualGearCandidates(string rarity)
     {
         var cards = CardManager.Instance;
-        if (cards == null) return Array.Empty<RelicData>();
-        return cards.relicCatalog.Where(item => item != null &&
+        if (cards == null) return Array.Empty<GearData>();
+        return cards.gearCatalog.Where(item => item != null &&
                 string.Equals(item.rarity, rarity, StringComparison.OrdinalIgnoreCase) &&
-                !cards.HasArtifact(item) &&
-                (item.tier <= 1 || cards.ownedArtifacts.Any(owned => owned != null &&
+                !cards.HasGear(item) &&
+                (item.tier <= 1 || cards.ownedGear.Any(owned => owned != null &&
                     string.Equals(owned.canonicalId, item.upgradeFromId, StringComparison.Ordinal))))
             .OrderBy(item => item.canonicalId, StringComparer.Ordinal)
             .ThenBy(item => item.id, StringComparer.Ordinal).ToArray();
     }
 
-    RelicData[] GetRitualUpgradeCandidates()
+    GearData[] GetRitualUpgradeCandidates()
     {
         var cards = CardManager.Instance;
-        if (cards == null) return Array.Empty<RelicData>();
-        return cards.ownedArtifacts.Where(item => item != null)
-            .Select(item => new { Owned = item, Upgrade = ArtifactUpgradeResolver.FindImmediateUpgrade(item, cards.relicCatalog) })
-            .Where(pair => pair.Upgrade != null && !cards.HasArtifact(pair.Upgrade))
+        if (cards == null) return Array.Empty<GearData>();
+        return cards.ownedGear.Where(item => item != null)
+            .Select(item => new { Owned = item, Upgrade = GearUpgradeResolver.FindImmediateUpgrade(item, cards.gearCatalog) })
+            .Where(pair => pair.Upgrade != null && !cards.HasGear(pair.Upgrade))
             .Select(pair => pair.Upgrade)
             .OrderBy(item => item.canonicalId, StringComparer.Ordinal)
             .ThenBy(item => item.id, StringComparer.Ordinal).ToArray();
@@ -1468,8 +1472,8 @@ public partial class RunManager : Singleton<RunManager>
         var combat = CombatManager.Instance;
         var candidates = choiceIndex switch
         {
-            0 => GetRitualArtifactCandidates("Legendary"),
-            1 => GetRitualArtifactCandidates("Epic"),
+            0 => GetRitualGearCandidates("Legendary"),
+            1 => GetRitualGearCandidates("Epic"),
             _ => GetRitualUpgradeCandidates()
         };
         if (candidates.Length == 0) return false;
@@ -1477,13 +1481,13 @@ public partial class RunManager : Singleton<RunManager>
             (_activeNode?.id ?? 0) * 397 ^ choiceIndex);
         var random = (_randomContext ?? new RunRandomContext(runSeed))
             .CreateStream("blood-ritual-reward", context);
-        _pendingBloodRitualArtifact = candidates[random.NextInt(0, candidates.Length)];
+        _pendingBloodRitualGear = candidates[random.NextInt(0, candidates.Length)];
         _pendingBloodRitualCost = choiceIndex == 1 ? 15 : choiceIndex == 2 ? 5 : 0;
         _pendingBloodRitualSetMaxHealth = choiceIndex == 0;
         _pendingBloodRitualReward = true;
 
         var cards = CardManager.Instance;
-        if (cards.ArtifactSlotsUsed >= cards.ArtifactCapacity && _pendingBloodRitualArtifact.OccupiesCapacitySlot)
+        if (cards.GearSlotsUsed >= cards.GearCapacity && _pendingBloodRitualGear.OccupiesCapacitySlot)
             return ShowBloodRitualReplacementPrompt();
         bool committed = CommitBloodRitualReward(null);
         ClearPendingBloodRitual();
@@ -1493,12 +1497,12 @@ public partial class RunManager : Singleton<RunManager>
     bool ShowBloodRitualReplacementPrompt()
     {
         var cards = CardManager.Instance;
-        var artifact = _pendingBloodRitualArtifact;
-        if (cards == null || artifact == null) return false;
-        _pendingBloodRitualReplacements = artifact.tier > 1
-            ? cards.ownedArtifacts.Where(item => item != null &&
-                string.Equals(item.canonicalId, artifact.upgradeFromId, StringComparison.Ordinal)).ToArray()
-            : cards.ownedArtifacts.Where(item => item != null && item.OccupiesCapacitySlot).ToArray();
+        var gear = _pendingBloodRitualGear;
+        if (cards == null || gear == null) return false;
+        _pendingBloodRitualReplacements = gear.tier > 1
+            ? cards.ownedGear.Where(item => item != null &&
+                string.Equals(item.canonicalId, gear.upgradeFromId, StringComparison.Ordinal)).ToArray()
+            : cards.ownedGear.Where(item => item != null && item.OccupiesCapacitySlot).ToArray();
         if (_pendingBloodRitualReplacements.Length == 0)
         {
             ClearPendingBloodRitual();
@@ -1509,12 +1513,12 @@ public partial class RunManager : Singleton<RunManager>
         _pendingBloodRitualEvent.id = $"blood-ritual-replace:{_activeNode?.id ?? 0}";
         _pendingBloodRitualEvent.category = MapNodeType.Risk;
         _pendingBloodRitualEvent.title = "REDLINE DEAL — CLAIM YOUR REWARD";
-        _pendingBloodRitualEvent.description = $"Choose a Gear item to replace with {_pendingBloodRitualArtifact.displayName}, or cancel without paying the cost.";
+        _pendingBloodRitualEvent.description = $"Choose a Gear item to replace with {_pendingBloodRitualGear.displayName}, or cancel without paying the cost.";
         _pendingBloodRitualEvent.choices = _pendingBloodRitualReplacements
             .Select(item => new RunEventChoice
             {
                 label = $"Replace {item.displayName}",
-                description = $"Replace it with {_pendingBloodRitualArtifact.displayName}.",
+                description = $"Replace it with {_pendingBloodRitualGear.displayName}.",
                 effects = Array.Empty<RunEffect>(),
                 interaction = RunEventChoiceInteraction.Immediate
             })
@@ -1551,14 +1555,14 @@ public partial class RunManager : Singleton<RunManager>
         return true;
     }
 
-    bool CommitBloodRitualReward(RelicData replacement)
+    bool CommitBloodRitualReward(GearData replacement)
     {
         var cards = CardManager.Instance;
         var combat = CombatManager.Instance;
-        var artifact = _pendingBloodRitualArtifact;
-        if (!_pendingBloodRitualReward || cards == null || combat == null || artifact == null ||
+        var gear = _pendingBloodRitualGear;
+        if (!_pendingBloodRitualReward || cards == null || combat == null || gear == null ||
             _pendingBloodRitualCost > 0 && !combat.CanTakeRunDamage(_pendingBloodRitualCost)) return false;
-        if (!cards.GrantArtifactReward(artifact, replacement)) return false;
+        if (!cards.GrantGearReward(gear, replacement)) return false;
         if (_pendingBloodRitualSetMaxHealth)
             combat.SetPlayerMaxHealthAndClamp(5);
         else if (_pendingBloodRitualCost > 0)
@@ -1570,8 +1574,8 @@ public partial class RunManager : Singleton<RunManager>
     {
         if (_pendingBloodRitualEvent != null) DestroyRuntimeObject(_pendingBloodRitualEvent);
         _pendingBloodRitualEvent = null;
-        _pendingBloodRitualArtifact = null;
-        _pendingBloodRitualReplacements = Array.Empty<RelicData>();
+        _pendingBloodRitualGear = null;
+        _pendingBloodRitualReplacements = Array.Empty<GearData>();
         _pendingBloodRitualCost = 0;
         _pendingBloodRitualSetMaxHealth = false;
         _pendingBloodRitualReward = false;
@@ -1636,7 +1640,7 @@ public partial class RunManager : Singleton<RunManager>
         if (choiceIndex == (int)RunContractObjective.DefeatEliteThisMap && !CanReachEliteAfterActiveNode())
             return false;
         var cards = CardManager.Instance;
-        if (cards == null || !cards.CanAfford(_pendingContractPrice) || !cards.SpendGold(_pendingContractPrice))
+        if (cards == null || !cards.CanAfford(_pendingContractPrice) || !cards.SpendCredits(_pendingContractPrice))
             return false;
         _usedSpecialShopOffers.Add(ShopOfferKind.Contract);
         _activeContract = new RunContractState
@@ -1662,7 +1666,7 @@ public partial class RunManager : Singleton<RunManager>
     {
         var contract = _activeContract;
         if (contract == null || node == null) return;
-        bool encounter = node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss;
+        bool encounter = node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Headliner;
         if (contract.objective == RunContractObjective.DefeatEliteThisMap &&
             node.kind == MapNodeType.Elite && node.mapIndex == contract.startedAtMapIndex &&
             (CombatManager.Instance?.EliteKillCount ?? 0) > 0)
@@ -1692,19 +1696,19 @@ public partial class RunManager : Singleton<RunManager>
         switch (contract.objective)
         {
             case RunContractObjective.WinTwoEncounters:
-                cards?.AddGold(6);
+                cards?.AddCredits(6);
                 break;
             case RunContractObjective.WinCombatWithoutHpLoss:
-                cards?.AddGold(10);
+                cards?.AddCredits(10);
                 break;
             case RunContractObjective.DefeatEliteThisMap:
-                var eligible = cards?.relicCatalog.Where(item => item != null &&
+                var eligible = cards?.gearCatalog.Where(item => item != null &&
                         string.Equals(item.rarity, "Rare", StringComparison.OrdinalIgnoreCase) &&
-                        !cards.HasArtifact(item) &&
-                        (!item.OccupiesCapacitySlot || cards.ArtifactSlotsUsed < cards.ArtifactCapacity) &&
-                        (item.tier <= 1 || cards.ownedArtifacts.Any(owned => owned != null &&
+                        !cards.HasGear(item) &&
+                        (!item.OccupiesCapacitySlot || cards.GearSlotsUsed < cards.GearCapacity) &&
+                        (item.tier <= 1 || cards.ownedGear.Any(owned => owned != null &&
                             string.Equals(owned.canonicalId, item.upgradeFromId, StringComparison.Ordinal))) &&
-                        string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(item)))
+                        string.IsNullOrEmpty(cards.GetGearAcquisitionUnavailableReason(item)))
                     .OrderBy(item => item.canonicalId, StringComparer.Ordinal)
                     .ThenBy(item => item.id, StringComparer.Ordinal).ToArray();
                 if (eligible != null && eligible.Length > 0)
@@ -1712,7 +1716,7 @@ public partial class RunManager : Singleton<RunManager>
                     int context = unchecked(contract.startedAtMapIndex * 7919 ^
                         contract.startedAtNodeId * 397 ^ (int)contract.objective * 31);
                     var random = (_randomContext ?? new RunRandomContext(runSeed)).CreateStream("quest-rare-reward", context);
-                    if (!cards.GrantArtifactReward(eligible[random.NextInt(0, eligible.Length)]))
+                    if (!cards.GrantGearReward(eligible[random.NextInt(0, eligible.Length)]))
                     {
                         combat?.HealPlayer(5);
                         Debug.Log("Contract reward could not be collected; healed 5 HP instead.", this);
@@ -1821,7 +1825,7 @@ public partial class RunManager : Singleton<RunManager>
         IReadOnlyList<CardEnhancementData> allowedEnhancements = IsHammerEvent()
             ? _pendingHammerEnhancements : GetEventEnhancements();
         if (GameplayInputGate.IsBlocked &&
-                !(IsHammerEvent() && GameplayInputGate.Reasons == GameplayInputBlockReason.ArtifactChoice) ||
+                !(IsHammerEvent() && GameplayInputGate.Reasons == GameplayInputBlockReason.GearChoice) ||
             !IsActiveEventChoice(choiceIndex, RunEventChoiceInteraction.ChooseEnhancementTarget) || enhancement == null ||
             !allowedEnhancements.Contains(enhancement) ||
             !string.IsNullOrEmpty(GetEnhancementAcquisitionTargetUnavailableReason(cardId, enhancement))) return false;
@@ -1925,13 +1929,13 @@ public partial class RunManager : Singleton<RunManager>
         int rewardType = random.NextInt(0, 3);
         if (rewardType == 0)
         {
-            var artifacts = cards.relicCatalog
+            var gearItems = cards.gearCatalog
                 .Where(value => value != null &&
-                    string.IsNullOrEmpty(cards.GetArtifactAcquisitionUnavailableReason(value)))
+                    string.IsNullOrEmpty(cards.GetGearAcquisitionUnavailableReason(value)))
                 .OrderBy(value => value.canonicalId, StringComparer.Ordinal)
                 .ThenBy(value => value.id, StringComparer.Ordinal).ToArray();
-            if (artifacts.Length > 0)
-                cards.BuyArtifact(artifacts[random.NextInt(0, artifacts.Length)], 0);
+            if (gearItems.Length > 0)
+                cards.BuyGear(gearItems[random.NextInt(0, gearItems.Length)], 0);
             return true;
         }
 
@@ -1972,11 +1976,11 @@ public partial class RunManager : Singleton<RunManager>
     void TryOpenHammerReward()
     {
         var cards = CardManager.Instance;
-        int hammerIndex = cards != null ? cards.ownedArtifacts.FindIndex(value => value != null &&
-            value.specialRule == ArtifactSpecialRule.Hammer) : -1;
-        var hammer = hammerIndex >= 0 ? cards.ownedArtifacts[hammerIndex] : null;
+        int hammerIndex = cards != null ? cards.ownedGear.FindIndex(value => value != null &&
+            value.specialRule == GearSpecialRule.Hammer) : -1;
+        var hammer = hammerIndex >= 0 ? cards.ownedGear[hammerIndex] : null;
         if (cards == null || hammer == null) return;
-        var instance = cards.GetArtifactInstanceAt(hammerIndex);
+        var instance = cards.GetGearInstanceAt(hammerIndex);
         if (!_pendingHammerReward)
         {
             int last = instance.State.GetCounter(-140);
@@ -2021,10 +2025,10 @@ public partial class RunManager : Singleton<RunManager>
                 new RunEventChoice { label = "Decline", description = "Leave the Hammer reward unused.", interaction = RunEventChoiceInteraction.HammerDecline }
             };
         _activeEvent = _pendingHammerEvent;
-        GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, true);
+        GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, true);
         if (OnShowEvent == null)
         {
-            GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, false);
+            GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, false);
             _activeEvent = null;
             DestroyRuntimeObject(_pendingHammerEvent);
             _pendingHammerEvent = null;
@@ -2039,7 +2043,7 @@ public partial class RunManager : Singleton<RunManager>
         if (!IsHammerEvent()) return false;
         OnHideEvent?.Invoke();
         _activeEvent = null;
-        GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, false);
+        GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, false);
         DestroyRuntimeObject(_pendingHammerEvent);
         _pendingHammerEvent = null;
         if (retry)
@@ -2122,54 +2126,54 @@ public partial class RunManager : Singleton<RunManager>
             return;
         }
 
-        bool wasBoss = _activeNode.kind == MapNodeType.Boss;
-        ApplyVictoryArtifactRewards(wasBoss);
+        bool wasHeadliner = _activeNode.kind == MapNodeType.Headliner;
+        ApplyVictoryGearRewards(wasHeadliner);
         ProgressContractForVictory(_activeNode, CombatManager.Instance?.EncounterActualHpLost ?? 0);
         if ((CombatManager.Instance?.EncounterDefeatedEnemyCount ?? 0) > 0)
             TryGrantConsumableDropForNode(_activeNode);
         CompleteActiveNode();
-        if (wasBoss)
-            HandleBossVictory();
+        if (wasHeadliner)
+            HandleHeadlinerVictory();
         else
             ShowPathAfterNode();
     }
 
-    void ApplyVictoryArtifactRewards(bool wasBoss)
+    void ApplyVictoryGearRewards(bool wasHeadliner)
     {
         var cards = CardManager.Instance;
         if (cards == null) return;
 
-        bool wasElite = !wasBoss && _activeNode != null && _activeNode.kind == MapNodeType.Elite &&
+        bool wasElite = !wasHeadliner && _activeNode != null && _activeNode.kind == MapNodeType.Elite &&
             (CombatManager.Instance?.EliteKillCount ?? 0) > 0;
         if (wasElite)
         {
-            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+            for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
             {
-                var artifact = cards.ownedArtifacts[artifactIndex];
-                if (artifact == null) continue;
-                var state = cards.GetArtifactInstanceAt(artifactIndex).State;
-                if (artifact.specialRule == ArtifactSpecialRule.HuntersLedger)
+                var gear = cards.ownedGear[gearIndex];
+                if (gear == null) continue;
+                var state = cards.GetGearInstanceAt(gearIndex).State;
+                if (gear.specialRule == GearSpecialRule.HuntersLedger)
                     state.SetCounter(-119, state.GetCounter(-119) + 1);
-                if (artifact.specialRule == ArtifactSpecialRule.TrophyRack)
+                if (gear.specialRule == GearSpecialRule.TrophyRack)
                     state.SetCounter(-137, state.GetCounter(-137) + 1);
             }
         }
-        if (wasBoss)
+        if (wasHeadliner)
         {
-            for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+            for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
             {
-                var artifact = cards.ownedArtifacts[artifactIndex];
-                if (artifact == null || artifact.specialRule != ArtifactSpecialRule.CrownOfEndurance) continue;
+                var gear = cards.ownedGear[gearIndex];
+                if (gear == null || gear.specialRule != GearSpecialRule.CrownOfEndurance) continue;
                 int growth = 3 + ((CombatManager.Instance?.EncounterActualHpLost ?? 0) == 0 ? 3 : 0);
                 CombatManager.Instance?.IncreasePlayerMaxHealth(growth, healIncrease: false);
             }
         }
-        if (wasBoss && cards.HasArtifactSpecialRule(ArtifactSpecialRule.GoldenVault))
+        if (wasHeadliner && cards.HasGearSpecialRule(GearSpecialRule.GoldenVault))
         {
-            int payout = RoundPercentage(cards.gold, 10);
-            if (payout > 0) cards.AddGold(payout);
+            int payout = RoundPercentage(cards.credits, 10);
+            if (payout > 0) cards.AddCredits(payout);
         }
-        if (!cards.HasArtifactSpecialRule(ArtifactSpecialRule.ScavengersSatchel)) return;
+        if (!cards.HasGearSpecialRule(GearSpecialRule.ScavengersSatchel)) return;
         _combatWinCount = IncrementToMaximum(_combatWinCount);
         if (_combatWinCount % 3 != 0) return;
         _satchelRewardCount = IncrementToMaximum(_satchelRewardCount);
@@ -2210,21 +2214,21 @@ public partial class RunManager : Singleton<RunManager>
             _visitedNodeTypesMapIndex = node.mapIndex;
         }
         _visitedNodeTypesCurrentMap.Add(node.kind);
-        bool isCombatWin = node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss;
+        bool isCombatWin = node.kind is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Headliner;
         var combat = CombatManager.Instance;
-        for (int artifactIndex = 0; artifactIndex < cards.ownedArtifacts.Count; artifactIndex++)
+        for (int gearIndex = 0; gearIndex < cards.ownedGear.Count; gearIndex++)
         {
-            var artifact = cards.ownedArtifacts[artifactIndex];
-            if (artifact == null) continue;
-            var state = cards.GetArtifactInstanceAt(artifactIndex).State;
-            if (artifact.specialRule == ArtifactSpecialRule.WanderersBoots &&
+            var gear = cards.ownedGear[gearIndex];
+            if (gear == null) continue;
+            var state = cards.GetGearInstanceAt(gearIndex).State;
+            if (gear.specialRule == GearSpecialRule.WanderersBoots &&
                 _visitedNodeTypesCurrentMap.Count >= 3 && state.GetCounter(-133) != node.mapIndex + 1)
             {
                 state.SetCounter(-133, node.mapIndex + 1);
                 combat?.HealPlayer(3);
-                cards.AddGold(3);
+                cards.AddCredits(3);
             }
-            if (artifact.specialRule == ArtifactSpecialRule.WarpathBanner)
+            if (gear.specialRule == GearSpecialRule.WarpathBanner)
                 state.SetCounter(-1340, isCombatWin ? Math.Min(3, state.GetCounter(-1340) + 1) : 0);
         }
     }
@@ -2242,7 +2246,7 @@ public partial class RunManager : Singleton<RunManager>
             if (shop == _activeShopState) shop.MadePricedPurchase = _madeSuccessfulPurchaseInCurrentShop;
         }
         // Completion hooks count visited nodes, not route depths. Checkpoints retain
-        // existing Artifact visit/counter behavior; their fractional column consumes no depth.
+        // existing Gear visit/counter behavior; their fractional column consumes no depth.
         _completedNodeCount = IncrementToMaximum(_completedNodeCount);
         ApplyPhase7MapCompletionEffects(resolvedNode);
         foreach (var nextId in resolvedNode.next)
@@ -2265,20 +2269,20 @@ public partial class RunManager : Singleton<RunManager>
         SaveGameService.Checkpoint(this);
     }
 
-    void HandleBossVictory()
+    void HandleHeadlinerVictory()
     {
-        var defeatedBoss = CurrentBoss;
-        if (defeatedBoss == null)
+        var defeatedHeadliner = CurrentHeadliner;
+        if (defeatedHeadliner == null)
         {
             Debug.LogError("RunManager: boss victory has no matching boss definition.", this);
             return;
         }
 
-        var reward = CardManager.Instance.AddBossReward(defeatedBoss.sourceCard);
-        OnBossRewardGranted?.Invoke(reward);
+        var reward = CardManager.Instance.AddHeadlinerReward(defeatedHeadliner.sourceCard);
+        OnHeadlinerRewardGranted?.Invoke(reward);
 
         SettleContractAtMapExit();
-        if (IsInfiniteMode && bossIndex == int.MaxValue)
+        if (IsInfiniteMode && headlinerIndex == int.MaxValue)
         {
             Timing.CompleteCurrentMap(false);
             Timing.StopRun();
@@ -2286,10 +2290,10 @@ public partial class RunManager : Singleton<RunManager>
             OnRunCompleted?.Invoke();
             return;
         }
-        bool finalMap = !IsInfiniteMode && bossIndex + 1 >= bossDeck.Count;
+        bool finalMap = !IsInfiniteMode && headlinerIndex + 1 >= headlinerDeck.Count;
         Timing.CompleteCurrentMap(!finalMap);
-        bossIndex++;
-        if (!IsInfiniteMode && bossIndex >= bossDeck.Count)
+        headlinerIndex++;
+        if (!IsInfiniteMode && headlinerIndex >= headlinerDeck.Count)
         {
             Timing.StopRun();
             IsRunCompleted = true;
@@ -2356,12 +2360,12 @@ public partial class RunManager : Singleton<RunManager>
         Timing.Reset();
         IsRunCompleted = false;
         IsInfiniteMode = false;
-        GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, false);
+        GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, false);
         OnHideShop?.Invoke();
         OnHideEvent?.Invoke();
         OnHideUpgrade?.Invoke();
         GameplayInputGate.Set(GameplayInputBlockReason.ConsumableReward, false);
-        GameplayInputGate.Set(GameplayInputBlockReason.ArtifactChoice, false);
+        GameplayInputGate.Set(GameplayInputBlockReason.GearChoice, false);
         _pendingConsumableRewards.Clear();
         _pendingHammerReward = false;
         _hammerRetryPending = false;
@@ -2385,8 +2389,8 @@ public partial class RunManager : Singleton<RunManager>
         }
 
         _generatedEnemyTypes.Clear();
-        bossDeck.Clear();
-        bossIndex = 0;
+        headlinerDeck.Clear();
+        headlinerIndex = 0;
         _completedNodeCount = 0;
         _pendingInvestmentStakes.Clear();
         _paidItemPurchaseCount = 0;

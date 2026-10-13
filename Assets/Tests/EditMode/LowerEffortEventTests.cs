@@ -46,7 +46,7 @@ public sealed class LowerEffortEventTests
         prefab.face = prefabObject.GetComponent<Image>();
         prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
         _cards = Make<CardManager>("Event Test Cards");
-        _cards.Configure(field, drag, prefab, System.Array.Empty<RelicData>(), _enhancements);
+        _cards.Configure(field, drag, prefab, System.Array.Empty<GearData>(), _enhancements);
         _cards.ConfigureRandom(new DeterministicRandom(803));
         _cards.BuildDeck();
         _cards.DealHand();
@@ -82,7 +82,7 @@ public sealed class LowerEffortEventTests
     }
 
     [Test]
-    public void Blacksmith_OtherChoicesDrawTwoOrGrantTenGold()
+    public void Blacksmith_OtherChoicesDrawTwoOrGrantTenCredits()
     {
         OpenEvent(_blacksmith);
         Assert.That(_cards.TryDiscardCardsByIds(_cards.hand.Take(2).Select(card => card.Id).ToArray()), Is.True);
@@ -91,9 +91,9 @@ public sealed class LowerEffortEventTests
         Assert.That(_cards.HandCount, Is.EqualTo(handBefore + 2));
 
         OpenEvent(_blacksmith);
-        int goldBefore = _cards.gold;
+        int creditsBefore = _cards.credits;
         Assert.That(_run.ChooseEventOption(2), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore + 10));
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore + 10));
     }
 
     [Test]
@@ -132,10 +132,10 @@ public sealed class LowerEffortEventTests
     {
         OpenEvent(_stranger);
         int handBefore = _cards.HandCount;
-        int goldBefore = _cards.gold;
+        int creditsBefore = _cards.credits;
         Assert.That(_run.ChooseEventOption(1), Is.True);
         Assert.That(_cards.HandCount, Is.EqualTo(handBefore));
-        Assert.That(_cards.gold, Is.EqualTo(goldBefore));
+        Assert.That(_cards.credits, Is.EqualTo(creditsBefore));
         Assert.That(_cards.ownedCards.Count(card => card.Enhancement != null), Is.Zero);
     }
 
@@ -161,9 +161,9 @@ public sealed class LowerEffortEventTests
     }
 
     [Test]
-    public void Ambush_FleeCostsThreeHealthAndFiveGold()
+    public void Ambush_FleeCostsThreeHealthAndFiveCredits()
     {
-        _cards.AddGold(5);
+        _cards.AddCredits(5);
         _combat.TakeRunDamage(10);
         OpenEvent(_ambush);
         Assert.That(_run.GetEventOptionUnavailableReason(1), Is.Empty);
@@ -171,16 +171,16 @@ public sealed class LowerEffortEventTests
         Assert.That(_run.ChooseEventOption(1), Is.True);
 
         Assert.That(_combat.player.currentHealth, Is.EqualTo(17));
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
         Assert.That(_run.ActiveEvent, Is.Null);
     }
 
     [Test]
-    public void Swamp_CrossingCostsFiveHealthAndMakesTheSeededArtifactEnhancementOrNothingRoll()
+    public void Swamp_CrossingCostsFiveHealthAndMakesTheSeededGearEnhancementOrNothingRoll()
     {
-        var artifact = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/AceEmblem.asset");
-        Assert.That(artifact, Is.Not.Null);
-        _cards.relicCatalog.Add(artifact);
+        var gear = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/AceEmblem.asset");
+        Assert.That(gear, Is.Not.Null);
+        _cards.gearCatalog.Add(gear);
         _combat.TakeRunDamage(5);
         OpenEvent(_swamp);
         int enhancementsBefore = _cards.ownedCards.Count(card => card.Enhancement != null);
@@ -191,7 +191,7 @@ public sealed class LowerEffortEventTests
         Assert.That(_run.ChooseEventOption(0), Is.True);
 
         Assert.That(_combat.player.currentHealth, Is.EqualTo(20));
-        Assert.That(_cards.ownedArtifacts.Count, Is.EqualTo(reward == 0 ? 1 : 0));
+        Assert.That(_cards.ownedGear.Count, Is.EqualTo(reward == 0 ? 1 : 0));
         Assert.That(_cards.ownedCards.Count(card => card.Enhancement != null),
             Is.EqualTo(enhancementsBefore + (reward == 1 ? 1 : 0)));
         Assert.That(_run.ActiveEvent, Is.Null);
@@ -201,15 +201,15 @@ public sealed class LowerEffortEventTests
     public void Swamp_AlternateRouteDoesNothing()
     {
         _combat.TakeRunDamage(4);
-        _cards.AddGold(7);
+        _cards.AddCredits(7);
         OpenEvent(_swamp);
         int health = _combat.player.currentHealth;
-        int gold = _cards.gold;
+        int credits = _cards.credits;
 
         Assert.That(_run.ChooseEventOption(1), Is.True);
 
         Assert.That(_combat.player.currentHealth, Is.EqualTo(health));
-        Assert.That(_cards.gold, Is.EqualTo(gold));
+        Assert.That(_cards.credits, Is.EqualTo(credits));
         Assert.That(_run.ActiveEvent, Is.Null);
     }
 

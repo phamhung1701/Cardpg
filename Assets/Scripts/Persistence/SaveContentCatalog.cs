@@ -3,15 +3,17 @@ using System.Linq;
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "Dealbreak/Save Content Catalog")]
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "SaveContentCatalog")]
 public sealed class SaveContentCatalog : ScriptableObject
 {
-    public RelicData[] artifacts = Array.Empty<RelicData>();
+    [UnityEngine.Serialization.FormerlySerializedAs("artifacts")]
+    public GearData[] gearItems = Array.Empty<GearData>();
     public CardEnhancementData[] enhancements = Array.Empty<CardEnhancementData>();
     public ConsumableData[] consumables = Array.Empty<ConsumableData>();
     public RunContentCatalog runContent;
     public EnemyTypeData[] fallbackEnemies = Array.Empty<EnemyTypeData>();
     public static SaveContentCatalog Load() => Resources.Load<SaveContentCatalog>("RunSaveContent");
-    public RelicData Artifact(string id) => artifacts.FirstOrDefault(x => x != null && x.id == id);
+    public GearData Gear(string id) => gearItems.FirstOrDefault(x => x != null && x.id == id);
     public CardEnhancementData Enhancement(string id) => enhancements.FirstOrDefault(x => x != null && x.id == id);
     public ConsumableData Consumable(string id) => consumables.FirstOrDefault(x => x != null && x.id == id);
     public RunEventDefinition Event(string id, MapNodeType kind) => runContent != null

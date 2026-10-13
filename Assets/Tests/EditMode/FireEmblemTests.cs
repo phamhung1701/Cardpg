@@ -10,14 +10,14 @@ public sealed class FireEmblemTests
     readonly List<UnityEngine.Object> _created = new();
     CardManager _cards;
     CombatManager _combat;
-    RelicData _fireEmblem;
+    GearData _fireEmblem;
     Field _field;
 
     [SetUp]
     public void SetUp()
     {
         GameplayInputGate.Clear();
-        _fireEmblem = AssetDatabase.LoadAssetAtPath<RelicData>("Assets/Data/Relics/FireEmblem.asset");
+        _fireEmblem = AssetDatabase.LoadAssetAtPath<GearData>("Assets/Data/Relics/FireEmblem.asset");
         Assert.That(_fireEmblem, Is.Not.Null);
 
         var canvas = Make<Canvas>("Fire Emblem Test Canvas");
@@ -41,7 +41,7 @@ public sealed class FireEmblemTests
         _cards.DealHand();
         _combat = Make<CombatManager>("Fire Emblem Test Combat");
         _combat.ConfigurePlayer(30);
-        Assert.That(_cards.BuyArtifact(_fireEmblem, 0), Is.True);
+        Assert.That(_cards.BuyGear(_fireEmblem, 0), Is.True);
     }
 
     [TearDown]

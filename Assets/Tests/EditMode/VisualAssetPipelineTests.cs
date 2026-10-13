@@ -19,36 +19,36 @@ public sealed class VisualAssetPipelineTests
     }
 
     [Test]
-    public void ArtifactSlot_UsesAuthoredSprite_AndFallsBackToGlyphWhenMissing()
+    public void GearSlot_UsesAuthoredSprite_AndFallsBackToGlyphWhenMissing()
     {
         var texture = new Texture2D(8, 8);
         _created.Add(texture);
         var sprite = Sprite.Create(texture, new Rect(0, 0, 8, 8), new Vector2(.5f, .5f));
         _created.Add(sprite);
 
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.icon = "♣";
-        artifact.iconSprite = sprite;
-        _created.Add(artifact);
-        var root = new GameObject("Icon slot", typeof(RectTransform), typeof(Image), typeof(ArtifactIconSlotUI));
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.icon = "♣";
+        gear.iconSprite = sprite;
+        _created.Add(gear);
+        var root = new GameObject("Icon slot", typeof(RectTransform), typeof(Image), typeof(GearIconSlotUI));
         _created.Add(root);
         var labelObject = new GameObject("Glyph", typeof(RectTransform), typeof(TextMeshProUGUI));
         labelObject.transform.SetParent(root.transform, false);
         var label = labelObject.GetComponent<TMP_Text>();
-        root.GetComponent<ArtifactIconSlotUI>().Bind(artifact, null, null, null, 0, null, false);
+        root.GetComponent<GearIconSlotUI>().Bind(gear, null, null, null, 0, null, false);
 
         var iconImage = root.GetComponentsInChildren<Image>(true).FirstOrDefault(image => image.gameObject != root);
         Assert.IsNotNull(iconImage);
         Assert.AreSame(sprite, iconImage.sprite);
         Assert.IsFalse(label.gameObject.activeSelf);
 
-        artifact.iconSprite = null;
-        var secondRoot = new GameObject("Fallback slot", typeof(RectTransform), typeof(Image), typeof(ArtifactIconSlotUI));
+        gear.iconSprite = null;
+        var secondRoot = new GameObject("Fallback slot", typeof(RectTransform), typeof(Image), typeof(GearIconSlotUI));
         _created.Add(secondRoot);
         var fallback = new GameObject("Glyph", typeof(RectTransform), typeof(TextMeshProUGUI));
         fallback.transform.SetParent(secondRoot.transform, false);
         var fallbackLabel = fallback.GetComponent<TMP_Text>();
-        secondRoot.GetComponent<ArtifactIconSlotUI>().Bind(artifact, null, null, null, 0, null, false);
+        secondRoot.GetComponent<GearIconSlotUI>().Bind(gear, null, null, null, 0, null, false);
         Assert.AreEqual("♣", fallbackLabel.text);
         Assert.IsTrue(fallbackLabel.gameObject.activeSelf);
     }

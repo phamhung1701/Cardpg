@@ -57,7 +57,7 @@ To make a Windows test build, select **File → Build Profiles → Windows → B
 
 ## Development notes
 
-- `CARDPG_DEVELOPMENT.md` is the historical implementation and design handoff; its code/architecture names are retained as legacy technical identifiers.
+- `DEALBREAK_DEVELOPMENT.md` is the historical implementation and design handoff. `Docs/Dealbreak_Internal_Rebranding_Report.md` records current internal names and preserved serialization/save contracts.
 - `Locus/knowledge/plan/combat-shop-economy-rebalance-report.md` records combat, mandatory Black Market, Service, Supply and Goods Refresh implementation decisions and verification limits.
 - `Locus/knowledge/plan/cardpg-effect-architecture.md` describes the shared typed Gear/Mod effect system and its current limits.
 - `Dealbreak_GameData_IDs_Terminology_Fixed.xlsx` is authoritative for player-facing terminology and content names. Older `CardPG_GameData_organized.xlsx` material is superseded for content terminology and identities.

@@ -25,7 +25,7 @@ public sealed class Phase7CSelectionEligibilityTests
         _field.cardsHolder = (RectTransform)holderObject.transform;
         _prefab = CreateCardView("Phase7C Card Prefab");
         _cards = CreateComponent<CardManager>("Phase7C CardManager");
-        _cards.Configure(_field, canvas, _prefab, System.Array.Empty<RelicData>());
+        _cards.Configure(_field, canvas, _prefab, System.Array.Empty<GearData>());
         _cards.ConfigureRandom(new LowestIndexRandomSource());
         _cards.BuildDeck();
         _cards.DealHand();

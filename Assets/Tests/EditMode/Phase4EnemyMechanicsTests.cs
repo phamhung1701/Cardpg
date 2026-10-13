@@ -20,7 +20,7 @@ public sealed class Phase4EnemyMechanicsTests
     {
         _cardsObject = new GameObject("Phase4 mechanics CardManager");
         _cards = _cardsObject.AddComponent<CardManager>();
-        _cards.Configure(null, null, null, Array.Empty<RelicData>(), Array.Empty<CardEnhancementData>());
+        _cards.Configure(null, null, null, Array.Empty<GearData>(), Array.Empty<CardEnhancementData>());
         _combatObject = new GameObject("Phase4 mechanics CombatManager");
         _combat = _combatObject.AddComponent<CombatManager>();
         _combat.ConfigurePlayer(30);
@@ -98,7 +98,7 @@ public sealed class Phase4EnemyMechanicsTests
     {
         var auxiliary = Enhancement(GameplayEffectKind.FlatAttack, GameplayEffectTrigger.InHandAttackCalculated, 3);
         var mending = Enhancement(GameplayEffectKind.Heal, GameplayEffectTrigger.PlayerTurnStart, 2);
-        var golden = Enhancement(GameplayEffectKind.BonusGold, GameplayEffectTrigger.AttackCommitted, 2);
+        var golden = Enhancement(GameplayEffectKind.BonusCredits, GameplayEffectTrigger.AttackCommitted, 2);
         var heldAuxiliary = Card(auxiliary, 1);
         var heldMending = Card(mending, 2);
         var heldGolden = Card(golden, 3);
@@ -112,7 +112,7 @@ public sealed class Phase4EnemyMechanicsTests
         _combat.StartEnemy(silence);
         Assert.That(_combat.CalculateCardAttackDamage(attacker), Is.EqualTo(attacker.BaseAttackValue));
         Assert.That(_combat.player.currentHealth, Is.EqualTo(25), "Mending is suppressed at player-turn start.");
-        Assert.That(_cards.gold, Is.Zero);
+        Assert.That(_cards.credits, Is.Zero);
 
         var action = new CombatActionContext(100, CombatActionOrigin.PlayerCard,
             sourcePlayer: _combat.player, card: attacker, targetEnemy: silence);
@@ -120,7 +120,7 @@ public sealed class Phase4EnemyMechanicsTests
         GameplayEffectResolver.EnqueueAttackCommitted(
             new AttackCommittedEffectContext(action, new[] { attacker }, _cards.hand.ToArray(), silence, _combat, _cards), queue);
         queue.ProcessPhase(CombatReactionPhase.AttackCommitted);
-        Assert.That(_cards.gold, Is.Zero, "Golden's held trigger is suppressed too.");
+        Assert.That(_cards.credits, Is.Zero, "Golden's held trigger is suppressed too.");
 
         silence.currentHp = 15;
         Assert.That(GameplayEffectResolver.HeldCardEffectsSuppressed(_combat), Is.False,

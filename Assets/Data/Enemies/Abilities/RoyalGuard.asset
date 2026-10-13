@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f03cb8e688113c74788306ee47ef9be5, type: 3}
   m_Name: RoyalGuard
-  m_EditorClassIdentifier: CardPG.Runtime::EnemyAbility
+  m_EditorClassIdentifier: Dealbreak.Runtime::EnemyAbility
   id: RoyalGuard
   displayName: Royal Guard
   description: Alternates +1 Shield and a normal attack, then a telegraphed double-damage

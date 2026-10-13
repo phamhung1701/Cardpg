@@ -34,7 +34,7 @@ public sealed class GoldenEnhancementTests
         prefab.face = prefabObject.GetComponent<Image>();
         prefab.canvasGroup = prefabObject.GetComponent<CanvasGroup>();
         _cards = CreateComponent<CardManager>("Golden Test Cards");
-        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<RelicData>(),
+        _cards.Configure(_field, dragCanvas, prefab, System.Array.Empty<GearData>(),
             new[] { _golden, AssetDatabase.LoadAssetAtPath<CardEnhancementData>("Assets/Data/Enhancements/Quickdraw.asset") });
         _cards.ConfigureRandom(new DeterministicRandom(701));
         _cards.BuildDeck();
@@ -76,16 +76,16 @@ public sealed class GoldenEnhancementTests
     }
 
     [Test]
-    public void Asset_UsesCanonicalRareTierOneBonusGoldAttackCommittedEffect()
+    public void Asset_UsesCanonicalRareTierOneBonusCreditsAttackCommittedEffect()
     {
         Assert.That(_golden.id, Is.EqualTo("enh_007"));
         Assert.That(_golden.canonicalId, Is.EqualTo("enh_007"));
-        Assert.That(_golden.displayName, Is.EqualTo("Golden"));
+        Assert.That(_golden.displayName, Is.EqualTo("Profitable"));
         Assert.That(_golden.rarity, Is.EqualTo("Rare"));
         Assert.That(_golden.tier, Is.EqualTo(1));
         Assert.That(_golden.price, Is.EqualTo(20), "Temporary prototype price; workbook price is blank.");
         Assert.That(_golden.effects, Has.Length.EqualTo(1));
-        Assert.That(_golden.effects[0].kind, Is.EqualTo(GameplayEffectKind.BonusGold));
+        Assert.That(_golden.effects[0].kind, Is.EqualTo(GameplayEffectKind.BonusCredits));
         Assert.That(_golden.effects[0].trigger, Is.EqualTo(GameplayEffectTrigger.AttackCommitted));
         Assert.That(_golden.effects[0].amount, Is.EqualTo(2));
     }
@@ -103,11 +103,11 @@ public sealed class GoldenEnhancementTests
         var target = StartTarget();
         var random = new CountingRandom();
         _combat.ConfigureCriticalRandom(random);
-        int initialGold = _cards.gold;
+        int initialCredits = _cards.credits;
 
         Assert.That(_combat.TryPlayCards(new[] { attack }, target, hitCount: 3), Is.True);
 
-        Assert.That(_cards.gold, Is.EqualTo(initialGold + 4), "Each in-hand Golden pays once for the action, not once per hit.");
+        Assert.That(_cards.credits, Is.EqualTo(initialCredits + 4), "Each in-hand Golden pays once for the action, not once per hit.");
         Assert.That(random.Calls, Is.Zero, "The gold reaction consumes no RNG.");
         Assert.That(_cards.discardPile.Count(card => card.Id == attack.data.Id), Is.EqualTo(1));
         Assert.That(JsonUtility.ToJson(_golden), Is.EqualTo(definitionBefore), "The shared definition stays immutable during the run.");
@@ -119,11 +119,11 @@ public sealed class GoldenEnhancementTests
         var goldenCard = HandViews().First();
         Assert.That(_cards.ApplyEnhancement(goldenCard.data.Id, _golden), Is.True);
         var target = StartTarget();
-        int initialGold = _cards.gold;
+        int initialCredits = _cards.credits;
 
         Assert.That(_combat.TryPlayCards(new[] { goldenCard }, target), Is.True);
 
-        Assert.That(_cards.gold, Is.EqualTo(initialGold));
+        Assert.That(_cards.credits, Is.EqualTo(initialCredits));
     }
 
     [Test]
@@ -134,11 +134,11 @@ public sealed class GoldenEnhancementTests
         Assert.That(_cards.ApplyEnhancement(goldenCard.data.Id, _golden), Is.True);
         var target = StartTarget();
         var attack = FindView(card => card.Rank != CardData.Rank.Ace);
-        int initialGold = _cards.gold;
+        int initialCredits = _cards.credits;
 
         Assert.That(_combat.TryPlayCards(new[] { attack }, target), Is.True);
 
-        Assert.That(_cards.gold, Is.EqualTo(initialGold));
+        Assert.That(_cards.credits, Is.EqualTo(initialCredits));
     }
 
     [Test]
@@ -150,11 +150,11 @@ public sealed class GoldenEnhancementTests
         var other = FindView(card => card.Rank != CardData.Rank.Ace, goldenCard.data, ace.data);
         var target = StartTarget();
         _combat.CriticalChancePercent = 0f;
-        int initialGold = _cards.gold;
+        int initialCredits = _cards.credits;
 
         Assert.That(_combat.TryPlayCards(new[] { ace, other }, target), Is.True);
 
-        Assert.That(_cards.gold, Is.EqualTo(initialGold + 2));
+        Assert.That(_cards.credits, Is.EqualTo(initialCredits + 2));
     }
 
     EnemyRuntime StartTarget()

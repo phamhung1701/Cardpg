@@ -259,7 +259,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1e5242d6c9a0da34ebb70e277c3075d3, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: CardPG.Runtime::CardView
+  m_EditorClassIdentifier: Dealbreak.Runtime::CardView
   face: {fileID: 6953395965615775836}
   nameLabel: {fileID: 1295324879227905638}
   enhancementLabel: {fileID: 8848474323152213327}

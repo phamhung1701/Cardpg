@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>Small fade/scale transition for the shared central board presentation panels.</summary>
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "BoardPanelTransition")]
 public sealed class BoardPanelTransition : MonoBehaviour
 {
     const float Duration = 0.16f;

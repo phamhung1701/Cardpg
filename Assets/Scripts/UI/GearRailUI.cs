@@ -3,8 +3,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>Displays the CardManager artifact build as a row of icons, with on-demand text.</summary>
-public sealed class ArtifactRailUI : MonoBehaviour
+/// <summary>Displays the CardManager Gear build as a row of icons, with on-demand text.</summary>
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "ArtifactRailUI")]
+public sealed class GearRailUI : MonoBehaviour
 {
     [Header("Source and icon rail")]
     public CardManager source;
@@ -30,16 +31,16 @@ public sealed class ArtifactRailUI : MonoBehaviour
     public TMP_Text detailText;
     public Button detailCloseButton;
 
-    readonly List<ArtifactIconSlotUI> _slots = new();
+    readonly List<GearIconSlotUI> _slots = new();
     CardManager _subscribedSource;
-    RelicData _hovered;
+    GearData _hovered;
     long _selectedInstanceId;
     bool _mergeSelecting;
     bool _mergeAwaitingConfirmation;
     long _firstMergeId;
     long _secondMergeId;
-    int _ownedArtifactCount;
-    RelicData _mergePreview;
+    int _ownedGearCount;
+    GearData _mergePreview;
     PathNode _mergeNode;
     GameState _mergeCombatState;
     Vector2 _lastDetailParentSize;
@@ -131,9 +132,9 @@ public sealed class ArtifactRailUI : MonoBehaviour
         }
 
         if (_mergeSelecting && cards != null && (cards.IsEnemyTargeting || cards.IsHandEnhancementTargeting)) CancelMerge();
-        if (_mergeSelecting && (!cards || cards.ownedArtifacts.Count < 2 ||
-            (_firstMergeId != 0 && cards.GetArtifactInstanceById(_firstMergeId) == null) ||
-            (_secondMergeId != 0 && cards.GetArtifactInstanceById(_secondMergeId) == null)))
+        if (_mergeSelecting && (!cards || cards.ownedGear.Count < 2 ||
+            (_firstMergeId != 0 && cards.GetGearInstanceById(_firstMergeId) == null) ||
+            (_secondMergeId != 0 && cards.GetGearInstanceById(_secondMergeId) == null)))
         {
             _mergeSelecting = false;
             _firstMergeId = _secondMergeId = 0;
@@ -142,24 +143,24 @@ public sealed class ArtifactRailUI : MonoBehaviour
         }
 
         if (capacityLabel)
-            capacityLabel.text = $"{(cards ? cards.ArtifactSlotsUsed : 0)}/{(cards ? cards.ArtifactCapacity : CardManager.BASE_ARTIFACT_CAPACITY)}";
+            capacityLabel.text = $"{(cards ? cards.GearSlotsUsed : 0)}/{(cards ? cards.GearCapacity : CardManager.BASE_GEAR_CAPACITY)}";
 
         int count = 0;
-        int artifactIndex = 0;
-        if (cards && cards.ownedArtifacts != null)
+        int gearIndex = 0;
+        if (cards && cards.ownedGear != null)
         {
-            foreach (var artifact in cards.ownedArtifacts)
+            foreach (var gear in cards.ownedGear)
             {
-                int currentArtifactIndex = artifactIndex++;
-                if (!artifact) continue;
+                int currentGearIndex = gearIndex++;
+                if (!gear) continue;
                 if (slotsRoot)
                 {
                     if (count == _slots.Count) _slots.Add(CreateSlot());
                     var slot = _slots[count];
                     slot.SetSlotSprites(occupiedSlotSprite, emptySlotSprite, selectedSlotSprite);
-                    var instanceId = cards.GetArtifactInstanceAt(currentArtifactIndex)?.Id ?? 0;
-                    slot.Bind(artifact, ShowTooltip, HideTooltipFor,
-                        selectedArtifact => SelectArtifact(instanceId, selectedArtifact),
+                    var instanceId = cards.GetGearInstanceAt(currentGearIndex)?.Id ?? 0;
+                    slot.Bind(gear, ShowTooltip, HideTooltipFor,
+                        selectedGear => SelectGear(instanceId, selectedGear),
                         instanceId, SelectForMerge, _firstMergeId == instanceId || _secondMergeId == instanceId,
                         _mergeSelecting, IsMergeEligible(cards, instanceId), _selectedInstanceId == instanceId);
                     slot.gameObject.SetActive(true);
@@ -168,9 +169,9 @@ public sealed class ArtifactRailUI : MonoBehaviour
             }
         }
 
-        int emptySlotCount = cards ? cards.ArtifactCapacity : CardManager.BASE_ARTIFACT_CAPACITY;
+        int emptySlotCount = cards ? cards.GearCapacity : CardManager.BASE_GEAR_CAPACITY;
         int visibleSlotCount = Mathf.Max(count, emptySlotCount);
-        _ownedArtifactCount = count;
+        _ownedGearCount = count;
         for (int i = count; i < visibleSlotCount; i++)
         {
             if (i == _slots.Count) _slots.Add(CreateSlot());
@@ -182,8 +183,8 @@ public sealed class ArtifactRailUI : MonoBehaviour
         for (int i = visibleSlotCount; i < _slots.Count; i++)
             _slots[i].gameObject.SetActive(false);
 
-        if (_hovered && (!cards || !cards.ownedArtifacts.Contains(_hovered))) HideTooltip();
-        if (_selectedInstanceId != 0 && (!cards || cards.GetArtifactInstanceById(_selectedInstanceId) == null)) CloseDetail();
+        if (_hovered && (!cards || !cards.ownedGear.Contains(_hovered))) HideTooltip();
+        if (_selectedInstanceId != 0 && (!cards || cards.GetGearInstanceById(_selectedInstanceId) == null)) CloseDetail();
         UpdateMergeControls();
     }
 
@@ -202,7 +203,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
             mergeCancelButton = CreateMergeButton(controlsRoot, "Cancel Gear Merge", "Cancel", new Vector2(66f, -120f), new Vector2(84f, 40f), 20f, 16f);
         if (!mergeStatusText)
         {
-            var statusObject = new GameObject("Artifact Merge Status", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            var statusObject = new GameObject("Gear Merge Status", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
             var rect = (RectTransform)statusObject.transform;
             rect.SetParent(controlsRoot, false);
             SetTopAnchoredRect(rect, new Vector2(0f, -180f), new Vector2(200f, 66f));
@@ -216,7 +217,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
             mergeStatusText.raycastTarget = false;
         }
 
-        // Reserve a strip above the scrollable artifact icons for the generated controls.
+        // Reserve a strip above the scrollable Gear icons for the generated controls.
         if (slotsRoot && slotsRoot.parent is RectTransform viewport && viewport.parent == controlsRoot)
         {
             _generatedControlsViewport = viewport;
@@ -269,9 +270,9 @@ public sealed class ArtifactRailUI : MonoBehaviour
         rect.sizeDelta = size;
     }
 
-    ArtifactIconSlotUI CreateSlot()
+    GearIconSlotUI CreateSlot()
     {
-        var go = new GameObject("Artifact Icon", typeof(RectTransform), typeof(Image), typeof(ArtifactIconSlotUI));
+        var go = new GameObject("Gear Icon", typeof(RectTransform), typeof(Image), typeof(GearIconSlotUI));
         var rect = (RectTransform)go.transform;
         rect.SetParent(slotsRoot, false);
         rect.sizeDelta = new Vector2(44f, 44f);
@@ -294,7 +295,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
         label.fontSizeMin = 12f;
         label.fontSizeMax = 30f;
         label.raycastTarget = false;
-        return go.GetComponent<ArtifactIconSlotUI>();
+        return go.GetComponent<GearIconSlotUI>();
     }
 
     void HandleRunStarted(string _)
@@ -332,16 +333,16 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (!_mergeSelecting) return true;
         if (id == _firstMergeId || id == _secondMergeId) return true;
         long anchor = _firstMergeId != 0 ? _firstMergeId : _secondMergeId;
-        if (anchor != 0) return cards.GetArtifactMergeResult(anchor, id) != null;
-        foreach (var candidate in cards.OwnedArtifactInstances)
-            if (candidate != null && cards.GetArtifactMergeResult(id, candidate.Id) != null) return true;
+        if (anchor != 0) return cards.GetGearMergeResult(anchor, id) != null;
+        foreach (var candidate in cards.OwnedGearInstances)
+            if (candidate != null && cards.GetGearMergeResult(id, candidate.Id) != null) return true;
         return false;
     }
 
     void BeginMergeSelection()
     {
         var cards = source ? source : CardManager.Instance;
-        if (_ownedArtifactCount < 2 || GameplayInputGate.IsBlocked ||
+        if (_ownedGearCount < 2 || GameplayInputGate.IsBlocked ||
             cards != null && (cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting)) return;
         CloseDetail();
         HideTooltip();
@@ -356,7 +357,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
         Refresh();
     }
 
-    void SelectForMerge(long instanceId, RelicData artifact)
+    void SelectForMerge(long instanceId, GearData gear)
     {
         if (!_mergeSelecting || instanceId == 0 || GameplayInputGate.IsBlocked ||
             (_subscribedSource != null && _subscribedSource.IsEnemyTargeting)) return;
@@ -367,7 +368,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
         _mergeAwaitingConfirmation = false;
         _mergePreview = null;
         var cards = source ? source : CardManager.Instance;
-        _mergePreview = cards ? cards.GetArtifactMergeResult(_firstMergeId, _secondMergeId) : null;
+        _mergePreview = cards ? cards.GetGearMergeResult(_firstMergeId, _secondMergeId) : null;
         _mergeAwaitingConfirmation = _mergePreview != null;
         Refresh();
     }
@@ -377,9 +378,9 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (!_mergeAwaitingConfirmation || !_mergePreview || GameplayInputGate.IsBlocked ||
             (_subscribedSource != null && _subscribedSource.IsEnemyTargeting)) return;
         var cards = source ? source : CardManager.Instance;
-        if (!cards || cards.GetArtifactInstanceById(_firstMergeId) == null ||
-            cards.GetArtifactInstanceById(_secondMergeId) == null || _firstMergeId == _secondMergeId ||
-            !cards.MergeArtifacts(_firstMergeId, _secondMergeId))
+        if (!cards || cards.GetGearInstanceById(_firstMergeId) == null ||
+            cards.GetGearInstanceById(_secondMergeId) == null || _firstMergeId == _secondMergeId ||
+            !cards.MergeGear(_firstMergeId, _secondMergeId))
         {
             CancelMerge();
             return;
@@ -399,7 +400,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
 
     void UpdateMergeControls()
     {
-        bool canMergeMode = _ownedArtifactCount >= 2;
+        bool canMergeMode = _ownedGearCount >= 2;
         if (_generatedControlsViewport)
             _generatedControlsViewport.offsetMax = new Vector2(_generatedControlsViewport.offsetMax.x,
                 _mergeSelecting ? -222f : canMergeMode ? -104f : -62f);
@@ -425,24 +426,24 @@ public sealed class ArtifactRailUI : MonoBehaviour
             else if (_mergePreview) mergeStatusText.text = $"Merge into {_mergePreview.displayName}? Confirm or Cancel.";
             else if (_firstMergeId != 0 && _secondMergeId != 0)
                 mergeStatusText.text = "These copies cannot be merged. Select a matching pair.";
-            else mergeStatusText.text = $"Select two matching artifact copies ({(_firstMergeId != 0 ? 1 : 0) + (_secondMergeId != 0 ? 1 : 0)}/2).";
+            else mergeStatusText.text = $"Select two matching Gear copies ({(_firstMergeId != 0 ? 1 : 0) + (_secondMergeId != 0 ? 1 : 0)}/2).";
         }
     }
 
-    void ShowTooltip(RelicData artifact)
+    void ShowTooltip(GearData gear)
     {
-        _hovered = artifact;
+        _hovered = gear;
         if (_selectedInstanceId != 0 && detailPanel && detailPanel.activeSelf) HideTooltip();
         else
         {
-            if (tooltipText) tooltipText.text = Describe(artifact);
+            if (tooltipText) tooltipText.text = Describe(gear);
             if (tooltipPanel) tooltipPanel.SetActive(true);
         }
     }
 
-    void HideTooltipFor(RelicData artifact)
+    void HideTooltipFor(GearData gear)
     {
-        if (_hovered == artifact) HideTooltip();
+        if (_hovered == gear) HideTooltip();
     }
 
     void HideTooltip()
@@ -451,9 +452,9 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (tooltipPanel) tooltipPanel.SetActive(false);
     }
 
-    void SelectArtifact(long instanceId, RelicData artifact)
+    void SelectGear(long instanceId, GearData gear)
     {
-        if (instanceId == 0 || artifact == null) return;
+        if (instanceId == 0 || gear == null) return;
         if (_selectedInstanceId == instanceId)
         {
             CloseDetail();
@@ -465,7 +466,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
         FindFirstObjectByType<ActionButtonsUI>()?.ClearSelectedConsumable();
         _selectedInstanceId = instanceId;
         HideTooltip();
-        if (detailText) detailText.text = $"<size=22><b>{artifact.displayName}</b></size>\n{artifact.description}";
+        if (detailText) detailText.text = $"<size=22><b>{gear.displayName}</b></size>\n{gear.description}";
         PositionDetailBesideSlot(instanceId);
         if (detailPanel)
         {
@@ -518,7 +519,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
             var closeLabel = detailCloseButton.GetComponentInChildren<TMP_Text>(true);
             if (closeLabel)
             {
-                closeLabel.text = "×";
+                closeLabel.text = "Ă—";
                 closeLabel.fontSize = 20f;
                 closeLabel.enableAutoSizing = false;
             }
@@ -531,7 +532,7 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (panelImage) panelImage.color = new Color(0.08f, 0.11f, 0.16f, 0.96f);
         var parentRect = detailRect.parent as RectTransform;
         if (parentRect == null) return;
-        ArtifactIconSlotUI selectedSlot = null;
+        GearIconSlotUI selectedSlot = null;
         foreach (var slot in _slots)
             if (slot && slot.InstanceId == instanceId) { selectedSlot = slot; break; }
         if (!selectedSlot) return;
@@ -572,6 +573,6 @@ public sealed class ArtifactRailUI : MonoBehaviour
         if (detailPanel) detailPanel.SetActive(false);
     }
 
-    static string Describe(RelicData artifact) => artifact
-        ? $"{artifact.displayName}\n{artifact.description}" : string.Empty;
+    static string Describe(GearData gear) => gear
+        ? $"{gear.displayName}\n{gear.description}" : string.Empty;
 }

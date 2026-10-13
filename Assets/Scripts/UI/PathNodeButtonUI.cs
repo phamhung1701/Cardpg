@@ -2,6 +2,7 @@ using TMPro;
 using UnityEngine;
 
 /// <summary>Applies the compact, non-spoiling label used by route-map nodes.</summary>
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "PathNodeButtonUI")]
 public sealed class PathNodeButtonUI : MonoBehaviour
 {
     [SerializeField] TMP_Text label;
@@ -31,7 +32,7 @@ public sealed class PathNodeButtonUI : MonoBehaviour
             MapNodeType.Event => "?",
             MapNodeType.Upgrade => "UPGRADE",
             MapNodeType.Risk => "?",
-            MapNodeType.Boss => run.GetNodeLabel(node).ToUpperInvariant(),
+            MapNodeType.Headliner => run.GetNodeLabel(node).ToUpperInvariant(),
             _ => "?"
         };
     }

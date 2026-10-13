@@ -2,13 +2,15 @@ using UnityEngine;
 
 // Managers and scene references must exist before UI OnEnable subscriptions.
 [DefaultExecutionOrder(-50)]
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "GameController")]
 public class GameController : MonoBehaviour
 {
     [Header("References")]
     public Field handField;
     public Canvas dragCanvas;
     public CardView cardPrefab;
-    public RelicData[] relicCatalog;
+    [UnityEngine.Serialization.FormerlySerializedAs("relicCatalog")]
+    public GearData[] gearCatalog;
     public CardEnhancementData[] enhancementCatalog;
     public ConsumableData[] consumableCatalog;
 
@@ -38,7 +40,7 @@ public class GameController : MonoBehaviour
         var cards = GetOrCreate<CardManager>();
         var combat = GetOrCreate<CombatManager>();
         var run = GetOrCreate<RunManager>();
-        cards.Configure(handField, dragCanvas, cardPrefab, relicCatalog, enhancementCatalog, consumableCatalog);
+        cards.Configure(handField, dragCanvas, cardPrefab, gearCatalog, enhancementCatalog, consumableCatalog);
         combat.ConfigurePlayer(playerMaxHealth);
         run.thiefType = thiefType;
         run.goblinType = goblinType;

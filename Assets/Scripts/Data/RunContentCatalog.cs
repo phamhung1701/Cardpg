@@ -1,6 +1,7 @@
 using UnityEngine;
 
 [CreateAssetMenu(fileName = "RunContentCatalog", menuName = "Game/Run Content Catalog")]
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RunContentCatalog")]
 public class RunContentCatalog : ScriptableObject
 {
     [Header("Encounters")]
@@ -10,22 +11,26 @@ public class RunContentCatalog : ScriptableObject
     public EnemyAbility eliteAbility;
 
     [Header("Headliner Suit Abilities")]
-    public EnemyAbility clubsBossAbility;
-    public EnemyAbility diamondsBossAbility;
-    public EnemyAbility heartsBossAbility;
-    public EnemyAbility spadesBossAbility;
+    [UnityEngine.Serialization.FormerlySerializedAs("clubsBossAbility")]
+    public EnemyAbility clubsHeadlinerAbility;
+    [UnityEngine.Serialization.FormerlySerializedAs("diamondsBossAbility")]
+    public EnemyAbility diamondsHeadlinerAbility;
+    [UnityEngine.Serialization.FormerlySerializedAs("heartsBossAbility")]
+    public EnemyAbility heartsHeadlinerAbility;
+    [UnityEngine.Serialization.FormerlySerializedAs("spadesBossAbility")]
+    public EnemyAbility spadesHeadlinerAbility;
 
     [Header("Route Content")]
     public RunEventDefinition[] events;
     public RunEventDefinition[] upgrades;
     public RunEventDefinition[] risks;
 
-    public EnemyAbility GetBossAbility(CardData.Suit suit) => suit switch
+    public EnemyAbility GetHeadlinerAbility(CardData.Suit suit) => suit switch
     {
-        CardData.Suit.Clubs => clubsBossAbility,
-        CardData.Suit.Diamonds => diamondsBossAbility,
-        CardData.Suit.Hearts => heartsBossAbility,
-        _ => spadesBossAbility
+        CardData.Suit.Clubs => clubsHeadlinerAbility,
+        CardData.Suit.Diamonds => diamondsHeadlinerAbility,
+        CardData.Suit.Hearts => heartsHeadlinerAbility,
+        _ => spadesHeadlinerAbility
     };
 
     public RunEventDefinition[] GetEvents(MapNodeType category) => category switch

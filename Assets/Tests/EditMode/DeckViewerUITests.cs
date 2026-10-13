@@ -48,7 +48,7 @@ public sealed class DeckViewerUITests
         var toggleObject = Create("Deck Viewer Toggle", typeof(RectTransform), typeof(Image), typeof(Button));
         _toggleButton = toggleObject.GetComponent<Button>();
         _viewer.toggleButton = _toggleButton;
-        _cards.Configure(null, null, _viewer.cardPrefab, System.Array.Empty<RelicData>());
+        _cards.Configure(null, null, _viewer.cardPrefab, System.Array.Empty<GearData>());
         viewerObject.SetActive(true);
     }
 

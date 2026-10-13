@@ -5,15 +5,15 @@ public partial class CardManager
 {
     public CardManagerSaveData CaptureSave()
     {
-        EnsureArtifactInstances();
+        EnsureGearInstances();
         return new CardManagerSaveData
         {
-            gold = gold, nextCardId = _nextCardId, random = _cards.CaptureRandomState(),
-            artifactIdWatermark = ArtifactRuntimeInstance.IdentityWatermark,
+            gold = credits, nextCardId = _nextCardId, random = _cards.CaptureRandomState(),
+            artifactIdWatermark = GearRuntimeInstance.IdentityWatermark,
             owned = ownedCards.Select(card => card.CaptureSave()).ToList(),
             deck = deck.Select(card => card.Id).ToList(), hand = hand.Select(card => card.Id).ToList(),
             discard = discardPile.Select(card => card.Id).ToList(),
-            artifacts = _orderedArtifactInstances.Select(item => new ArtifactSaveData
+            artifacts = _orderedGearInstances.Select(item => new ArtifactSaveData
             {
                 id = item.Id, contentId = item.Definition.id, effects = item.State.CaptureSave(),
                 preparedCardId = item.PreparedDwarfSourceCard?.Id ?? 0, pendingCardId = item.PendingDwarfSourceCard?.Id ?? 0
@@ -28,8 +28,8 @@ public partial class CardManager
     {
         ClearCardState();
         _enemyTargetHandler = null; _enemyTargetEligibility = null;
-        gold = data.gold; _nextCardId = data.nextCardId;
-        relics.Clear(); ownedArtifacts.Clear(); _orderedArtifactInstances.Clear(); _backpack.Clear();
+        credits = data.gold; _nextCardId = data.nextCardId;
+        gearIds.Clear(); ownedGear.Clear(); _orderedGearInstances.Clear(); _backpack.Clear();
         _consumableUsedThisEncounter = false;
         var restored = data.owned.Select(saved =>
         {
@@ -40,13 +40,13 @@ public partial class CardManager
         _cards.RestoreZones(restored, data.deck, data.hand, data.discard, data.random);
         foreach (var saved in data.artifacts)
         {
-            var definition = catalog.Artifact(saved.contentId);
-            var artifact = ArtifactRuntimeInstance.Restore(definition, saved.id, saved.effects);
-            artifact.PreparedDwarfSourceCard = FindOwnedCard(saved.preparedCardId);
-            artifact.PendingDwarfSourceCard = FindOwnedCard(saved.pendingCardId);
-            ownedArtifacts.Add(definition); _orderedArtifactInstances.Add(artifact); relics.Add(definition.id);
+            var definition = catalog.Gear(saved.contentId);
+            var gear = GearRuntimeInstance.Restore(definition, saved.id, saved.effects);
+            gear.PreparedDwarfSourceCard = FindOwnedCard(saved.preparedCardId);
+            gear.PendingDwarfSourceCard = FindOwnedCard(saved.pendingCardId);
+            ownedGear.Add(definition); _orderedGearInstances.Add(gear); gearIds.Add(definition.id);
         }
-        ArtifactRuntimeInstance.RestoreIdentityWatermark(data.artifactIdWatermark);
+        GearRuntimeInstance.RestoreIdentityWatermark(data.artifactIdWatermark);
         foreach (var saved in data.backpack)
         {
             var definition = catalog.Consumable(saved.contentId);
@@ -59,7 +59,7 @@ public partial class CardManager
     internal void PresentRestoredSave()
     {
         if (CanCreateViews()) foreach (var card in hand) CreateView(card);
-        OnGoldChanged?.Invoke(gold); OnDeckChanged?.Invoke(); OnBuildChanged?.Invoke();
+        OnCreditsChanged?.Invoke(credits); OnDeckChanged?.Invoke(); OnBuildChanged?.Invoke();
         OnConsumablesChanged?.Invoke(); OnCardSelected?.Invoke(null); OnEnemyTargetingChanged?.Invoke(false);
     }
 }

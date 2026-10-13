@@ -12,7 +12,7 @@ public sealed class DevModeTests
     CardManager _cards;
     CombatManager _combat;
     RunManager _run;
-    RelicData[] _artifacts;
+    GearData[] _gears;
     CardEnhancementData[] _enhancements;
 
     [SetUp]
@@ -20,7 +20,7 @@ public sealed class DevModeTests
     {
         DevModeRuntime.Disable();
         GameplayInputGate.Clear();
-        _artifacts = Enumerable.Range(0, 6).Select(i => Artifact($"DEV-ART-{i:D2}", $"Dev Artifact {i}", 15 + i)).ToArray();
+        _gears = Enumerable.Range(0, 6).Select(i => Gear($"DEV-ART-{i:D2}", $"Dev Artifact {i}", 15 + i)).ToArray();
         _enhancements = Enumerable.Range(0, 2).Select(i => Enhancement($"DEV-ENH-{i:D2}", $"Dev Enhancement {i}", 10 + i)).ToArray();
         var mappedConsumables = _enhancements.Select((enhancement, index) =>
         {
@@ -36,7 +36,7 @@ public sealed class DevModeTests
             return item;
         }).ToArray();
         _cards = Make<CardManager>("Dev Test Cards");
-        _cards.Configure(null, null, null, _artifacts, _enhancements, mappedConsumables);
+        _cards.Configure(null, null, null, _gears, _enhancements, mappedConsumables);
         _cards.ConfigureRandom(new DeterministicRandom(991));
         _combat = Make<CombatManager>("Dev Test Combat");
         _combat.ConfigurePlayer(30);
@@ -91,25 +91,25 @@ public sealed class DevModeTests
     }
 
     [Test]
-    public void DevMode_InfiniteMoneyAllowsSpendingWithoutChangingGold_AndDoesNotChangeArtifactCapacity()
+    public void DevMode_InfiniteMoneyAllowsSpendingWithoutChangingCredits_AndDoesNotChangeGearCapacity()
     {
-        _cards.gold = 17;
+        _cards.credits = 17;
         DevModeRuntime.Configure(true, false, true, false);
 
         Assert.That(_cards.CanAfford(100000), Is.True);
-        Assert.That(_cards.SpendGold(100000), Is.True);
-        Assert.That(_cards.gold, Is.EqualTo(17));
-        Assert.That(_cards.BuyArtifact(_artifacts[0], 100000), Is.True);
-        Assert.That(_cards.ArtifactSlotsUsed, Is.EqualTo(1));
-        Assert.That(_cards.ArtifactCapacity, Is.EqualTo(CardManager.BASE_ARTIFACT_CAPACITY));
+        Assert.That(_cards.SpendCredits(100000), Is.True);
+        Assert.That(_cards.credits, Is.EqualTo(17));
+        Assert.That(_cards.BuyGear(_gears[0], 100000), Is.True);
+        Assert.That(_cards.GearSlotsUsed, Is.EqualTo(1));
+        Assert.That(_cards.GearCapacity, Is.EqualTo(CardManager.BASE_GEAR_CAPACITY));
 
         DevModeRuntime.Disable();
         Assert.That(_cards.CanAfford(100000), Is.False);
-        Assert.That(_cards.SpendGold(100000), Is.False);
+        Assert.That(_cards.SpendCredits(100000), Is.False);
     }
 
     [Test]
-    public void DevMode_UnlimitedShopOffersExposesEveryCatalogEntry_ButRetainsArtifactCapacity()
+    public void DevMode_UnlimitedShopOffersExposesEveryCatalogEntry_ButRetainsGearCapacity()
     {
         DevModeRuntime.Configure(true, true, true, true);
         _run.StartRunWithSeed("DEV-SHOP-OFFERS");
@@ -117,28 +117,28 @@ public sealed class DevModeTests
         shop.accessible = true;
         _run.OnPathChosen(shop.id);
 
-        int expectedCount = _artifacts.Length + _enhancements.Length + 2;
+        int expectedCount = _gears.Length + _enhancements.Length + 2;
         Assert.That(_run.GetCurrentShopOffers(), Has.Count.EqualTo(expectedCount));
         CollectionAssert.AllItemsAreUnique(_run.GetCurrentShopOffers().Select(offer => offer.StableId).ToArray());
-        Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Artifact),
-            Is.EqualTo(_artifacts.Length));
+        Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Gear),
+            Is.EqualTo(_gears.Length));
         Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Enhancement), Is.Zero);
         Assert.That(_run.GetCurrentShopOffers().Count(offer => offer.kind == ShopOfferKind.Consumable &&
             offer.consumable != null && offer.consumable.effectType == ConsumableEffectType.ApplyEnhancement),
             Is.EqualTo(_enhancements.Length));
 
-        var artifactOffers = _run.GetCurrentShopOffers().Where(offer => offer.kind == ShopOfferKind.Artifact).ToArray();
-        for (int i = 0; i < CardManager.BASE_ARTIFACT_CAPACITY; i++)
-            Assert.That(_run.PurchaseShopOffer(artifactOffers[i].StableId), Is.True);
-        Assert.That(_cards.ArtifactSlotsUsed, Is.EqualTo(5));
-        Assert.That(_cards.ArtifactCapacity, Is.EqualTo(5));
-        Assert.That(_run.GetShopOfferUnavailableReason(artifactOffers[5].StableId),
+        var gearOffers = _run.GetCurrentShopOffers().Where(offer => offer.kind == ShopOfferKind.Gear).ToArray();
+        for (int i = 0; i < CardManager.BASE_GEAR_CAPACITY; i++)
+            Assert.That(_run.PurchaseShopOffer(gearOffers[i].StableId), Is.True);
+        Assert.That(_cards.GearSlotsUsed, Is.EqualTo(5));
+        Assert.That(_cards.GearCapacity, Is.EqualTo(5));
+        Assert.That(_run.GetShopOfferUnavailableReason(gearOffers[5].StableId),
             Is.EqualTo("Gear Capacity Full"));
-        Assert.That(_run.PurchaseShopOffer(artifactOffers[5].StableId), Is.False,
+        Assert.That(_run.PurchaseShopOffer(gearOffers[5].StableId), Is.False,
             "Unlimited Shop offer generation does not lift the Persistent Artifact capacity rule.");
         Assert.That(_run.GetCurrentShopOffers(), Has.Count.EqualTo(expectedCount),
             "The cached dev offer list remains inspectable after purchases.");
-        Assert.That(_cards.gold, Is.Zero, "Infinite money spends nothing.");
+        Assert.That(_cards.credits, Is.Zero, "Infinite money spends nothing.");
     }
 
     [Test]
@@ -158,20 +158,20 @@ public sealed class DevModeTests
         Assert.That(results, Is.EqualTo(1));
     }
 
-    RelicData Artifact(string id, string name, int price)
+    GearData Gear(string id, string name, int price)
     {
-        var artifact = ScriptableObject.CreateInstance<RelicData>();
-        artifact.id = id;
-        artifact.canonicalId = id;
-        artifact.displayName = name;
-        artifact.rarity = "Common";
-        artifact.tier = 1;
-        artifact.price = price;
-        artifact.capacityCategory = ArtifactCapacityCategory.Persistent;
-        artifact.effects = Array.Empty<GameplayEffectDefinition>();
-        artifact.ruleModifiers = Array.Empty<GameplayRuleModifierData>();
-        _assets.Add(artifact);
-        return artifact;
+        var gear = ScriptableObject.CreateInstance<GearData>();
+        gear.id = id;
+        gear.canonicalId = id;
+        gear.displayName = name;
+        gear.rarity = "Common";
+        gear.tier = 1;
+        gear.price = price;
+        gear.capacityCategory = GearCapacityCategory.Persistent;
+        gear.effects = Array.Empty<GameplayEffectDefinition>();
+        gear.ruleModifiers = Array.Empty<GameplayRuleModifierData>();
+        _assets.Add(gear);
+        return gear;
     }
 
     CardEnhancementData Enhancement(string id, string name, int price)

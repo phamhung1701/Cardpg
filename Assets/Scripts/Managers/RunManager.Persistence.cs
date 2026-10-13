@@ -4,20 +4,20 @@ using UnityEngine;
 
 public partial class RunManager
 {
-    public bool CanCaptureSave => !IsRunCompleted && BossTotal == 12 && !string.IsNullOrEmpty(runSeed) &&
+    public bool CanCaptureSave => !IsRunCompleted && HeadlinerTotal == 12 && !string.IsNullOrEmpty(runSeed) &&
         CombatManager.Instance != null && CombatManager.Instance.CanCapturePersistentState &&
         CardManager.Instance != null && !_shopTransaction &&
         (_activeNode == null || _activeNode.kind is MapNodeType.Shop or MapNodeType.Event or MapNodeType.Risk or MapNodeType.Upgrade) &&
         !_pendingHammerReward && !_hammerRetryPending && !_pendingBloodRitualReward &&
         _pendingContractSelectionEvent == null && _pendingConsumableRewards.Count == 0 &&
-        (GameplayInputGate.Reasons & (GameplayInputBlockReason.ArtifactChoice | GameplayInputBlockReason.ConsumableReward)) == 0;
+        (GameplayInputGate.Reasons & (GameplayInputBlockReason.GearChoice | GameplayInputBlockReason.ConsumableReward)) == 0;
 
     public RunSaveData CaptureSave()
     {
         if (!CanCaptureSave) throw new InvalidOperationException("The run is not at a safe checkpoint.");
         var data = new RunSaveData
         {
-            seed = runSeed, bossIndex = bossIndex, infiniteMode = IsInfiniteMode,
+            seed = runSeed, bossIndex = headlinerIndex, infiniteMode = IsInfiniteMode,
             completedNodeCount = _completedNodeCount, activeNodeId = _activeNode?.id ?? -1,
             activeEventId = _activeEvent != null ? _activeEvent.id : null,
             cards = CardManager.Instance.CaptureSave(), timing = Timing.CaptureSave(),
@@ -30,7 +30,7 @@ public partial class RunManager
                 { mapIndex = x.Key, choices = x.Value.Select(item => item.id).ToList() }).ToList(),
             upgradeOffers = _activeUpgradeOffers.Select(CaptureOffer).ToList(),
             midShopGoods = new[] { midShopGoods.x, midShopGoods.y, midShopGoods.z },
-            preBossShopGoods = new[] { preBossShopGoods.x, preBossShopGoods.y, preBossShopGoods.z }
+            preBossShopGoods = new[] { preHeadlinerShopGoods.x, preHeadlinerShopGoods.y, preHeadlinerShopGoods.z }
         };
         data.hasContract = _activeContract != null;
         if (_activeContract != null) data.contract = new ContractSaveData
@@ -41,8 +41,8 @@ public partial class RunManager
             contentId = n.contentId, mapIndex = n.mapIndex, col = n.col, row = n.row, next = n.next.ToList(),
             completed = n.completed, accessible = n.accessible, revealed = n.revealed, hidden = n.hidden,
             shopCheckpoint = n.isShopCheckpoint }).ToList();
-        data.bosses = bossDeck.Select(b => new BossSaveData { name = b.enemyName, hp = b.maxHp, attack = b.baseAttack,
-            gold = b.goldReward, rank = (int)b.sourceCard.rank, suit = (int)b.sourceCard.suit,
+        data.bosses = headlinerDeck.Select(b => new BossSaveData { name = b.enemyName, hp = b.maxHp, attack = b.baseAttack,
+            gold = b.creditsReward, rank = (int)b.sourceCard.rank, suit = (int)b.sourceCard.suit,
             encounterCount = b.encounterCount, fleeTurns = b.fleeAfterPlayerTurns,
             abilities = (b.abilities ?? Array.Empty<EnemyAbility>()).Select(a => new AbilitySaveData
             { id = a.id, displayName = a.displayName, description = a.description, effect = (int)a.effect, amount = a.amount }).ToList() }).ToList();
@@ -68,7 +68,7 @@ public partial class RunManager
         runSeed = data.seed; _randomContext = new RunRandomContext(data.seed);
         CombatManager.Instance.RestorePersistentState(data);
         CardManager.Instance.RestoreSave(data.cards, catalog);
-        bossIndex = data.bossIndex; IsInfiniteMode = data.infiniteMode;
+        headlinerIndex = data.bossIndex; IsInfiniteMode = data.infiniteMode;
         _completedNodeCount = data.completedNodeCount;
         currentPath.AddRange(data.nodes.Select(n => new PathNode { id = n.id, kind = (MapNodeType)n.kind,
             type = n.type, contentId = n.contentId, mapIndex = n.mapIndex, col = n.col, row = n.row,
@@ -76,17 +76,17 @@ public partial class RunManager
             revealed = n.revealed, hidden = n.hidden, isShopCheckpoint = n.shopCheckpoint }));
         foreach (var saved in data.bosses)
         {
-            var boss = EnemyTypeData.Create(saved.name, saved.hp, saved.attack, saved.gold);
-            boss.sourceCard = CardData.Create((CardData.Suit)saved.suit, (CardData.Rank)saved.rank);
-            boss.encounterCount = saved.encounterCount; boss.fleeAfterPlayerTurns = saved.fleeTurns;
-            boss.abilities = saved.abilities.Select(a =>
+            var headliner = EnemyTypeData.Create(saved.name, saved.hp, saved.attack, saved.gold);
+            headliner.sourceCard = CardData.Create((CardData.Suit)saved.suit, (CardData.Rank)saved.rank);
+            headliner.encounterCount = saved.encounterCount; headliner.fleeAfterPlayerTurns = saved.fleeTurns;
+            headliner.abilities = saved.abilities.Select(a =>
             {
                 var ability = ScriptableObject.CreateInstance<EnemyAbility>();
                 ability.id = a.id; ability.displayName = a.displayName; ability.description = a.description;
                 ability.effect = (EnemyAbilityEffect)a.effect; ability.amount = a.amount;
                 _generatedEnemyAbilities.Add(ability); return ability;
             }).ToArray();
-            _generatedEnemyTypes.Add(boss); bossDeck.Add(boss);
+            _generatedEnemyTypes.Add(headliner); headlinerDeck.Add(headliner);
         }
         foreach (var saved in data.shops)
         {
@@ -121,7 +121,7 @@ public partial class RunManager
             encounterWins = data.contract.encounterWins, stableId = data.contract.stableId };
         Timing.RestoreSave(data.timing);
         midShopGoods = new Vector3Int(data.midShopGoods[0], data.midShopGoods[1], data.midShopGoods[2]);
-        preBossShopGoods = new Vector3Int(data.preBossShopGoods[0], data.preBossShopGoods[1], data.preBossShopGoods[2]);
+        preHeadlinerShopGoods = new Vector3Int(data.preBossShopGoods[0], data.preBossShopGoods[1], data.preBossShopGoods[2]);
         SubscribeToCombatResults();
     }
 
@@ -130,7 +130,7 @@ public partial class RunManager
         // Presentation notifications only: deliberately no MapReady, NodeCompleted, encounter startup or purchases.
         OnRunStarted?.Invoke(runSeed);
         CardManager.Instance.PresentRestoredSave();
-        OnCycleStarted?.Invoke(IsInfiniteMode ? $"District {CurrentCycle} / Infinite" : $"District {CurrentCycle} / {BossTotal}");
+        OnCycleStarted?.Invoke(IsInfiniteMode ? $"District {CurrentCycle} / Infinite" : $"District {CurrentCycle} / {HeadlinerTotal}");
         if (_activeNode == null) OnShowPathScreen?.Invoke();
         else if (_activeNode.kind == MapNodeType.Shop) OnShowShop?.Invoke();
         else if (_activeNode.kind == MapNodeType.Upgrade) OnShowUpgrade?.Invoke();
@@ -140,13 +140,13 @@ public partial class RunManager
     static OfferSaveData CaptureOffer(ShopOffer o) => new()
     { kind = (int)o.kind, slot = o.slot, basePrice = o.basePrice, price = o.price,
         investmentStake = o.investmentStake, supplyQuantity = o.supplyQuantity, generation = o.generation,
-        purchased = o.purchased, artifactId = o.artifact != null ? o.artifact.id : null,
+        purchased = o.purchased, artifactId = o.gear != null ? o.gear.id : null,
         enhancementId = o.enhancement != null ? o.enhancement.id : null,
         consumableId = o.consumable != null ? o.consumable.id : null };
     static ShopOffer RestoreOffer(OfferSaveData o, SaveContentCatalog c) => new()
     { kind = (ShopOfferKind)o.kind, slot = o.slot, basePrice = o.basePrice, price = o.price,
         investmentStake = o.investmentStake, supplyQuantity = o.supplyQuantity, generation = o.generation,
-        purchased = o.purchased, artifact = string.IsNullOrEmpty(o.artifactId) ? null : c.Artifact(o.artifactId),
+        purchased = o.purchased, gear = string.IsNullOrEmpty(o.artifactId) ? null : c.Gear(o.artifactId),
         enhancement = string.IsNullOrEmpty(o.enhancementId) ? null : c.Enhancement(o.enhancementId),
         consumable = string.IsNullOrEmpty(o.consumableId) ? null : c.Consumable(o.consumableId) };
 }

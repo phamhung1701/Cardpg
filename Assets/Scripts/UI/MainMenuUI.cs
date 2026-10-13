@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+[UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "MainMenuUI")]
 public sealed class MainMenuUI : MonoBehaviour
 {
     public FrontendMenuNavigator navigator;
