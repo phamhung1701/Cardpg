@@ -959,14 +959,15 @@ public partial class CombatManager : Singleton<CombatManager>
         _activeAction = CreateAction(CombatActionOrigin.EnemyRetaliation);
         _nextReactiveHitIndex = 1;
         var remaining = new List<(int amount, bool split)>();
-        int ordinaryTotal = 0;
+        // Match the saturating pending-damage total; unchecked int addition could erase a positive aggregate.
+        long ordinaryTotal = 0;
         for (int i = 0; i < _pendingAttacks.Count; i++)
         {
             var source = _pendingAttackSources[i];
             if (source != null && source.HasDoubleStrike) remaining.Add((_pendingAttacks[i], true));
-            else ordinaryTotal += _pendingAttacks[i];
+            else ordinaryTotal = Math.Min(int.MaxValue, ordinaryTotal + _pendingAttacks[i]);
         }
-        if (ordinaryTotal > 0) remaining.Insert(0, (ordinaryTotal, false));
+        if (ordinaryTotal > 0) remaining.Insert(0, ((int)ordinaryTotal, false));
         try
         {
             int lost = 0;

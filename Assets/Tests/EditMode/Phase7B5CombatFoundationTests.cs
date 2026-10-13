@@ -187,6 +187,102 @@ public sealed class Phase7B5CombatFoundationTests
     }
 
     [Test]
+    public void EnemyRetaliationWithoutDefense_AppliesResolvedDamageAndReportsHpLoss()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Retaliation", 100, 7, 0));
+        _combat.StartEnemy(enemy);
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.True);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+        int healthBefore = _combat.player.currentHealth;
+
+        _combat.TakeRemainingDamage();
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Request.Origin, Is.EqualTo(CombatDamageOrigin.EnemyAggregate));
+        Assert.That(results[0].RequestedDamage, Is.EqualTo(7));
+        Assert.That(results[0].ActualHpLost, Is.EqualTo(7));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(healthBefore - 7));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+    }
+
+    [Test]
+    public void EnemyRetaliationAfterPartialBlock_AppliesOnlyPositiveResidualDamage()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Partial Block", 100, 20, 0));
+        _combat.StartEnemy(enemy);
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, enemy), Is.True);
+        var defense = HandViews().First(view => _combat.CalculateCardDefense(view.data) > 0);
+        int block = _combat.CalculateCardDefense(defense.data);
+        int healthBefore = _combat.player.currentHealth;
+        Assert.That(_combat.TryDefendWithCards(new[] { defense }), Is.True);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+
+        _combat.TakeRemainingDamage();
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].RequestedDamage, Is.EqualTo(20 - block));
+        Assert.That(results[0].ActualHpLost, Is.EqualTo(20 - block));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(healthBefore - (20 - block)));
+    }
+
+    [Test]
+    public void EnemyRetaliationAfterFullBlock_AppliesNoHpDamage()
+    {
+        var attackCard = LowestAttackView();
+        var defenseCard = HandViews().First(view => view != attackCard && _combat.CalculateCardDefense(view.data) > 0);
+        int block = _combat.CalculateCardDefense(defenseCard.data);
+        var enemy = new EnemyRuntime(CreateEnemyType("Full Block", 100, block, 0));
+        _combat.StartEnemy(enemy);
+        Assert.That(_combat.TryPlayCards(new[] { attackCard }, enemy), Is.True);
+        int healthBefore = _combat.player.currentHealth;
+        Assert.That(_combat.TryDefendWithCards(new[] { defenseCard }), Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(healthBefore));
+    }
+
+    [Test]
+    public void MultiEnemyRetaliation_ResolvesOneAggregateDamageRequest()
+    {
+        var type = CreateEnemyType("Aggregate HP", 100, 4, 0);
+        var first = new EnemyRuntime(type, 1, 2);
+        var second = new EnemyRuntime(type, 2, 2);
+        _combat.StartEncounter(new[] { first, second });
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, first), Is.True);
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+
+        _combat.TakeRemainingDamage();
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].RequestedDamage, Is.EqualTo(8));
+        Assert.That(results[0].ActualHpLost, Is.EqualTo(8));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(22));
+    }
+
+    [Test]
+    public void MultiEnemyAggregateAboveIntRange_SaturatesInsteadOfDroppingDamage()
+    {
+        var type = CreateEnemyType("Overflow Aggregate", 100, 1_500_000_000, 0);
+        var first = new EnemyRuntime(type, 1, 1);
+        var second = new EnemyRuntime(type, 2, 1);
+        _combat.StartEncounter(new[] { first, second });
+        Assert.That(_combat.TryPlayCards(new[] { LowestAttackView() }, first), Is.True);
+        Assert.That(_combat.pendingDamage, Is.EqualTo(int.MaxValue));
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+
+        _combat.TakeRemainingDamage();
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].RequestedDamage, Is.EqualTo(int.MaxValue));
+        Assert.That(results[0].ActualHpLost, Is.EqualTo(30));
+        Assert.That(_combat.player.IsDefeated, Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameOver));
+    }
+
+    [Test]
     public void Recover_MultiEnemyAggregateAppliesReductionThenConsumesOneShieldAndDrawsOnce()
     {
         var reduction = ScriptableObject.CreateInstance<RelicData>();
