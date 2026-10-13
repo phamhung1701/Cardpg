@@ -23,7 +23,7 @@ public sealed class ConsumableRewardUI : MonoBehaviour
             RunManager.Instance.OnConsumableRewardChanged += Refresh;
         if (CardManager.Instance != null)
             CardManager.Instance.OnConsumablesChanged += Refresh;
-        if (claimButton) claimButton.onClick.AddListener(ClaimSelected);
+        if (claimButton) { claimButton.onClick.AddListener(ClaimSelected); KeyButtonBorderStyle.Apply(claimButton); }
         if (declineButton) declineButton.onClick.AddListener(Decline);
         Refresh();
     }

@@ -19,7 +19,7 @@ public sealed class ConfirmationDialogUI : MonoBehaviour
 
     void OnEnable()
     {
-        if (confirmButton) confirmButton.onClick.AddListener(Confirm);
+        if (confirmButton) { confirmButton.onClick.AddListener(Confirm); KeyButtonBorderStyle.Apply(confirmButton); }
         if (cancelButton) cancelButton.onClick.AddListener(Cancel);
         if (panel) panel.SetActive(false);
     }

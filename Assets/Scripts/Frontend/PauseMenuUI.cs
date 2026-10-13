@@ -24,8 +24,8 @@ public sealed class PauseMenuUI : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         DevModePanelUI.InstallGame(this);
 #endif
-        if (pauseButton) pauseButton.onClick.AddListener(OpenPause);
-        if (resumeButton) resumeButton.onClick.AddListener(Resume);
+        if (pauseButton) { pauseButton.onClick.AddListener(OpenPause); KeyButtonBorderStyle.Apply(pauseButton); }
+        if (resumeButton) { resumeButton.onClick.AddListener(Resume); KeyButtonBorderStyle.Apply(resumeButton); }
         if (settingsButton) settingsButton.onClick.AddListener(OpenSettings);
         if (restartButton) restartButton.onClick.AddListener(ConfirmRestart);
         if (abandonButton) abandonButton.onClick.AddListener(ConfirmAbandon);

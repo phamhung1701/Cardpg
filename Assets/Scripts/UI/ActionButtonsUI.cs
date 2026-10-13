@@ -79,12 +79,12 @@ public class ActionButtonsUI : MonoBehaviour
         _enhancementTargetUI = GetComponent<EnhancementTargetUI>();
         _enemyGroup = FindFirstObjectByType<EnemyGroupUI>();
 
-        if (playButton) playButton.onClick.AddListener(OnPlayClicked);
-        if (blockButton) blockButton.onClick.AddListener(OnBlockClicked);
+        if (playButton) { playButton.onClick.AddListener(OnPlayClicked); KeyButtonBorderStyle.Apply(playButton); }
+        if (blockButton) { blockButton.onClick.AddListener(OnBlockClicked); KeyButtonBorderStyle.Apply(blockButton); }
         if (rankSortButton) rankSortButton.onClick.AddListener(OnRankSortClicked);
         if (suitSortButton) suitSortButton.onClick.AddListener(OnSuitSortClicked);
-        if (takeDamageButton) takeDamageButton.onClick.AddListener(OnTakeDamageClicked);
-        if (recoverButton) recoverButton.onClick.AddListener(OnRecoverClicked);
+        if (takeDamageButton) { takeDamageButton.onClick.AddListener(OnTakeDamageClicked); KeyButtonBorderStyle.Apply(takeDamageButton); }
+        if (recoverButton) { recoverButton.onClick.AddListener(OnRecoverClicked); KeyButtonBorderStyle.Apply(recoverButton); }
         BindBackpackSlots();
         EnsureConsumableContextUI();
 
@@ -675,6 +675,7 @@ public class ActionButtonsUI : MonoBehaviour
         image.color = new Color(0.22f, 0.43f, 0.34f, 1f);
         var button = go.GetComponent<Button>();
         button.targetGraphic = image;
+        if (objectName == "Use Trick") KeyButtonBorderStyle.Apply(button);
         button.colors = new ColorBlock { normalColor = Color.white, highlightedColor = new Color(1.1f, 1.1f, 1.1f),
             pressedColor = new Color(0.8f, 0.8f, 0.8f), selectedColor = Color.white,
             disabledColor = new Color(0.45f, 0.45f, 0.45f, 0.48f), colorMultiplier = 1f, fadeDuration = 0.1f };

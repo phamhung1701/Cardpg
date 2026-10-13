@@ -94,7 +94,7 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             CardManager.Instance.OnDeckChanged += RefreshCards;
             CardManager.Instance.OnConsumablesChanged += ValidateTargeting;
         }
-        if (confirmButton) confirmButton.onClick.AddListener(Confirm);
+        if (confirmButton) { confirmButton.onClick.AddListener(Confirm); KeyButtonBorderStyle.Apply(confirmButton); }
         if (backButton) backButton.onClick.AddListener(Back);
         Hide();
     }

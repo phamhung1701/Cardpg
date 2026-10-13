@@ -46,8 +46,8 @@ public class ShopUI : MonoBehaviour
             CardManager.Instance.OnBuildChanged += RefreshItems;
             CardManager.Instance.OnDeckChanged += RefreshQuantityLimitDetails;
         }
-        if (continueButton) continueButton.onClick.AddListener(OnContinue);
-        if (buyButton) buyButton.onClick.AddListener(OnBuy);
+        if (continueButton) { continueButton.onClick.AddListener(OnContinue); KeyButtonBorderStyle.Apply(continueButton); }
+        if (buyButton) { buyButton.onClick.AddListener(OnBuy); KeyButtonBorderStyle.Apply(buyButton); }
         EnsureInvestmentControls();
         EnsureOfferScrolling();
         EnsureSellingControls();

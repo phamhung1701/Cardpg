@@ -22,7 +22,7 @@ public sealed class SettingsMenuUI : MonoBehaviour
 
     void OnEnable()
     {
-        if (applyButton) applyButton.onClick.AddListener(Apply);
+        if (applyButton) { applyButton.onClick.AddListener(Apply); KeyButtonBorderStyle.Apply(applyButton); }
         if (backButton) backButton.onClick.AddListener(Back);
         if (panel) panel.SetActive(false);
     }

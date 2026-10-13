@@ -39,8 +39,8 @@ public class RunResultUI : MonoBehaviour
             RunManager.Instance.OnRunCompleted += HandleRunCompleted;
             RunManager.Instance.OnRunStarted += HandleRunStarted;
         }
-        if (retrySameSeedButton) retrySameSeedButton.onClick.AddListener(RetrySameSeed);
-        if (newRunButton) newRunButton.onClick.AddListener(NewRun);
+        if (retrySameSeedButton) { retrySameSeedButton.onClick.AddListener(RetrySameSeed); KeyButtonBorderStyle.Apply(retrySameSeedButton); }
+        if (newRunButton) { newRunButton.onClick.AddListener(NewRun); KeyButtonBorderStyle.Apply(newRunButton); }
         if (mainMenuButton) mainMenuButton.onClick.AddListener(MainMenu);
         HideAll();
     }
