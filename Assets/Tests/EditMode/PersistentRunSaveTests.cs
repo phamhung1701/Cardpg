@@ -84,6 +84,49 @@ public sealed class PersistentRunSaveTests
     }
 
     [Test]
+    public void AutoClaimedEnemyDrop_PersistsInventoryAndResolvedNodeContextWithoutDuplicateGrant()
+    {
+        const int nodeId = 43;
+        const int mapIndex = 2;
+        var candidates = cards.consumableCatalog
+            .Where(item => item != null && item.dropAvailable && item.dropChance > 0f &&
+                item.effectType != ConsumableEffectType.ApplyEnhancement)
+            .OrderBy(item => item.id, StringComparer.Ordinal).ToArray();
+        var chosen = (ConsumableData)null;
+        string seed = null;
+        int context = unchecked(mapIndex * 7919 ^ nodeId);
+        for (int attempt = 0; attempt < 10000 && chosen == null; attempt++)
+        {
+            string candidateSeed = "AUTO-DROP-SAVE-" + attempt;
+            var random = new RunRandomContext(candidateSeed).CreateStream("consumable-drops", context);
+            foreach (var candidate in candidates)
+                if (random.NextFloat() < Mathf.Clamp01(candidate.dropChance))
+                {
+                    chosen = candidate;
+                    seed = candidateSeed;
+                    break;
+                }
+        }
+        Assert.That(chosen, Is.Not.Null, "A seeded eligible drop should be found.");
+        run.StartRunWithSeed(seed);
+        var node = new PathNode { id = nodeId, mapIndex = mapIndex, kind = MapNodeType.Combat };
+        var grant = typeof(RunManager).GetMethod("TryGrantConsumableDropForNode", Private);
+        Assert.That((bool)grant.Invoke(run, new object[] { node }), Is.True);
+        Assert.That(run.PendingConsumableReward, Is.Null);
+        Assert.That(cards.GetConsumableCount(chosen), Is.EqualTo(1));
+
+        var checkpoint = run.CaptureSave();
+        Write(checkpoint);
+        run.RestoreSave(JsonClone(Read()), catalog);
+
+        Assert.That(cards.GetConsumableCount(chosen), Is.EqualTo(1));
+        Assert.That((bool)grant.Invoke(run, new object[] { node }), Is.False,
+            "The saved resolved-node context prevents a restart or duplicate event from granting a second drop.");
+        Assert.That(cards.GetConsumableCount(chosen), Is.EqualTo(1));
+        Assert.That(run.PendingConsumableReward, Is.Null);
+    }
+
+    [Test]
     public void StatefulRandomStreams_ContinueAtExactSavedPositions()
     {
         var critical = (IRandomSource)typeof(CombatManager).GetField("_criticalRandom", Private).GetValue(combat);

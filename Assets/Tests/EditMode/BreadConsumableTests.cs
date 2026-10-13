@@ -11,6 +11,7 @@ public sealed class BreadConsumableTests
     CombatManager _combat;
     RunManager _run;
     ConsumableData _bread;
+    int _breadUses;
 
     [SetUp]
     public void SetUp()
@@ -18,6 +19,7 @@ public sealed class BreadConsumableTests
         GameplayInputGate.Clear();
         _bread = AssetDatabase.LoadAssetAtPath<ConsumableData>("Assets/Data/Consumables/Bread.asset");
         Assert.That(_bread, Is.Not.Null);
+        _breadUses = _bread.uses;
         _cards = Make<CardManager>("Bread Test Cards");
         _cards.Configure(null, null, null, System.Array.Empty<RelicData>(),
             System.Array.Empty<CardEnhancementData>(), new[] { _bread });
@@ -34,6 +36,7 @@ public sealed class BreadConsumableTests
     public void TearDown()
     {
         GameplayInputGate.Clear();
+        if (_bread != null) _bread.uses = _breadUses;
         for (int i = _created.Count - 1; i >= 0; i--)
             if (_created[i] != null) Object.DestroyImmediate(_created[i]);
         _created.Clear();
@@ -107,6 +110,127 @@ public sealed class BreadConsumableTests
         Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.False, "A resolved drop is not rolled twice for the same node.");
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(CardManager.BACKPACK_CAPACITY));
         Assert.That(_run.DeclinePendingConsumableReward(), Is.True);
+    }
+
+    [Test]
+    public void EncounterDrop_AutoClaimsIntoAvailableSlotWithoutOpeningRewardChoice()
+    {
+        const int nodeId = 24;
+        const int mapIndex = 2;
+        _run.StartRunWithSeed(SeedForBreadDrop(nodeId, mapIndex, "BREAD-AUTO-DROP"));
+        var node = new PathNode { id = nodeId, mapIndex = mapIndex, kind = MapNodeType.Combat };
+        var method = typeof(RunManager).GetMethod("TryGrantConsumableDropForNode",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.True);
+
+        Assert.That(_run.PendingConsumableReward, Is.Null);
+        Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1));
+        Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(1));
+        Assert.That(GameplayInputGate.IsBlocked, Is.False);
+        Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.False);
+        Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1), "A successful drop is not duplicated on repeat resolution.");
+    }
+
+    [Test]
+    public void EncounterDrop_AutoMergesIntoExistingStackEvenWhenBackpackHasNoFreeSlot()
+    {
+        var pack = ScriptableObject.CreateInstance<RelicData>();
+        _created.Add(pack);
+        pack.id = "test_rare_pack";
+        pack.displayName = "Test Pack";
+        pack.rarity = "Common";
+        pack.tier = 1;
+        pack.price = 0;
+        pack.specialRule = ArtifactSpecialRule.TravelerPackRare;
+        pack.effects = System.Array.Empty<GameplayEffectDefinition>();
+        pack.ruleModifiers = System.Array.Empty<GameplayRuleModifierData>();
+        var extras = Enumerable.Range(0, 4).Select(index =>
+        {
+            var item = ScriptableObject.CreateInstance<ConsumableData>();
+            _created.Add(item);
+            item.id = "test_extra_" + index;
+            item.displayName = "Extra " + index;
+            item.shopAvailable = false;
+            item.dropAvailable = false;
+            item.dropChance = 0f;
+            return item;
+        }).ToArray();
+        _cards.Configure(null, null, null, new[] { pack }, System.Array.Empty<CardEnhancementData>(),
+            new[] { _bread }.Concat(extras).ToArray());
+        Assert.That(_cards.BuyArtifact(pack, 0), Is.True);
+        Assert.That(_cards.AddConsumable(_bread, 2), Is.True);
+        foreach (var extra in extras) Assert.That(_cards.AddConsumable(extra), Is.True);
+        Assert.That(_cards.IsBackpackFull, Is.True);
+        Assert.That(_cards.GetConsumableStackCountAtSlot(0), Is.EqualTo(2));
+        const int nodeId = 25;
+        const int mapIndex = 2;
+        _run.StartRunWithSeed(SeedForBreadDrop(nodeId, mapIndex, "BREAD-STACK-DROP"));
+        Assert.That(_cards.BuyArtifact(pack, 0), Is.True);
+        Assert.That(_cards.AddConsumable(_bread, 2), Is.True);
+        foreach (var extra in extras) Assert.That(_cards.AddConsumable(extra), Is.True);
+        var node = new PathNode { id = nodeId, mapIndex = mapIndex, kind = MapNodeType.Combat };
+        var method = typeof(RunManager).GetMethod("TryGrantConsumableDropForNode",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.True);
+
+        Assert.That(_run.PendingConsumableReward, Is.Null);
+        Assert.That(_cards.IsBackpackFull, Is.True);
+        Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(CardManager.TRAVELER_BACKPACK_CAPACITY));
+        Assert.That(_cards.GetConsumableStackCountAtSlot(0), Is.EqualTo(3));
+        Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(3));
+    }
+
+    [Test]
+    public void FleeOnlyVictoryDoesNotGrantAnEnemyDrop()
+    {
+        const int nodeId = 26;
+        const int mapIndex = 2;
+        _run.StartRunWithSeed(SeedForBreadDrop(nodeId, mapIndex, "BREAD-FLEE-DROP"));
+        var node = new PathNode { id = nodeId, mapIndex = mapIndex, kind = MapNodeType.Combat };
+        typeof(RunManager).GetField("_activeNode", System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic).SetValue(_run, node);
+        var fleeingType = EnemyTypeData.Create("Drop Test Flee", 100, 0, 0);
+        fleeingType.fleeAfterPlayerTurns = 1;
+        _created.Add(fleeingType);
+        var fleeingEnemy = new EnemyRuntime(fleeingType);
+        _combat.StartEnemy(fleeingEnemy);
+        fleeingEnemy.NotifyPlayerTurnCompleted();
+        typeof(CombatManager).GetMethod("CompletePlayerTurnForEnemies",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(_combat, null);
+        Assert.That(_combat.Enemies, Is.Empty);
+        Assert.That(_combat.EncounterDefeatedEnemyCount, Is.Zero);
+
+        typeof(CombatManager).GetMethod("ResolveEncounter",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .Invoke(_combat, new object[] { EncounterResult.Victory });
+
+        Assert.That(_cards.GetConsumableCount(_bread), Is.Zero);
+        Assert.That(_run.PendingConsumableReward, Is.Null);
+        Assert.That(GameplayInputGate.IsBlocked, Is.False);
+    }
+
+    [Test]
+    public void DefeatNeverGrantsAnEnemyDrop()
+    {
+        const int nodeId = 27;
+        const int mapIndex = 2;
+        _run.StartRunWithSeed(SeedForBreadDrop(nodeId, mapIndex, "BREAD-DEFEAT-DROP"));
+        typeof(RunManager).GetField("_activeNode", System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic).SetValue(_run,
+            new PathNode { id = nodeId, mapIndex = mapIndex, kind = MapNodeType.Combat });
+        var type = EnemyTypeData.Create("Defeated Drop Enemy", 100, 0, 0);
+        _created.Add(type);
+        _combat.StartEnemy(new EnemyRuntime(type));
+
+        typeof(CombatManager).GetMethod("ResolveEncounter",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .Invoke(_combat, new object[] { EncounterResult.Defeat });
+
+        Assert.That(_cards.GetConsumableCount(_bread), Is.Zero);
+        Assert.That(_run.PendingConsumableReward, Is.Null);
+        Assert.That(GameplayInputGate.IsBlocked, Is.False);
     }
 
     [Test]
@@ -203,11 +327,18 @@ public sealed class BreadConsumableTests
         Assert.That(method, Is.Not.Null);
 
         Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.True);
-        Assert.That(_run.PendingConsumableReward, Is.Not.Null);
-        Assert.That(_run.ClaimPendingConsumableReward(0), Is.True);
+        Assert.That(_run.PendingConsumableReward, Is.Null);
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1));
+        Assert.That(_cards.BackpackSlotsUsed, Is.EqualTo(1));
         Assert.That((bool)method.Invoke(_run, new object[] { node }), Is.False);
         Assert.That(_cards.GetConsumableCount(_bread), Is.EqualTo(1));
+    }
+
+    string SeedForBreadDrop(int nodeId, int mapIndex, string prefix)
+    {
+        int context = unchecked(mapIndex * 7919 ^ nodeId);
+        return Enumerable.Range(0, 1000).Select(index => $"{prefix}-{index}")
+            .First(seed => new RunRandomContext(seed).CreateStream("consumable-drops", context).NextFloat() < _bread.dropChance);
     }
 
     EnemyTypeData Enemy(string name)

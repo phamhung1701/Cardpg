@@ -2125,7 +2125,8 @@ public partial class RunManager : Singleton<RunManager>
         bool wasBoss = _activeNode.kind == MapNodeType.Boss;
         ApplyVictoryArtifactRewards(wasBoss);
         ProgressContractForVictory(_activeNode, CombatManager.Instance?.EncounterActualHpLost ?? 0);
-        TryGrantConsumableDropForNode(_activeNode);
+        if ((CombatManager.Instance?.EncounterDefeatedEnemyCount ?? 0) > 0)
+            TryGrantConsumableDropForNode(_activeNode);
         CompleteActiveNode();
         if (wasBoss)
             HandleBossVictory();
@@ -2192,7 +2193,9 @@ public partial class RunManager : Singleton<RunManager>
         for (int i = 0; i < candidates.Length; i++)
         {
             if (random.NextFloat() >= Mathf.Clamp01(candidates[i].dropChance)) continue;
-            return QueueConsumableReward($"enemy-drop:{context}", "Enemy Drop", new[] { candidates[i] });
+            var selected = candidates[i];
+            if (cards.CanAddConsumable(selected) && cards.AddConsumable(selected)) return true;
+            return QueueConsumableReward($"enemy-drop:{context}", "Enemy Drop", new[] { selected });
         }
         return false;
     }

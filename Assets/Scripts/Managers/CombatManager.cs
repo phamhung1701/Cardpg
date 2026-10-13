@@ -69,6 +69,7 @@ public partial class CombatManager : Singleton<CombatManager>
     bool _isEliteEncounter;
     int _eliteKillCount;
     public int EliteKillCount => _eliteKillCount;
+    public int EncounterDefeatedEnemyCount => _processedEnemyDeaths.Count;
     public int EncounterActualHpLost => _encounterActualHpLost;
     public bool IsBossEncounter => _isBossEncounter;
     public bool IsOpeningPlayerAttack => _openingPlayerAttackInProgress || _playerAttackActionCount == 0;
