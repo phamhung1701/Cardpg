@@ -378,7 +378,7 @@ public class ShopUI : MonoBehaviour
             : System.Array.Empty<ShopOffer>();
         AddSectionHeading("GOODS", itemsContainer);
         AddGoodsRefreshButton();
-        AddSectionHeading("SERVICES — once per Black Market", _servicesContainer ?? itemsContainer);
+        AddSectionHeading("SERVICES — once per Shop", _servicesContainer ?? itemsContainer);
         foreach (var offer in offers.OrderBy(offer => offer.IsService ? 1 : 0))
         {
             string unavailableReason = RunManager.Instance != null
@@ -392,14 +392,14 @@ public class ShopUI : MonoBehaviour
             if (text)
             {
                 string status = string.IsNullOrEmpty(unavailableReason) ? string.Empty : $"\n<color=#DFA0A0>{unavailableReason}</color>";
-            string priceLabel = offer.kind == ShopOfferKind.Investment
-                ? (offer.investmentStake > 0 ? $"{offer.investmentStake}g stake" : "Set stake")
-                : offer.kind == ShopOfferKind.Supply ? "3g / card" : $"{offer.price}g";
-                text.text = $"{offer.Icon} {offer.DisplayName} - {priceLabel}\n{offer.Description(cm)}{status}";
+                string priceLabel = offer.kind == ShopOfferKind.Investment
+                    ? (offer.investmentStake > 0 ? $"{offer.investmentStake}g stake" : "Set stake")
+                    : offer.kind == ShopOfferKind.Supply ? "3g / card" : $"{offer.price}g";
+                text.text = $"<b>{offer.Icon} {offer.DisplayName}</b>\n{offer.Description(cm)}\n<align=right><color=#F2CC75><b>{priceLabel}</b></color></align>{status}";
                 text.overflowMode = TextOverflowModes.Overflow;
                 var row = btn.GetComponent<LayoutElement>() ?? btn.AddComponent<LayoutElement>();
                 float textWidth = Mathf.Max(1f, ((RectTransform)container).rect.width - 32f);
-                row.minHeight = Mathf.Max(58f, text.GetPreferredValues(text.text, textWidth, 0f).y + 16f);
+                row.minHeight = Mathf.Max(104f, text.GetPreferredValues(text.text, textWidth, 0f).y + 20f);
                 row.preferredHeight = row.minHeight;
             }
 
