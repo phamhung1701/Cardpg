@@ -12,6 +12,13 @@ public sealed class ConsumableInstance
         RemainingCharges = Math.Max(1, definition.uses);
     }
 
+    public static ConsumableInstance Restore(ConsumableData definition, int charges)
+    {
+        if (charges <= 0 || charges > Math.Max(1, definition.uses))
+            throw new ArgumentOutOfRangeException(nameof(charges));
+        return new ConsumableInstance(definition) { RemainingCharges = charges };
+    }
+
     public bool SpendCharge()
     {
         if (RemainingCharges <= 0) return false;

@@ -5,7 +5,7 @@ using UnityEngine;
 
 public enum ConsumableTargetType { None, Card, Enemy }
 
-public class CardManager : Singleton<CardManager>
+public partial class CardManager : Singleton<CardManager>
 {
     public const int HAND_SIZE = 8;
     public const int BASE_ARTIFACT_CAPACITY = 5;
@@ -487,7 +487,12 @@ public class CardManager : Singleton<CardManager>
         }
         OnConsumablesChanged?.Invoke();
         OnConsumableUsed?.Invoke(item.Definition);
-        if (!wasInEncounter || _consumableUsedThisEncounter) return;
+        if (!wasInEncounter)
+        {
+            SaveGameService.Checkpoint(RunManager.Instance);
+            return;
+        }
+        if (_consumableUsedThisEncounter) return;
         _consumableUsedThisEncounter = true;
         for (int i = 0; i < ownedArtifacts.Count; i++)
         {

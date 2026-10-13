@@ -6,13 +6,27 @@ public enum MainMenuDestination
 
 public static class FrontendLaunchContext
 {
+    static RunSaveData _pendingContinue;
     static string _pendingRunSeed;
     static bool _hasPendingRun;
     static MainMenuDestination _pendingMenuDestination;
     static bool _hasPendingMenuDestination;
 
+    public static void RequestContinue(RunSaveData data)
+    {
+        _pendingRunSeed = null; _hasPendingRun = false;
+        _pendingContinue = data;
+    }
+
+    public static bool TryConsumeContinue(out RunSaveData data)
+    {
+        data = _pendingContinue; _pendingContinue = null;
+        return data != null;
+    }
+
     public static void RequestRun(string seed)
     {
+        _pendingContinue = null;
         _pendingRunSeed = RunRandomContext.NormalizeSeed(seed);
         _hasPendingRun = true;
     }
@@ -42,6 +56,7 @@ public static class FrontendLaunchContext
 
     public static void Clear()
     {
+        _pendingContinue = null;
         _pendingRunSeed = null;
         _hasPendingRun = false;
         _pendingMenuDestination = MainMenuDestination.Home;

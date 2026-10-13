@@ -46,6 +46,27 @@ public sealed class CardCollection
         _deck.AddRange(validatedCards);
     }
 
+    public uint CaptureRandomState() => _random is DeterministicRandom random ? random.State
+        : throw new InvalidOperationException("Cannot persist an unsupported card random source.");
+
+    public void RestoreZones(IReadOnlyList<CardInstance> owned, IReadOnlyList<int> deck,
+        IReadOnlyList<int> hand, IReadOnlyList<int> discard, uint randomState)
+    {
+        var byId = new Dictionary<int, CardInstance>();
+        foreach (var card in owned) byId.Add(card.Id, card);
+        var seen = new HashSet<int>();
+        foreach (var zone in new[] { deck, hand, discard })
+            foreach (int id in zone)
+                if (!byId.ContainsKey(id) || !seen.Add(id)) throw new ArgumentException("Invalid card zones.");
+        if (seen.Count != owned.Count || randomState == 0) throw new ArgumentException("Incomplete card zones or RNG.");
+        Clear();
+        _ownedCards.AddRange(owned);
+        foreach (int id in deck) _deck.Add(byId[id]);
+        foreach (int id in hand) _hand.Add(byId[id]);
+        foreach (int id in discard) _discardPile.Add(byId[id]);
+        _random = DeterministicRandom.Restore(randomState);
+    }
+
     public bool AddOwnedToDeck(CardInstance card) => AddOwned(card, _deck);
 
     public bool AddOwnedToDiscard(CardInstance card) => AddOwned(card, _discardPile);

@@ -20,6 +20,13 @@ public sealed class DeterministicRandom : IRandomSource
         if (_state == 0) _state = 0x6D2B79F5u;
     }
 
+    public uint State => _state;
+    public static DeterministicRandom Restore(uint state)
+    {
+        if (state == 0) throw new ArgumentException("Invalid zero PRNG state.", nameof(state));
+        return new DeterministicRandom(unchecked((int)state));
+    }
+
     public int NextInt(int minInclusive, int maxExclusive)
     {
         if (maxExclusive <= minInclusive)

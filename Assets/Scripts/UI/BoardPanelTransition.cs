@@ -24,7 +24,7 @@ public sealed class BoardPanelTransition : MonoBehaviour
     public static void Hide(GameObject panel)
     {
         if (panel == null || !panel.activeSelf) return;
-        if (!Application.isPlaying)
+        if (!Application.isPlaying || !panel.activeInHierarchy)
         {
             panel.SetActive(false);
             return;
@@ -70,7 +70,7 @@ public sealed class BoardPanelTransition : MonoBehaviour
     {
         StopAllCoroutines();
         CacheComponents();
-        if (!Application.isPlaying)
+        if (!Application.isPlaying || !isActiveAndEnabled)
         {
             _group.alpha = 0f;
             _group.interactable = false;

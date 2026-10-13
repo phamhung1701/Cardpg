@@ -44,16 +44,37 @@ public class GameController : MonoBehaviour
         run.goblinType = goblinType;
         run.knightType = knightType;
         run.contentCatalog = runContentCatalog;
+        SaveGameService.Attach(run);
         _configured = true;
     }
 
     void Start()
     {
         if (!_configured) return;
-        if (FrontendLaunchContext.TryConsumeRunSeed(out string seed))
+        if (FrontendLaunchContext.TryConsumeContinue(out var saved))
+        {
+            RestoreSavedRun(saved);
+        }
+        else if (FrontendLaunchContext.TryConsumeRunSeed(out string seed))
             RunManager.Instance.StartRunWithSeed(seed);
+        else if (!DevModeRuntime.Enabled && SaveGameService.TryRead(out saved, out _))
+            RestoreSavedRun(saved);
+        else if (!DevModeRuntime.Enabled && SaveGameService.Store.HasActiveFiles)
+        {
+            SaveGameService.TryRead(out _, out string error);
+            GameFlowService.Instance?.ShowMainMenu();
+            SavePromptUI.ShowError(error);
+        }
         else
             RunManager.Instance.StartRun();
+    }
+
+    void RestoreSavedRun(RunSaveData saved)
+    {
+        if (SaveGameService.Restore(RunManager.Instance, saved, out string error)) return;
+        // Never replace a failed Continue with a fresh run or overwrite its recovery files.
+        GameFlowService.Instance?.ShowMainMenu();
+        SavePromptUI.ShowError(error);
     }
 
     static T GetOrCreate<T>() where T : Singleton<T>

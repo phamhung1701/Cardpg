@@ -64,6 +64,24 @@ public sealed class CardInstance
         return true;
     }
 
+    public CardSaveData CaptureSave() => new()
+    {
+        id = id, rank = (int)Rank, definitionSuit = (int)definition.suit,
+        effectiveSuit = (int)Suit, enhancementId = enhancement != null ? enhancement.id : null,
+        permanentAttack = PermanentAttackBonus, effects = EffectState.CaptureSave()
+    };
+
+    public static CardInstance Restore(CardData definition, CardSaveData data, CardEnhancementData enhancement)
+    {
+        var card = new CardInstance(definition, data.id)
+        {
+            enhancement = enhancement, hasSuitOverride = data.effectiveSuit != data.definitionSuit,
+            suitOverride = (CardData.Suit)data.effectiveSuit, PermanentAttackBonus = data.permanentAttack
+        };
+        card.EffectState.RestoreSave(data.effects);
+        return card;
+    }
+
     public CardInstance ClonePermanentState(int newId)
     {
         var copy = new CardInstance(definition, newId)

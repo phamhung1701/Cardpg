@@ -32,6 +32,22 @@ public sealed class RunTimingStatistics
     public RunMapSplit CurrentIncompleteSplit =>
         new(CurrentMapIndex, CurrentMapElapsedSeconds, false);
 
+    public TimingSaveData CaptureSave()
+    {
+        var data = new TimingSaveData { active = IsActive, rolling = _rollingSplitHistory,
+            mapIndex = CurrentMapIndex, totalElapsed = TotalElapsedSeconds, mapElapsed = CurrentMapElapsedSeconds };
+        foreach (var split in _completedSplits) data.splits.Add(new SplitSaveData { mapIndex = split.MapIndex, elapsed = split.ElapsedSeconds });
+        return data;
+    }
+
+    public void RestoreSave(TimingSaveData data)
+    {
+        Reset();
+        IsActive = data.active; _rollingSplitHistory = data.rolling;
+        CurrentMapIndex = data.mapIndex; TotalElapsedSeconds = data.totalElapsed; CurrentMapElapsedSeconds = data.mapElapsed;
+        foreach (var split in data.splits) _completedSplits.Add(new RunMapSplit(split.mapIndex, split.elapsed, true));
+    }
+
     public void StartNewRun(int startingMapIndex = 0)
     {
         Reset();

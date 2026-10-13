@@ -5,7 +5,7 @@ using UnityEngine;
 
 public enum GameState { Idle, PlayerTurn, EnemyAttacking, GameOver, GameWon }
 
-public class CombatManager : Singleton<CombatManager>
+public partial class CombatManager : Singleton<CombatManager>
 {
     [Header("Critical Hits")]
     [SerializeField, Range(0f, 100f)] float criticalChancePercent = 25f;

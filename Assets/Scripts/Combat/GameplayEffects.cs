@@ -172,6 +172,18 @@ public sealed class GameplayEffectState
     public void SetCounter(int effectIndex, int value) => _counters[effectIndex] = value;
     public int GetEncounterCounter(int ruleIndex) => _encounterCounters.TryGetValue(ruleIndex, out int value) ? value : 0;
     public void SetEncounterCounter(int ruleIndex, int value) => _encounterCounters[ruleIndex] = value;
+    public EffectStateSaveData CaptureSave() => new()
+    {
+        persistent = _counters.OrderBy(x => x.Key).Select(x => new CounterSaveData { key = x.Key, value = x.Value }).ToList(),
+        encounter = _encounterCounters.OrderBy(x => x.Key).Select(x => new CounterSaveData { key = x.Key, value = x.Value }).ToList()
+    };
+    public void RestoreSave(EffectStateSaveData data)
+    {
+        Clear();
+        foreach (var counter in data.persistent) _counters.Add(counter.key, counter.value);
+        foreach (var counter in data.encounter) _encounterCounters.Add(counter.key, counter.value);
+    }
+
     public void ClearEncounter() => _encounterCounters.Clear();
     public void Clear() { _counters.Clear(); _encounterCounters.Clear(); }
 }
@@ -179,7 +191,13 @@ public sealed class GameplayEffectState
 public sealed class ArtifactRuntimeInstance
 {
     static long s_nextId;
-    public long Id { get; } = System.Threading.Interlocked.Increment(ref s_nextId);
+    public static long IdentityWatermark => s_nextId;
+    public static void RestoreIdentityWatermark(long value)
+    {
+        if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+        System.Threading.Interlocked.Exchange(ref s_nextId, value);
+    }
+    public long Id { get; private set; } = System.Threading.Interlocked.Increment(ref s_nextId);
     public RelicData Definition { get; }
     public GameplayEffectState State { get; } = new();
     public CardInstance PreparedDwarfSourceCard { get; set; }
@@ -187,6 +205,15 @@ public sealed class ArtifactRuntimeInstance
 
     public ArtifactRuntimeInstance(RelicData definition) =>
         Definition = definition != null ? definition : throw new ArgumentNullException(nameof(definition));
+
+    public static ArtifactRuntimeInstance Restore(RelicData definition, long id, EffectStateSaveData effects)
+    {
+        if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+        var instance = new ArtifactRuntimeInstance(definition) { Id = id };
+        s_nextId = Math.Max(s_nextId, id);
+        instance.State.RestoreSave(effects);
+        return instance;
+    }
 
     public void ResetEncounterState()
     {

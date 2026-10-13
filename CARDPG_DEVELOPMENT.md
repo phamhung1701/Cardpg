@@ -450,11 +450,11 @@ Working gameplay foundations should be preserved, but the following systems are 
 - Player maximum HP 30 is provisional.
 - Enemy/boss stats, hand size, prices, and other balance values are prototype tuning.
 - Boss rewards currently enter the shuffled draw deck; this may be tuned later.
-- Gold, Artifact ownership, and build catalogs still live in CardManager; broader run/build-state organization can be revisited if save/load or a larger progression layer is introduced.
+- Gold, Artifact ownership, and build catalogs still live in CardManager. Phase 8A persistence uses explicit owner-specific capture/restore contracts rather than moving that runtime authority.
 - The rebuilt card UI uses suit-tinted temporary panels and text rather than final card art.
 - The enemy portrait remains a styled placeholder label rather than authored enemy artwork.
-- Seed generation is intentionally local-only; cross-version determinism, networking, cloud seed exchange, and save/load persistence are not implemented.
-- The frontend deliberately has no Continue/save-resume, profiles, achievements, metaprogression, character selection, fake difficulty, or placeholder audio settings.
+- Seed generation is intentionally local-only; cross-version determinism, networking and cloud seed exchange are not implemented. Phase 8A now provides local checkpoint save/load.
+- The frontend has a single-run Continue flow as of Phase 8A, but no profiles, achievements, metaprogression, character selection, fake difficulty or placeholder audio settings.
 - Display settings are prototype desktop controls. Additional Audio, Gameplay, and Accessibility categories are structured for later expansion but contain no fake options.
 - `Unity6_Recreation_Guide.md` predates the Phase 1–4 implementation and still describes the older 52-card starting-deck prototype. It is historical reference, not current design authority; the repository now starts runs with 40 Ace–Ten cards.
 
@@ -621,6 +621,39 @@ Continue gradual content expansion from `CardPG_GameData_organized.xlsx`; inspec
 - RunManager retains separate run-local inventory, purchases, Service usage and Refresh state per map/checkpoint. Two distinct seeded Services are offered from Guidance, Quest (existing Contract), Investment and Supply; at least one checkpoint per map includes Supply. Existing Quest prerequisites and other Service mechanics remain.
 - Supply is one purchase per Shop at 3g per successfully drawn existing card, bounded by Gold, deck count and hand capacity. Goods-only Refresh costs 3/5/8/12/17/23/...; purchased Goods cannot return, Service objects remain unchanged, and refresh-generation IDs reject stale requests. Default configurable Goods slot counts (Artifact/Enhancement/Consumable) are 2/2/1 mid-map and 1/1/3 pre-boss.
 - Shop UI presents separate Goods/Services columns, quantity entry and Refresh. Runtime compilation succeeded and the final Console check returned zero warnings/errors. Targeted runtime/scene checks passed; 18 focused EditMode cases were added, but **no automated tests ran** because Unity Test tools are disabled and the user cannot load the workspace settings to enable them. Independent final Luna review was also blocked by quota. Do not treat this phase as regression-accepted until EditMode/PlayMode suites run. Details: `Locus/knowledge/plan/combat-shop-economy-rebalance-report.md`.
+
+## Phase 8A — Persistent Run Save/Load
+
+### Architecture and ownership
+
+- `Assets/Scripts/Persistence/RunSaveData.cs` defines version-1 value-only DTOs (`version`, `contentVersion`, and `checkpoint = "safe-node"`). Data contains no Unity object references, delegates, views, selections or animations. Owner-specific partial contracts live in `CardManager.Persistence.cs`, `CombatManager.Persistence.cs` and `RunManager.Persistence.cs`; loading does not call run startup, map/boss generation, purchases, draws or gameplay-effect hooks.
+- Snapshots preserve the seed; generated boss order, stats and abilities; route graph and completion flags; active non-combat node; player resources; exact owned/deck/hand/discard ordering and card IDs; Enhancements, suit changes, permanent bonuses and effect counters; Artifact identities/acquisition order and the identity allocator; backpack slot/item order and charges; all Shop inventories, purchase guards, Service state and Refresh generations; Upgrade offers; Investment stakes, Contract progress, reward guards, Alchemist caches and run timing.
+- The card, critical and Duelist RNG owners expose and restore exact nonzero xorshift state. Context-derived streams remain seed/context-derived, with their context counters and already-generated results saved. Loading cannot advance these streams. Offline/menu time is not added to saved run timing.
+- `Assets/Resources/RunSaveContent.asset` is the persistent content registry, currently referencing the Game scene's 74 Artifacts, 12 Enhancements, 19 Consumables, enemy fallbacks and run-content catalog. Definitions remain authored assets, resolved by stable content IDs. Keep this registry aligned when changing GameController catalogs; bump the content/save version when incompatible rules or schemas change. No old-version migration is silently inferred.
+
+### Storage and safe checkpoints
+
+- `SaveGameService` coordinates the runtime; `RunSaveStore` independently reads/writes one `active-run.json` under `Application.persistentDataPath`. The JSON envelope has a format version and SHA-256 integrity checksum. Writes validate first, flush a same-directory temporary file and atomically move/replace the primary. A `.bak` recovery copy is validated independently; malformed, missing, unknown-content and incompatible saves fail gracefully. An 8 MiB file limit bounds input. A `.deleted` tombstone prevents backup resurrection after terminal/deletion interruption.
+- Autosaves run only when the model is settled: on the route; in a normal Shop, authored Event/Risk or cached Upgrade choice; before committing a route selection; and after completed Shop/purchase/Refresh/sale/resource transactions. A quarter-second safe-state poll covers remaining state changes, while pause/quit and returning to the main menu flush a safe checkpoint. Unchanged gameplay snapshots do not repeatedly write just because the timer advances.
+- **No mid-combat serialization.** Closing during a battle returns to the map checkpoint immediately before the encounter was selected, restoring HP, card order, counters and RNG from that boundary. The player can select the route again; no enemy, hit, action queue or animation is reconstructed.
+- Unresolved reward/Artifact prompts, Hammer/Blood Ritual continuations and Quest-objective selection are unfinished transactions. They keep the previous safe checkpoint; exiting during them rolls back that unfinished sequence. Their UI/callback state is deliberately excluded. Ordinary Event/Upgrade/Shop interfaces are reconstructed from saved node IDs and cached offers without applying their effects again.
+- Final victory and defeat delete the primary, backup and temporary save. Explicit **Abandon Run** retains its existing destructive meaning and also clears the save. Entering Infinite Mode after victory starts a new active checkpoint sequence. Dev Mode is a sandbox: it neither writes nor deletes the normal run's save.
+
+### Frontend and restore sequence
+
+Main Menu creates a Continue button enabled only for a validated primary/recovery save, with a saved-run/recovery status. Starting New Run asks before replacing existing save files; cancellation preserves them. `FrontendLaunchContext` carries a one-shot saved DTO separately from a seed. `GameController` configures managers, restores validated model state, then invokes presentation-only notifications. Direct Game-scene entry also resumes a valid save; invalid files are not silently replaced. Save failures are surfaced rather than silently reported as successful.
+
+Shop completion now marks the checkpoint cache complete on every completion path, including Quest confirmation, not only the Shop Continue button. Scene teardown also hides inactive board panels without starting a coroutine on an inactive parent. No balance values or content effects changed.
+
+### Verification and limitations
+
+- Added **20 EditMode cases** in `PersistentRunSaveTests` plus **1 PlayMode transition case** in `SaveLoadSceneTransitionTests`. **Automated execution: 0 run, 0 passed, 0 failed** because Unity Test tools remain disabled; this is not a passing regression gate.
+- Unity compilation passed. Staged runtime checks verified exact JSON round-trip; Shop-state equality after a Play Mode/domain restart and Continue-button scene reload; RNG continuation and exact deck order; pre-combat rollback (runtime HP 26 restored to saved HP 30); backup recovery/corruption rejection; tombstone deletion/rewrite; New Run cancel/confirm; Quest completion persistence; and final-victory/defeat deletion without resurrection. The last connected Console check after the transition fix showed zero errors and one unrelated Unity account-service warning.
+- These are accelerated Editor checks, not a packaged executable relaunch, a full twelve-map playthrough or a full automated regression run. After a workspace move/import Unity reconnected without a forced restart; additional missing-primary backup preservation and incompatible-on-disk-version checks passed. The post-move Console contains a project-file-generator sharing-violation error and a Unity account-service warning, not a reported save/load runtime failure. See the Phase 8A handoff report for the final verification status.
+
+### Phase 8B extension boundary
+
+Retain this storage envelope, content-ID registry and owner contracts. Add a new versioned combat checkpoint DTO/discriminator containing exact enemy runtimes/identities, pending hit/source assignments, Shield/Block, turn/action counters, death/reward guards and ordered resumable reaction/extra-turn/overflow state. Establish explicit between-action capture points first. Do not serialize callbacks or replay encounter-start effects to rebuild combat. Add deliberate migration/compatibility policy and mid-combat determinism tests before enabling that checkpoint kind; version 1 accepts only `safe-node`.
 
 ## 10. Instructions for Future Locus Sessions
 

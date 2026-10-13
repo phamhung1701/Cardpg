@@ -11,6 +11,7 @@ public sealed class MainMenuUI : MonoBehaviour
 
     void OnEnable()
     {
+        RunSaveMenuUI.Install(this);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         DevModePanelUI.InstallMainMenu(this);
 #endif

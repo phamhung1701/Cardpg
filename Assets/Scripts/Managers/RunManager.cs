@@ -17,7 +17,7 @@ public class PathNode
     public bool isShopCheckpoint;
 }
 
-public class RunManager : Singleton<RunManager>
+public partial class RunManager : Singleton<RunManager>
 {
     public const int FirstMapBossHp = 20;
     [Header("Enemy Type Assets")]
@@ -184,6 +184,7 @@ public class RunManager : Singleton<RunManager>
             return;
         }
 
+        if (!SaveGameService.BeginNewRun(this)) return;
         runSeed = RunRandomContext.NormalizeSeed(seed);
         _randomContext = new RunRandomContext(runSeed);
 
@@ -200,6 +201,7 @@ public class RunManager : Singleton<RunManager>
         Timing.StartNewRun(CurrentMapIndex);
         OnRunStarted?.Invoke(runSeed);
         NextCycle();
+        SaveGameService.Checkpoint(this, true);
     }
 
     bool HasRequiredConfiguration()
@@ -477,6 +479,8 @@ public class RunManager : Singleton<RunManager>
             return;
         }
 
+        // Capture before committing the route or running encounter-start draws/effects.
+        SaveGameService.Checkpoint(this, true);
         var columnNodes = currentPath.Where(other => Mathf.Approximately(other.col, node.col)).ToArray();
         var accessibleBefore = columnNodes.Select(other => other.accessible).ToArray();
         var revealedBefore = columnNodes.Select(other => other.revealed).ToArray();
@@ -846,6 +850,7 @@ public class RunManager : Singleton<RunManager>
         int payout = expectedAuthoredPrice / 2;
         if (!cards.RemoveArtifactInstance(artifactInstanceId)) return false;
         if (payout > 0) cards.AddGold(payout);
+        SaveGameService.Checkpoint(this);
         return true;
     }
 
@@ -859,6 +864,7 @@ public class RunManager : Singleton<RunManager>
         int payout = expectedAuthoredPrice / 2;
         if (!cards.RemoveConsumableInstanceAtSlot(slotIndex, expectedInstance)) return false;
         if (payout > 0) cards.AddGold(payout);
+        SaveGameService.Checkpoint(this);
         return true;
     }
 
@@ -961,7 +967,7 @@ public class RunManager : Singleton<RunManager>
             if (success && offer.kind != ShopOfferKind.Contract) MarkShopPurchase(offer);
             return success;
         }
-        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); SaveGameService.Checkpoint(this); }
     }
 
     void MarkShopPurchase(ShopOffer offer)
@@ -1046,7 +1052,7 @@ public class RunManager : Singleton<RunManager>
             MarkShopPurchase(offer);
             return true;
         }
-        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); SaveGameService.Checkpoint(this); }
     }
 
     public int GetSupplyMaximumQuantity()
@@ -1083,7 +1089,7 @@ public class RunManager : Singleton<RunManager>
             MarkShopPurchase(offer);
             return true;
         }
-        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); SaveGameService.Checkpoint(this); }
     }
 
     static bool IsEligiblePaidItem(ShopOfferKind kind) => kind is
@@ -1276,7 +1282,7 @@ public class RunManager : Singleton<RunManager>
             _activeShopOffers.InsertRange(0, replacement);
             return true;
         }
-        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); }
+        finally { _shopTransaction = false; OnShopOffersChanged?.Invoke(); SaveGameService.Checkpoint(this); }
     }
 
     void AddSpecialShopOffers(int context)
@@ -2202,6 +2208,11 @@ public class RunManager : Singleton<RunManager>
         if (resolvedNode == null || resolvedNode.completed) return;
 
         resolvedNode.completed = true;
+        if (resolvedNode.kind == MapNodeType.Shop && _shopStates.TryGetValue((resolvedNode.mapIndex, resolvedNode.id), out var shop))
+        {
+            shop.Completed = true;
+            if (shop == _activeShopState) shop.MadePricedPurchase = _madeSuccessfulPurchaseInCurrentShop;
+        }
         // Completion hooks count visited nodes, not route depths. Checkpoints retain
         // existing Artifact visit/counter behavior; their fractional column consumes no depth.
         _completedNodeCount = IncrementToMaximum(_completedNodeCount);
@@ -2223,6 +2234,7 @@ public class RunManager : Singleton<RunManager>
     {
         if (!IsRunCompleted && _activeEvent == null)
             OnShowPathScreen?.Invoke();
+        SaveGameService.Checkpoint(this);
     }
 
     void HandleBossVictory()
@@ -2283,12 +2295,15 @@ public class RunManager : Singleton<RunManager>
         if (!CanContinueInfiniteMode || !Timing.ResumeAtNextMap()) return false;
         IsInfiniteMode = true;
         IsRunCompleted = false;
+        SaveGameService.ResumeSaving(this);
         NextCycle();
+        SaveGameService.Checkpoint(this, true);
         return true;
     }
 
     public void AbandonRun()
     {
+        SaveGameService.EndRun(this);
         Timing.StopRun();
     }
 

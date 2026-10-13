@@ -27,8 +27,32 @@ public sealed class GameFlowService : MonoBehaviour
 
     public void StartRun(string seed)
     {
+        if (SavePromptUI.IsOpen) return;
+        if (SaveGameService.Store.HasActiveFiles)
+        {
+            SavePromptUI.AskReplacement(() => StartConfirmedRun(seed));
+            return;
+        }
+        StartConfirmedRun(seed);
+    }
+
+    void StartConfirmedRun(string seed)
+    {
+        if (!SaveGameService.DeleteActiveSave()) { SavePromptUI.ShowError(SaveGameService.LastError); return; }
         DevModeRuntime.Disable();
         LoadRun(seed);
+    }
+
+    public bool ContinueRun()
+    {
+        if (SavePromptUI.IsOpen) return false;
+        if (!SaveGameService.TryRead(out var data, out string error))
+        { SavePromptUI.ShowError(error); return false; }
+        DevModeRuntime.Disable();
+        RestoreGlobalRuntimeState();
+        FrontendLaunchContext.RequestContinue(data);
+        SceneManager.LoadScene(GameSceneName);
+        return true;
     }
 
     public void StartDevRun(string seed, bool infiniteHealth, bool infiniteMoney, bool unlimitedShopOffers)
@@ -46,6 +70,7 @@ public sealed class GameFlowService : MonoBehaviour
 
     public void ShowMainMenu(MainMenuDestination destination = MainMenuDestination.Home)
     {
+        SaveGameService.Checkpoint(RunManager.Instance, true);
         DevModeRuntime.Disable();
         RestoreGlobalRuntimeState();
         FrontendLaunchContext.RequestMainMenu(destination);
@@ -54,6 +79,7 @@ public sealed class GameFlowService : MonoBehaviour
 
     public void Quit()
     {
+        SaveGameService.Checkpoint(RunManager.Instance, true);
         RestoreGlobalRuntimeState();
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;

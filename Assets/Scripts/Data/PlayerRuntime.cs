@@ -30,6 +30,17 @@ public sealed class PlayerRuntime : ICombatDamageTarget
         currentHealth = Math.Min(currentHealth, maxHealth);
     }
 
+    public void RestorePersistentState(int maximum, int health, int shield, int block)
+    {
+        ValidateMaxHealth(maximum);
+        if (health <= 0 || health > maximum || shield < 0 || block < 0)
+            throw new ArgumentException("Invalid saved player state.");
+        maxHealth = maximum;
+        currentHealth = health;
+        shieldCharges = shield;
+        encounterBlock = block;
+    }
+
     public void Reset()
     {
         currentHealth = maxHealth;
