@@ -283,6 +283,90 @@ public sealed class Phase7B5CombatFoundationTests
     }
 
     [Test]
+    public void PassPlayerTurn_LeavesCardsUntouchedThenResolvesOneMultiEnemyResponse()
+    {
+        var ability = ScriptableObject.CreateInstance<CountingEnemyAbility>();
+        _created.Add(ability);
+        var type = CreateEnemyType("Pass Response", 100, 4, 0, ability);
+        var first = new EnemyRuntime(type, 1, 2);
+        var second = new EnemyRuntime(type, 2, 2);
+        _combat.StartEncounter(new[] { first, second });
+        var handBefore = _cards.hand.ToArray();
+        var deckBefore = _cards.deck.ToArray();
+        var discardBefore = _cards.discardPile.ToArray();
+        var results = new List<DamageResult>();
+        _combat.OnDamageResolved += results.Add;
+
+        Assert.That(_combat.CanPassPlayerTurn, Is.True);
+        Assert.That(_combat.PassPlayerTurn(), Is.True);
+
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        Assert.That(_combat.pendingDamage, Is.EqualTo(8));
+        Assert.That(_combat.PendingAttackCount, Is.EqualTo(2));
+        Assert.That(_combat.CompletedPlayerTurnCount, Is.EqualTo(1));
+        Assert.That(_cards.hand, Is.EqualTo(handBefore));
+        Assert.That(_cards.deck, Is.EqualTo(deckBefore));
+        Assert.That(_cards.discardPile, Is.EqualTo(discardBefore));
+        Assert.That(ability.CardResolvedCount, Is.Zero, "Pass does not trigger card-play effects.");
+        Assert.That(results, Is.Empty, "Pass advances to, but does not bypass or pre-resolve, enemy retaliation.");
+
+        _combat.TakeRemainingDamage();
+        Assert.That(results, Has.Count.EqualTo(1), "Ordinary multi-enemy retaliation remains one aggregate damage action.");
+        Assert.That(results[0].RequestedDamage, Is.EqualTo(8));
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(22));
+    }
+
+    [Test]
+    public void PassPlayerTurn_ConsumesBonusActionAndStartsEnemyResponseOnce()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Bonus Pass", 100, 3, 0));
+        _combat.StartEnemy(enemy);
+        typeof(CombatManager).GetMethod("BeginPlayerTurn", System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic).Invoke(_combat, new object[] { true });
+        Assert.That(_combat.IsBonusPlayerAction, Is.True);
+
+        Assert.That(_combat.PassPlayerTurn(), Is.True);
+
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        Assert.That(_combat.pendingDamage, Is.EqualTo(3));
+        Assert.That(_combat.CompletedPlayerTurnCount, Is.EqualTo(1));
+        Assert.That(_combat.QueuedExtraPlayerTurns, Is.Zero);
+    }
+
+    [Test]
+    public void PassPlayerTurn_RejectsBlockedOrInvalidPhaseAndHandlesZeroAttackNormally()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Blocked Pass", 100, 4, 0));
+        _combat.StartEnemy(enemy);
+        var resolvingField = typeof(CombatManager).GetField("_isResolvingAction",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        resolvingField.SetValue(_combat, true);
+        Assert.That(_combat.CanPassPlayerTurn, Is.False);
+        Assert.That(_combat.PassPlayerTurn(), Is.False);
+        resolvingField.SetValue(_combat, false);
+        GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, true);
+        try
+        {
+            Assert.That(_combat.CanPassPlayerTurn, Is.False);
+            Assert.That(_combat.PassPlayerTurn(), Is.False);
+        }
+        finally { GameplayInputGate.Clear(); }
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(_combat.PassPlayerTurn(), Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        Assert.That(_combat.CanPassPlayerTurn, Is.False);
+        Assert.That(_combat.PassPlayerTurn(), Is.False, "Pass is unavailable during the enemy response.");
+
+        _combat.Reset();
+        var harmless = new EnemyRuntime(CreateEnemyType("Zero Attack Pass", 100, 0, 0));
+        _combat.StartEnemy(harmless);
+        Assert.That(_combat.PassPlayerTurn(), Is.True);
+        Assert.That(_combat.pendingDamage, Is.Zero);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(_combat.CompletedPlayerTurnCount, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Recover_MultiEnemyAggregateAppliesReductionThenConsumesOneShieldAndDrawsOnce()
     {
         var reduction = ScriptableObject.CreateInstance<RelicData>();

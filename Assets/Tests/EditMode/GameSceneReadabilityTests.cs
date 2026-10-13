@@ -31,6 +31,18 @@ public sealed class GameSceneReadabilityTests
     }
 
     [Test]
+    public void PassActionIsAuthoredAsAReadableActionBarButton()
+    {
+        var actionButtons = Find("Canvas")?.GetComponent<ActionButtonsUI>();
+        var passObject = Find("Canvas/PlayerArea/ActionBar/PassButton");
+        Assert.That(actionButtons, Is.Not.Null);
+        Assert.That(passObject, Is.Not.Null);
+        Assert.That(actionButtons.passButton, Is.SameAs(passObject.GetComponent<Button>()));
+        Assert.That(passObject.GetComponentInChildren<TMP_Text>(true).text, Is.EqualTo("PASS"));
+        AssertHitTarget("Canvas/PlayerArea/ActionBar/PassButton", 60f, 56f);
+    }
+
+    [Test]
     public void ImportantGameHudTextHasReadableMinimumSizesAtReferenceResolution()
     {
         var canvas = Find("Canvas");

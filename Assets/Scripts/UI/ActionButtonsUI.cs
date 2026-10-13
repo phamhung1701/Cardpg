@@ -13,6 +13,7 @@ public class ActionButtonsUI : MonoBehaviour
 
     [Header("References")]
     public Button playButton;
+    public Button passButton;
     public Button blockButton;
     public Button rankSortButton;
     public Button suitSortButton;
@@ -80,6 +81,7 @@ public class ActionButtonsUI : MonoBehaviour
         _enemyGroup = FindFirstObjectByType<EnemyGroupUI>();
 
         if (playButton) { playButton.onClick.AddListener(OnPlayClicked); KeyButtonBorderStyle.Apply(playButton); }
+        if (passButton) { passButton.onClick.AddListener(OnPassClicked); KeyButtonBorderStyle.Apply(passButton); }
         if (blockButton) { blockButton.onClick.AddListener(OnBlockClicked); KeyButtonBorderStyle.Apply(blockButton); }
         if (rankSortButton) rankSortButton.onClick.AddListener(OnRankSortClicked);
         if (suitSortButton) suitSortButton.onClick.AddListener(OnSuitSortClicked);
@@ -121,6 +123,7 @@ public class ActionButtonsUI : MonoBehaviour
         }
 
         if (playButton) playButton.onClick.RemoveListener(OnPlayClicked);
+        if (passButton) passButton.onClick.RemoveListener(OnPassClicked);
         if (blockButton) blockButton.onClick.RemoveListener(OnBlockClicked);
         if (rankSortButton) rankSortButton.onClick.RemoveListener(OnRankSortClicked);
         if (suitSortButton) suitSortButton.onClick.RemoveListener(OnSuitSortClicked);
@@ -258,6 +261,12 @@ public class ActionButtonsUI : MonoBehaviour
         bool targeting = cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting;
         if (playButton) playButton.interactable = !GameplayInputGate.IsBlocked &&
             (cards.IsEnemyTargeting || !targeting && combat.currentState == GameState.PlayerTurn && canPlay);
+        if (passButton)
+        {
+            bool combatPhase = combat.currentState is GameState.PlayerTurn or GameState.EnemyAttacking;
+            if (passButton.gameObject.activeSelf != combatPhase) passButton.gameObject.SetActive(combatPhase);
+            passButton.interactable = !GameplayInputGate.IsBlocked && !targeting && combat.CanPassPlayerTurn;
+        }
         if (blockButton) blockButton.interactable = !targeting && isDefense && canDefend;
         if (rankSortButton) rankSortButton.interactable = cards.HandCount > 1;
         if (suitSortButton) suitSortButton.interactable = cards.HandCount > 1;
@@ -511,6 +520,12 @@ public class ActionButtonsUI : MonoBehaviour
 
     // Kept for existing serialized UnityEvent bindings and interaction characterization.
     void OnDiscardClicked() => OnBlockClicked();
+
+    void OnPassClicked()
+    {
+        var combat = CombatManager.Instance;
+        if (combat != null && combat.PassPlayerTurn()) RefreshAll();
+    }
 
     void OnTakeDamageClicked() => CombatManager.Instance?.TakeRemainingDamage();
     void OnRecoverClicked() => CombatManager.Instance?.Recover();

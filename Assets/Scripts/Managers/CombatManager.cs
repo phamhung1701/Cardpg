@@ -1003,6 +1003,46 @@ public partial class CombatManager : Singleton<CombatManager>
         }
     }
 
+    public bool CanPassPlayerTurn
+    {
+        get
+        {
+            var cards = CardManager.Instance;
+            return !GameplayInputGate.IsBlocked && !_reactionFaulted && !_isResolvingAction &&
+                currentState == GameState.PlayerTurn && !_encounterResolved && !player.IsDefeated &&
+                _enemies.Count > 0 && cards != null && !cards.IsHandEnhancementTargeting && !cards.IsEnemyTargeting;
+        }
+    }
+
+    public bool PassPlayerTurn()
+    {
+        if (!CanPassPlayerTurn) return false;
+        _isResolvingAction = true;
+        _reactions.Clear();
+        try
+        {
+            CardManager.Instance.ClearSelection();
+            CompletePlayerTurnForEnemies();
+            if (_enemies.Count == 0)
+            {
+                _queuedPlayerTurnGrants.Clear();
+                ResolveEncounter(EncounterResult.Victory);
+                return true;
+            }
+
+            _completedPlayerTurnCount++;
+            // Passing consumes the current action (including a bonus action) and cannot mint new action grants.
+            _queuedPlayerTurnGrants.Clear();
+            BeginEnemyAttack();
+            return true;
+        }
+        finally
+        {
+            _isResolvingAction = false;
+            _reactions.Clear();
+        }
+    }
+
     public void Recover()
     {
         if (_reactionFaulted || GameplayInputGate.IsBlocked || _isResolvingAction || currentState != GameState.PlayerTurn ||
