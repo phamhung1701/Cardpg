@@ -580,6 +580,8 @@ public class ActionButtonsUI : MonoBehaviour
             if (targetCard != null)
             {
                 var cards = CardManager.Instance;
+                if (cards.GetConsumableAtSlot(sourceSlot)?.effectType == ConsumableEffectType.ApplyEnhancement)
+                    return; // Enhancement Tricks require card-first selection followed by explicit Use confirmation.
                 if (cards.GetConsumableTargetMaximum(sourceSlot) > 0 &&
                     targetCard.data != null && cards.CanTargetConsumableAtSlot(sourceSlot, targetCard.data.Id))
                 {
@@ -616,7 +618,8 @@ public class ActionButtonsUI : MonoBehaviour
         var cards = CardManager.Instance;
         var item = cards?.GetConsumableInstanceAtSlot(slotIndex);
         if (cards == null || item == null || cards.IsHandEnhancementTargeting || cards.IsEnemyTargeting) return;
-        cards.ClearSelection();
+        if (cards.GetConsumableAtSlot(slotIndex)?.effectType != ConsumableEffectType.ApplyEnhancement)
+            cards.ClearSelection();
         FindFirstObjectByType<ArtifactRailUI>()?.ClearObjectSelection();
         if (_selectedConsumableSlot == slotIndex && ReferenceEquals(_selectedConsumable, item))
             ClearSelectedConsumable();
@@ -734,19 +737,38 @@ public class ActionButtonsUI : MonoBehaviour
         if (!_consumableContextPanel) EnsureConsumableContextUI();
         if (!_consumableContextPanel) return;
         var definition = _selectedConsumable.Definition;
+        var selectedCards = cards.SelectedCards;
+        CardInstance selectedEnhancementTarget = definition.effectType == ConsumableEffectType.ApplyEnhancement &&
+            selectedCards.Count == 1 ? selectedCards[0]?.data : null;
+        bool validEnhancementTarget = selectedEnhancementTarget != null &&
+            cards.CanTargetConsumableAtSlot(_selectedConsumableSlot, selectedEnhancementTarget.Id);
         if (_consumableContextText)
         {
             int stackCount = cards.GetConsumableStackCountAtSlot(_selectedConsumableSlot);
-            _consumableContextText.text = _discardConfirmationArmed
-                ? $"Discard 1 of {stackCount} copies of {definition.displayName}? This removes this copy and all {_selectedConsumable.RemainingCharges} remaining charge(s). No reward."
-                : $"<size=115%><b>{definition.displayName}</b></size>" +
-                    (stackCount > 1 ? $" — {stackCount} copies" : string.Empty) + $"\n{definition.description}" +
+            string details = $"<size=115%><b>{definition.displayName}</b></size>" +
+                (stackCount > 1 ? $" — {stackCount} copies" : string.Empty) + $"\n{definition.description}";
+            if (definition.effectType == ConsumableEffectType.ApplyEnhancement)
+                details += selectedCards.Count == 1
+                    ? validEnhancementTarget
+                        ? $"\n<size=90%><color=#E8C66D>Selected target: {selectedEnhancementTarget.DisplayName}</color></size>"
+                        : $"\n<size=85%><color=#DFA0A0>Selected card is unavailable (enhanced or outside the allowed zone).</color></size>"
+                    : "\n<size=85%><color=#C7D0DB>Select one card first; Use applies this effect to that card.</color></size>";
+            if (_discardConfirmationArmed)
+                _consumableContextText.text = $"Discard 1 of {stackCount} copies of {definition.displayName}? This removes this copy and all {_selectedConsumable.RemainingCharges} remaining charge(s). No reward.";
+            else
+                _consumableContextText.text = details +
                     (run != null && run.CanSellItems ? string.Empty : "\n<size=85%><color=#B7C0C7>Sell in Black Market</color></size>");
             float availableWidth = Mathf.Max(80f, _consumableContextRect.rect.width - 24f);
             float textHeight = _consumableContextText.GetPreferredValues(_consumableContextText.text, availableWidth, 0f).y;
             _consumableContextRect.sizeDelta = new Vector2(270f, Mathf.Max(150f, Mathf.Ceil(textHeight + 74f)));
         }
-        if (_consumableUseButton) _consumableUseButton.interactable = !_discardConfirmationArmed && cards.CanUseConsumableAtSlot(_selectedConsumableSlot, CombatManager.Instance);
+        if (_consumableUseButton)
+        {
+            bool canUse = definition.effectType == ConsumableEffectType.ApplyEnhancement
+                ? validEnhancementTarget
+                : cards.CanUseConsumableAtSlot(_selectedConsumableSlot, CombatManager.Instance);
+            _consumableUseButton.interactable = !_discardConfirmationArmed && canUse && !GameplayInputGate.IsBlocked;
+        }
         if (_consumableSellButton)
         {
             SetConsumableActionLabel(_consumableSellButton, _discardConfirmationArmed ? "CANCEL" : "SELL");
@@ -816,8 +838,28 @@ public class ActionButtonsUI : MonoBehaviour
     {
         var cards = CardManager.Instance;
         var combat = CombatManager.Instance;
-        if (cards == null || combat == null || cards.GetConsumableInstanceAtSlot(_selectedConsumableSlot) != _selectedConsumable ||
-            !cards.CanUseConsumableAtSlot(_selectedConsumableSlot, combat)) return;
+        if (GameplayInputGate.IsBlocked || cards == null || combat == null || _selectedConsumable == null ||
+            cards.GetConsumableInstanceAtSlot(_selectedConsumableSlot) != _selectedConsumable ||
+            cards.IsEnemyTargeting || cards.IsHandEnhancementTargeting) return;
+
+        var definition = _selectedConsumable.Definition;
+        if (definition.effectType == ConsumableEffectType.ApplyEnhancement)
+        {
+            if (cards.SelectedCards.Count != 1) { RefreshAll(); return; }
+            var target = cards.SelectedCards[0]?.data;
+            if (target == null || !ReferenceEquals(cards.FindOwnedCard(target.Id), target) ||
+                !cards.CanTargetConsumableAtSlot(_selectedConsumableSlot, target.Id))
+            {
+                RefreshAll();
+                return;
+            }
+            if (cards.UseEnhancementConsumableAtSlot(_selectedConsumableSlot, target.Id))
+                ClearSelectedConsumable();
+            RefreshAll();
+            return;
+        }
+
+        if (!cards.CanUseConsumableAtSlot(_selectedConsumableSlot, combat)) return;
         switch (cards.GetConsumableTargetTypeAtSlot(_selectedConsumableSlot))
         {
             case ConsumableTargetType.Card:

@@ -12,21 +12,33 @@ public sealed class Phase7EShopSelectionTests
     CardManager _cards;
     RunManager _run;
     ShopUI _ui;
+    CardEnhancementData _enhancement;
+    ConsumableData _enhancementPatch;
 
     [SetUp]
     public void SetUp()
     {
         var artifactA = CreateArtifact("first", 10);
         var artifactB = CreateArtifact("second", 12);
-        var enhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
-        enhancement.id = "sharp";
-        enhancement.displayName = "Sharpened";
-        enhancement.description = "Attack bonus";
-        enhancement.price = 8;
-        _assets.Add(enhancement);
+        _enhancement = ScriptableObject.CreateInstance<CardEnhancementData>();
+        _enhancement.id = "sharp";
+        _enhancement.displayName = "Sharpened";
+        _enhancement.description = "Attack bonus";
+        _enhancement.price = 8;
+        _assets.Add(_enhancement);
+        _enhancementPatch = ScriptableObject.CreateInstance<ConsumableData>();
+        _enhancementPatch.id = "sharp_patch";
+        _enhancementPatch.canonicalId = "phase7e_patch";
+        _enhancementPatch.displayName = "Sharpened Patch";
+        _enhancementPatch.description = "Target: Card. Effect: Apply Sharpened.";
+        _enhancementPatch.price = _enhancement.price;
+        _enhancementPatch.effectType = ConsumableEffectType.ApplyEnhancement;
+        _enhancementPatch.enhancementToApply = _enhancement;
+        _enhancementPatch.shopAvailable = true;
+        _assets.Add(_enhancementPatch);
 
         _cards = Make<CardManager>("Cards");
-        _cards.Configure(null, null, null, new[] { artifactA, artifactB }, new[] { enhancement });
+        _cards.Configure(null, null, null, new[] { artifactA, artifactB }, new[] { _enhancement }, new[] { _enhancementPatch });
         var combat = Make<CombatManager>("Combat");
         combat.ConfigurePlayer(30);
         _run = Make<RunManager>("Run");
@@ -207,28 +219,24 @@ public sealed class Phase7EShopSelectionTests
     }
 
     [Test]
-    public void StaleOfferAndIneligibleEnhancement_AreRejectedWithoutSpending()
+    public void NoDirectEnhancementOffer_BuyAddsMappedConsumableWithoutApplyingIt()
     {
         _cards.AddGold(50);
-        var enhancement = _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Enhancement);
-        Click(enhancement);
-        var chosenCard = _cards.ownedCards.First(card => card.Enhancement == null);
-        Assert.That(_cards.ApplyEnhancement(chosenCard.Id, enhancement.enhancement), Is.True);
-        Assert.That(_ui.SelectedOfferId, Is.Null, "Build refresh clears stale selection");
-        Click(enhancement);
-        _ui.buyButton.onClick.Invoke();
-        Assert.That(_cards.gold, Is.EqualTo(50));
-        Assert.That(_ui.enhancementTargetUI, Is.Null, "This fixture tests the Shop selection shell separately");
-        Assert.That(_run.PurchaseShopEnhancement(enhancement.StableId, chosenCard.Id), Is.False);
-        Assert.That(_run.GetEnhancementTargetUnavailableReason(chosenCard.Id), Does.Contain("already enhanced"));
+        Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Enhancement), Is.False);
+        var offer = _run.GetCurrentShopOffers().Single(item => item.kind == ShopOfferKind.Consumable &&
+            item.consumable == _enhancementPatch);
+        Click(offer);
+        Assert.That(_ui.selectedOfferText.text, Does.Contain(_enhancement.displayName));
+        Assert.That(_ui.buyButton.interactable, Is.True);
 
-        var artifact = ArtifactOffer();
-        Click(artifact);
-        _run.GetCurrentShopOffers();
-        _run.OnShopDone();
+        _ui.buyButton.onClick.Invoke();
+
+        Assert.That(_cards.GetConsumableCount(_enhancementPatch), Is.EqualTo(1));
+        Assert.That(_cards.hand.All(card => card.Enhancement == null), Is.True,
+            "Purchasing the mapped Trick does not apply its Mod before the player selects a card and uses it.");
+        Assert.That(_cards.gold, Is.EqualTo(50 - offer.price));
         Assert.That(_ui.SelectedOfferId, Is.Null);
-        Assert.That(_run.PurchaseShopOffer(artifact.StableId), Is.False);
-        Assert.That(_cards.gold, Is.EqualTo(50));
+        Assert.That(_run.PurchaseShopEnhancement(offer.StableId, _cards.hand[0].Id), Is.False);
     }
 
     [Test]

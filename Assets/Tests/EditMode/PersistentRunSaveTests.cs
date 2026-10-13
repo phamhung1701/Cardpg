@@ -127,6 +127,39 @@ public sealed class PersistentRunSaveTests
     }
 
     [Test]
+    public void EnhancementTrickUse_RestoresExactCardModAndRemainingChargeCount()
+    {
+        var patch = ScriptableObject.CreateInstance<ConsumableData>();
+        assets.Add(patch);
+        patch.id = "save-enhancement-patch";
+        patch.canonicalId = "con_save_enhancement_patch";
+        patch.displayName = "Save Enhancement Patch";
+        patch.effectType = ConsumableEffectType.ApplyEnhancement;
+        patch.enhancementToApply = catalog.enhancements[0];
+        patch.uses = 3;
+        patch.shopAvailable = true;
+        catalog.consumables = catalog.consumables.Concat(new[] { patch }).ToArray();
+        cards.consumableCatalog.Add(patch);
+        var target = cards.hand[0];
+        int targetId = target.Id;
+        Assert.That(cards.AddConsumable(patch), Is.True);
+
+        Assert.That(cards.UseEnhancementConsumableAtSlot(0, targetId), Is.True);
+        Assert.That(target.Enhancement, Is.SameAs(catalog.enhancements[0]));
+        Assert.That(cards.GetConsumableInstanceAtSlot(0).RemainingCharges, Is.EqualTo(2));
+        var saved = run.CaptureSave();
+        Write(saved);
+
+        run.RestoreSave(JsonClone(Read()), catalog);
+
+        var restoredTarget = cards.FindOwnedCard(targetId);
+        Assert.That(restoredTarget, Is.Not.Null);
+        Assert.That(restoredTarget.Enhancement, Is.SameAs(catalog.enhancements[0]));
+        Assert.That(cards.GetConsumableInstanceAtSlot(0).Definition, Is.SameAs(patch));
+        Assert.That(cards.GetConsumableInstanceAtSlot(0).RemainingCharges, Is.EqualTo(2));
+    }
+
+    [Test]
     public void StatefulRandomStreams_ContinueAtExactSavedPositions()
     {
         var critical = (IRandomSource)typeof(CombatManager).GetField("_criticalRandom", Private).GetValue(combat);

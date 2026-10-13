@@ -127,7 +127,7 @@ public sealed class Phase7EEnhancementTargetTests
         int goldAfterReplacement = _cards.gold;
         Assert.That(_run.PurchaseShopEnhancement(offer.StableId, invalid.Id, true), Is.False);
         Assert.That(_run.GetEnhancementAcquisitionTargetUnavailableReason(invalid.Id, newEnhancement),
-            Is.EqualTo("Card already has this Enhancement"));
+            Is.EqualTo("Card already has this Mod"));
         Assert.That(_cards.gold, Is.EqualTo(goldAfterReplacement));
         Assert.That(invalid.EffectState.GetCounter(0), Is.EqualTo(9));
         Assert.That(invalid.EffectState.GetEncounterCounter(0), Is.EqualTo(6));
@@ -293,7 +293,7 @@ public sealed class Phase7EEnhancementTargetTests
         _picker.OpenShop(offer.StableId);
 
         Assert.That(_cards.IsHandEnhancementTargeting, Is.True);
-        Assert.That(_picker.cardsContainer.GetComponentInParent<ScrollRect>().gameObject.activeSelf, Is.False,
+        Assert.That(_picker.cardsContainer.GetComponentInParent<ScrollRect>(true).gameObject.activeSelf, Is.False,
             "Acquisition targets are selected directly in the hand, not a second card list.");
         var dialog = _picker.titleLabel.rectTransform.parent as RectTransform;
         Assert.That(dialog.sizeDelta, Is.EqualTo(new Vector2(440f, 170f)));
@@ -336,7 +336,7 @@ public sealed class Phase7EEnhancementTargetTests
         Assert.That(sourceModal.activeSelf, Is.True, "Cancellation restores the originating Shop modal.");
         Assert.That(_picker.titleLabel.rectTransform.parent.GetComponent<RectTransform>().sizeDelta,
             Is.EqualTo(new Vector2(920f, 760f)), "The authored card layout is restored after targeting.");
-        Assert.That(_picker.cardsContainer.GetComponentInParent<ScrollRect>().gameObject.activeSelf, Is.True);
+        Assert.That(_picker.cardsContainer.GetComponentInParent<ScrollRect>(true).gameObject.activeSelf, Is.True);
         Assert.That(_cards.gold, Is.EqualTo(40));
 
         _picker.OpenShop(offer.StableId);
@@ -371,7 +371,12 @@ public sealed class Phase7EEnhancementTargetTests
         var node = _run.currentPath.First(n => n.kind == MapNodeType.Shop);
         node.accessible = true;
         _run.OnPathChosen(node.id);
-        return _run.GetCurrentShopOffers().First(o => o.kind == ShopOfferKind.Enhancement);
+        // This fixture exercises the retained legacy target-purchase API directly;
+        // production Shop generation is separately required to expose only mapped Tricks.
+        var legacyOffer = new ShopOffer { kind = ShopOfferKind.Enhancement,
+            enhancement = _enhancement, basePrice = _enhancement.price, price = _enhancement.price };
+        ((List<ShopOffer>)_run.GetCurrentShopOffers()).Add(legacyOffer);
+        return legacyOffer;
     }
 
     ShopOffer OpenUpgradeOffer()
@@ -418,6 +423,9 @@ public sealed class Phase7EEnhancementTargetTests
         _picker.confirmButton = MakeChild<Button>(dialogObject.transform, "Confirm");
         _picker.backButton = MakeChild<Button>(dialogObject.transform, "Back");
         root.SetActive(true);
+        const System.Reflection.BindingFlags lifecycle = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        typeof(EnhancementTargetUI).GetMethod("OnDisable", lifecycle).Invoke(_picker, null);
+        typeof(EnhancementTargetUI).GetMethod("OnEnable", lifecycle).Invoke(_picker, null);
     }
 
     T MakeChild<T>(Transform parent, string name) where T : Component

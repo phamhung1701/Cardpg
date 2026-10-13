@@ -40,6 +40,7 @@ public partial class CardManager : Singleton<CardManager>
     CardView _activeDragCard;
     int _nextCardId = 1;
     bool _consumableUsedThisEncounter;
+    bool _consumableUseInProgress;
     Action<CardView> _handEnhancementTargetHandler;
     Func<int, bool> _handTargetEligibility;
     Action<EnemyRuntime> _enemyTargetHandler;
@@ -293,7 +294,8 @@ public partial class CardManager : Singleton<CardManager>
     public bool CanUseConsumableAtSlot(int slotIndex, CombatManager combat)
     {
         var consumable = GetConsumableAtSlot(slotIndex);
-        if (consumable == null || GetConsumableInstanceAtSlot(slotIndex).RemainingCharges <= 0 ||
+        var item = GetConsumableInstanceAtSlot(slotIndex);
+        if (_consumableUseInProgress || consumable == null || item == null || item.RemainingCharges <= 0 ||
             GameplayInputGate.IsBlocked || combat == null || combat.player == null || combat.player.IsDefeated ||
             combat.IsResolvingAction) return false;
         bool inCombat = combat.currentState == GameState.PlayerTurn || combat.currentState == GameState.EnemyAttacking;
@@ -356,16 +358,30 @@ public partial class CardManager : Singleton<CardManager>
 
     public bool UseEnhancementConsumableAtSlot(int slotIndex, int cardId)
     {
+        if (_consumableUseInProgress) return false;
         var combat = CombatManager.Instance;
         if (!CanUseConsumableAtSlot(slotIndex, combat)) return false;
         var instance = GetConsumableInstanceAtSlot(slotIndex);
-        var consumable = instance.Definition;
-        if (consumable.effectType != ConsumableEffectType.ApplyEnhancement ||
-            consumable.enhancementToApply == null || !CanTargetConsumableAtSlot(slotIndex, cardId)) return false;
+        var consumable = instance != null ? instance.Definition : null;
         var card = FindOwnedCard(cardId);
-        if (card == null || !ApplyEnhancement(cardId, consumable.enhancementToApply)) return false;
-        CompleteConsumableUse(slotIndex, instance, combat, IsActiveEncounter(combat));
-        return true;
+        if (instance == null || consumable == null || card == null ||
+            consumable.effectType != ConsumableEffectType.ApplyEnhancement || consumable.enhancementToApply == null ||
+            !CanTargetConsumableAtSlot(slotIndex, cardId) || slotIndex < 0 || slotIndex >= _backpack.Count ||
+            !_backpack[slotIndex].Items.Contains(instance) || instance.RemainingCharges <= 0) return false;
+
+        bool wasInEncounter = IsActiveEncounter(combat);
+        _consumableUseInProgress = true;
+        try
+        {
+            if (!card.TryApplyEnhancement(consumable.enhancementToApply)) return false;
+            RefreshTrackedView(card);
+            // The target and exact item were validated above; no callbacks run before charge commit.
+            CompleteConsumableUse(slotIndex, instance, combat, wasInEncounter);
+            OnDeckChanged?.Invoke();
+            OnBuildChanged?.Invoke();
+            return true;
+        }
+        finally { _consumableUseInProgress = false; }
     }
 
     public bool UseDeckMutationConsumableAtSlot(int slotIndex, IReadOnlyList<int> cardIds)
@@ -1279,6 +1295,7 @@ public partial class CardManager : Singleton<CardManager>
         _orderedArtifactInstances.Clear();
         _backpack.Clear();
         _consumableUsedThisEncounter = false;
+        _consumableUseInProgress = false;
 
         OnGoldChanged?.Invoke(gold);
         OnDeckChanged?.Invoke();

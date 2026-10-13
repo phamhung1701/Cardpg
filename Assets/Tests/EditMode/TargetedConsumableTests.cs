@@ -259,7 +259,7 @@ public sealed class TargetedConsumableTests
         var all = AssetDatabase.FindAssets("t:ConsumableData", new[] { "Assets/Data/Consumables" })
             .Select(guid => AssetDatabase.LoadAssetAtPath<ConsumableData>(AssetDatabase.GUIDToAssetPath(guid)))
             .Where(item => item != null && item.effectType == ConsumableEffectType.ApplyEnhancement).ToArray();
-        var expected = new[] { "con_003", "con_006", "con_007", "con_008", "con_009", "con_010", "con_011", "con_012", "con_013", "con_014", "con_015" };
+        var expected = new[] { "con_003", "con_006", "con_007", "con_008", "con_009", "con_010", "con_011", "con_012", "con_013", "con_014", "con_015", "con_020" };
         CollectionAssert.AreEquivalent(expected, all.Select(item => item.canonicalId));
         foreach (var item in all)
         {
@@ -271,7 +271,7 @@ public sealed class TargetedConsumableTests
     }
 
     [Test]
-    public void ShopOffersOneRandomConsumableFromCatalogPerVisit()
+    public void ShopOffersMappedEnhancementAndGeneralConsumablesFromCatalogPerVisit()
     {
         var all = AssetDatabase.FindAssets("t:ConsumableData", new[] { "Assets/Data/Consumables" })
             .Select(guid => AssetDatabase.LoadAssetAtPath<ConsumableData>(AssetDatabase.GUIDToAssetPath(guid)))
@@ -287,10 +287,12 @@ public sealed class TargetedConsumableTests
         _run.OnPathChosen(shop.id);
 
         var offers = _run.GetCurrentShopOffers().Where(offer => offer.kind == ShopOfferKind.Consumable).ToArray();
-        Assert.That(offers, Has.Length.EqualTo(1));
-        Assert.That(offers[0].consumable, Is.Not.Null);
-        Assert.That(offers[0].consumable.shopAvailable, Is.True);
-        Assert.That(all, Does.Contain(offers[0].consumable));
+        Assert.That(offers.Length, Is.GreaterThan(0));
+        Assert.That(_run.GetCurrentShopOffers().Any(offer => offer.kind == ShopOfferKind.Enhancement), Is.False);
+        Assert.That(offers.Any(offer => offer.consumable.effectType == ConsumableEffectType.ApplyEnhancement), Is.True);
+        Assert.That(offers.Select(offer => offer.consumable).Distinct().Count(), Is.EqualTo(offers.Length));
+        Assert.That(offers.All(offer => offer.consumable != null && offer.consumable.shopAvailable), Is.True);
+        Assert.That(offers.All(offer => all.Contains(offer.consumable)), Is.True);
     }
 
     [Test]
