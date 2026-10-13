@@ -97,6 +97,82 @@ public sealed class Phase7EShopSelectionTests
     }
 
     [Test]
+    public void SupplySteppersFollowAuthoritativeMaximumAndShowTotalBeforePurchase()
+    {
+        _cards.AddGold(9);
+        var collection = (CardCollection)typeof(CardManager)
+            .GetField("_cards", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .GetValue(_cards);
+        Assert.That(collection.TryDiscard(_cards.hand.ToArray()), Is.True);
+        _cards.NotifyDeckChanged();
+        var offer = ReplaceCurrentServiceWith(ShopOfferKind.Supply);
+        Click(offer);
+        var down = GetUiField<Button>("_quantityDecreaseButton");
+        var up = GetUiField<Button>("_quantityIncreaseButton");
+        var input = GetUiField<TMP_InputField>("_investmentStakeInput");
+        Assert.That(down.interactable, Is.False, "Quantity one is the minimum.");
+        Assert.That(up.interactable, Is.True, $"max={_run.GetSupplyMaximumQuantity()}, gold={_cards.gold}, draw={_cards.deck.Count}, hand={_cards.HandCount}/{_cards.HandCapacity}, quantity={offer.supplyQuantity}");
+        up.onClick.Invoke();
+        up.onClick.Invoke();
+        Assert.That(offer.supplyQuantity, Is.EqualTo(3));
+        Assert.That(up.interactable, Is.False, "The current authoritative maximum is three.");
+        Assert.That(_ui.selectedOfferText.text, Does.Contain("total 9 Credits"));
+
+        _cards.DrawToHand(CardManager.Instance.HandCapacity - 1);
+        Assert.That(_run.GetSupplyMaximumQuantity(), Is.EqualTo(1));
+        Assert.That(up.interactable, Is.False);
+        Assert.That(_ui.buyButton.interactable, Is.False, "A stale quantity cannot be purchased after hand capacity changes.");
+        input.onEndEdit.Invoke("2");
+        Assert.That(offer.supplyQuantity, Is.EqualTo(3), "Invalid typed edits do not mutate the authoritative quantity.");
+        down.onClick.Invoke();
+        down.onClick.Invoke();
+        Assert.That(offer.supplyQuantity, Is.EqualTo(1));
+        Assert.That(_ui.buyButton.interactable, Is.True);
+        _ui.buyButton.onClick.Invoke();
+        Assert.That(_cards.gold, Is.EqualTo(6));
+        Assert.That(_cards.HandCount, Is.EqualTo(CardManager.Instance.HandCapacity));
+    }
+
+    [Test]
+    public void InvestmentSteppersEnforceMinimumMaximumAndRejectStaleKeyboardValue()
+    {
+        _cards.AddGold(10);
+        var offer = ReplaceCurrentServiceWith(ShopOfferKind.Investment);
+        Click(offer);
+        var down = GetUiField<Button>("_quantityDecreaseButton");
+        var up = GetUiField<Button>("_quantityIncreaseButton");
+        var input = GetUiField<TMP_InputField>("_investmentStakeInput");
+        Assert.That(offer.investmentStake, Is.EqualTo(1));
+        Assert.That(down.interactable, Is.False);
+        up.onClick.Invoke();
+        up.onClick.Invoke();
+        Assert.That(offer.investmentStake, Is.EqualTo(3));
+        Assert.That(_ui.selectedOfferText.text, Does.Contain("3 Credits at risk"));
+        input.onEndEdit.Invoke("11");
+        Assert.That(offer.investmentStake, Is.EqualTo(3));
+        Assert.That(input.text, Is.EqualTo("3"));
+        Assert.That(_cards.gold, Is.EqualTo(10));
+        Assert.That(_run.SetInvestmentStake(offer.StableId, 11), Is.False);
+        down.onClick.Invoke();
+        Assert.That(offer.investmentStake, Is.EqualTo(2));
+    }
+
+    ShopOffer ReplaceCurrentServiceWith(ShopOfferKind kind)
+    {
+        var offer = _run.GetCurrentShopOffers().First(item => item.IsService);
+        offer.kind = kind;
+        offer.price = kind == ShopOfferKind.Supply ? 3 : 5;
+        offer.supplyQuantity = 1;
+        offer.investmentStake = 0;
+        InvokeUi("RefreshItems");
+        return offer;
+    }
+
+    T GetUiField<T>(string fieldName) where T : class =>
+        typeof(ShopUI).GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .GetValue(_ui) as T;
+
+    [Test]
     public void Buy_ChargesCachedPriceOnlyAtConfirmation_AndClearsSelection()
     {
         _cards.AddGold(50);

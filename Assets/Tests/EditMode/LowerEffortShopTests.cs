@@ -60,6 +60,13 @@ public sealed class LowerEffortShopTests
         Assert.That(_run.SetInvestmentStake(investment.StableId, 5), Is.True);
         Assert.That(_run.SetInvestmentStake(investment.StableId, 0), Is.False);
         Assert.That(_run.SetInvestmentStake(investment.StableId, int.MaxValue), Is.False);
+        var transactionField = typeof(RunManager).GetField("_shopTransaction",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        transactionField.SetValue(_run, true);
+        Assert.That(_run.SetInvestmentStake(investment.StableId, 4), Is.False,
+            "Reentrant quantity changes are rejected while a shop transaction is committing.");
+        transactionField.SetValue(_run, false);
+        Assert.That(investment.investmentStake, Is.EqualTo(5));
         Assert.That(_run.PurchaseShopOffer(investment.StableId), Is.True);
         Assert.That(_cards.gold, Is.Zero);
         Assert.That(_run.PendingInvestmentCount, Is.EqualTo(1));

@@ -1190,7 +1190,7 @@ public partial class RunManager : Singleton<RunManager>
 
     public bool SetInvestmentStake(string stableId, int stake)
     {
-        if (GameplayInputGate.IsBlocked || !IsActiveShopForSale()) return false;
+        if (GameplayInputGate.IsBlocked || _shopTransaction || !IsActiveShopForSale()) return false;
         var offer = _activeShopOffers.FirstOrDefault(candidate => candidate != null && candidate.StableId == stableId);
         var cards = CardManager.Instance;
         if (offer == null || offer.kind != ShopOfferKind.Investment || cards == null || stake <= 0 || stake > cards.gold)

@@ -16,6 +16,8 @@ public class ShopUI : MonoBehaviour
     public EnhancementTargetUI enhancementTargetUI;
     TMP_InputField _investmentStakeInput;
     TMP_Text _investmentResultText;
+    Button _quantityDecreaseButton;
+    Button _quantityIncreaseButton;
     Button _sellModeButton;
     TMP_Text _sellModeLabel;
     ScrollRect _offersScroll;
@@ -42,6 +44,7 @@ public class ShopUI : MonoBehaviour
         {
             CardManager.Instance.OnGoldChanged += HandleGoldChanged;
             CardManager.Instance.OnBuildChanged += RefreshItems;
+            CardManager.Instance.OnDeckChanged += RefreshQuantityLimitDetails;
         }
         if (continueButton) continueButton.onClick.AddListener(OnContinue);
         if (buyButton) buyButton.onClick.AddListener(OnBuy);
@@ -65,6 +68,7 @@ public class ShopUI : MonoBehaviour
         {
             CardManager.Instance.OnGoldChanged -= HandleGoldChanged;
             CardManager.Instance.OnBuildChanged -= RefreshItems;
+            CardManager.Instance.OnDeckChanged -= RefreshQuantityLimitDetails;
         }
         if (continueButton) continueButton.onClick.RemoveListener(OnContinue);
         if (buyButton) buyButton.onClick.RemoveListener(OnBuyOrConfirmSale);
@@ -93,6 +97,10 @@ public class ShopUI : MonoBehaviour
         inputObject.SetActive(false);
         _investmentStakeInput = input;
         input.onEndEdit.AddListener(HandleInvestmentStakeEdited);
+        _quantityDecreaseButton = CreateQuantityButton(card, "Decrease Quantity", "−", -98f, AdjustSelectedQuantityDown);
+        _quantityIncreaseButton = CreateQuantityButton(card, "Increase Quantity", "+", 98f, AdjustSelectedQuantityUp);
+        _quantityDecreaseButton.gameObject.SetActive(false);
+        _quantityIncreaseButton.gameObject.SetActive(false);
 
         var resultObject = new GameObject("InvestmentResult", typeof(RectTransform), typeof(TextMeshProUGUI));
         resultObject.transform.SetParent(card, false);
@@ -104,6 +112,26 @@ public class ShopUI : MonoBehaviour
         _investmentResultText.alignment = TextAlignmentOptions.Center;
         _investmentResultText.fontSize = 16f;
         _investmentResultText.raycastTarget = false;
+    }
+
+    Button CreateQuantityButton(Transform parent, string objectName, string label, float xOffset, UnityEngine.Events.UnityAction action)
+    {
+        var go = new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+        var rect = (RectTransform)go.transform;
+        rect.anchorMin = rect.anchorMax = new Vector2(0.82f, 0.19f);
+        rect.anchoredPosition = new Vector2(xOffset, 0f);
+        rect.sizeDelta = new Vector2(34f, 32f);
+        var image = go.GetComponent<Image>();
+        image.color = new Color(0.22f, 0.35f, 0.42f, 1f);
+        var button = go.GetComponent<Button>();
+        button.targetGraphic = image;
+        button.onClick.AddListener(action);
+        var text = CreateInputLabel(go.transform, label, false);
+        text.alignment = TextAlignmentOptions.Center;
+        text.fontSize = 22f;
+        text.raycastTarget = false;
+        return button;
     }
 
     void EnsureSellingControls()
@@ -281,11 +309,12 @@ public class ShopUI : MonoBehaviour
         var selected = FindOffer(_selectedOfferId);
         if (selected != null && selected.kind == ShopOfferKind.Supply)
         {
-            if (!int.TryParse(value, out int quantity) || !RunManager.Instance.SetSupplyQuantity(_selectedOfferId, quantity))
+            var run = RunManager.Instance;
+            int current = selected.supplyQuantity;
+            if (run == null || !int.TryParse(value, out int quantity) || !run.SetSupplyQuantity(_selectedOfferId, quantity))
             {
-                selected.supplyQuantity = 0;
-                UpdateSelectionDetails($"Choose 1–{RunManager.Instance.GetSupplyMaximumQuantity()} cards.");
-                if (buyButton) buyButton.interactable = false;
+                if (_investmentStakeInput) _investmentStakeInput.SetTextWithoutNotify(current > 0 ? current.ToString() : string.Empty);
+                UpdateSelectionDetails($"Choose 1–{(run != null ? run.GetSupplyMaximumQuantity() : 0)} cards.");
             }
             else UpdateSelectionDetails();
             return;
@@ -295,8 +324,12 @@ public class ShopUI : MonoBehaviour
             UpdateSelectionDetails("Enter a whole Credits amount from 1 to your current Credits.");
             return;
         }
-        if (!RunManager.Instance.SetInvestmentStake(_selectedOfferId, stake))
+        if (RunManager.Instance == null || !RunManager.Instance.SetInvestmentStake(_selectedOfferId, stake))
+        {
+            if (_investmentStakeInput && selected != null)
+                _investmentStakeInput.SetTextWithoutNotify(selected.investmentStake > 0 ? selected.investmentStake.ToString() : string.Empty);
             UpdateSelectionDetails("Stake must be between 1 and your current Credits.");
+        }
         else UpdateSelectionDetails();
     }
 
@@ -350,6 +383,8 @@ public class ShopUI : MonoBehaviour
 #endif
         _selectedOfferId = null;
         if (_investmentStakeInput) _investmentStakeInput.gameObject.SetActive(false);
+        if (_quantityDecreaseButton) _quantityDecreaseButton.gameObject.SetActive(false);
+        if (_quantityIncreaseButton) _quantityIncreaseButton.gameObject.SetActive(false);
         ClearSaleSelection();
         UpdateSelectionDetails();
         if (itemsContainer == null || itemButtonPrefab == null) return;
@@ -511,9 +546,14 @@ public class ShopUI : MonoBehaviour
                     ? new Vector2(0.7f, _selectedOfferAnchorMax.y) : _selectedOfferAnchorMax;
             if (supplySelected)
             {
-                int quantity = Mathf.Clamp(selectedOffer.supplyQuantity, 1, Mathf.Max(1, RunManager.Instance.GetSupplyMaximumQuantity()));
-                RunManager.Instance.SetSupplyQuantity(stableId, quantity);
-                _investmentStakeInput.SetTextWithoutNotify(quantity.ToString());
+                int maximum = RunManager.Instance.GetSupplyMaximumQuantity();
+                if (maximum > 0)
+                {
+                    int quantity = Mathf.Clamp(selectedOffer.supplyQuantity, 1, maximum);
+                    RunManager.Instance.SetSupplyQuantity(stableId, quantity);
+                    _investmentStakeInput.SetTextWithoutNotify(quantity.ToString());
+                }
+                else _investmentStakeInput.SetTextWithoutNotify(string.Empty);
             }
             if (investmentSelected)
             {
@@ -522,6 +562,9 @@ public class ShopUI : MonoBehaviour
                 _investmentStakeInput.SetTextWithoutNotify(selectedOffer.investmentStake > 0 ? selectedOffer.investmentStake.ToString() : string.Empty);
             }
         }
+        if (_quantityDecreaseButton) _quantityDecreaseButton.gameObject.SetActive(investmentSelected || supplySelected);
+        if (_quantityIncreaseButton) _quantityIncreaseButton.gameObject.SetActive(investmentSelected || supplySelected);
+        RefreshQuantityControls();
         foreach (Transform child in ShopRows())
         {
             var button = child.GetComponent<Button>();
@@ -540,6 +583,52 @@ public class ShopUI : MonoBehaviour
         UpdateSelectionDetails();
     }
 
+    void RefreshQuantityControls()
+    {
+        var run = RunManager.Instance;
+        var offer = FindOffer(_selectedOfferId);
+        if (run == null || offer == null || offer.kind is not (ShopOfferKind.Supply or ShopOfferKind.Investment))
+        {
+            if (_quantityDecreaseButton) _quantityDecreaseButton.interactable = false;
+            if (_quantityIncreaseButton) _quantityIncreaseButton.interactable = false;
+            return;
+        }
+        int maximum = offer.kind == ShopOfferKind.Supply
+            ? run.GetSupplyMaximumQuantity()
+            : CardManager.Instance != null ? CardManager.Instance.gold : 0;
+        int current = offer.kind == ShopOfferKind.Supply ? offer.supplyQuantity : offer.investmentStake;
+        if (_quantityDecreaseButton) _quantityDecreaseButton.interactable = current > 1 && !GameplayInputGate.IsBlocked;
+        if (_quantityIncreaseButton) _quantityIncreaseButton.interactable = current < maximum && !GameplayInputGate.IsBlocked;
+    }
+
+    void RefreshQuantityLimitDetails()
+    {
+        if (panel != null && panel.activeSelf) UpdateSelectionDetails();
+    }
+
+    void AdjustSelectedQuantity(int delta)
+    {
+        if (GameplayInputGate.IsBlocked || panel == null || !panel.activeSelf || string.IsNullOrEmpty(_selectedOfferId)) return;
+        var run = RunManager.Instance;
+        var offer = FindOffer(_selectedOfferId);
+        if (run == null || offer == null) return;
+        int maximum = offer.kind == ShopOfferKind.Supply
+            ? run.GetSupplyMaximumQuantity()
+            : offer.kind == ShopOfferKind.Investment && CardManager.Instance != null ? CardManager.Instance.gold : 0;
+        int current = offer.kind == ShopOfferKind.Supply ? offer.supplyQuantity : offer.investmentStake;
+        if (maximum < 1) return;
+        int next = Mathf.Clamp(current + delta, 1, maximum);
+        bool changed = offer.kind == ShopOfferKind.Supply
+            ? run.SetSupplyQuantity(offer.StableId, next)
+            : offer.kind == ShopOfferKind.Investment && run.SetInvestmentStake(offer.StableId, next);
+        if (!changed) return;
+        if (_investmentStakeInput) _investmentStakeInput.SetTextWithoutNotify(next.ToString());
+        UpdateSelectionDetails();
+    }
+
+    void AdjustSelectedQuantityDown() => AdjustSelectedQuantity(-1);
+    void AdjustSelectedQuantityUp() => AdjustSelectedQuantity(1);
+
     void UpdateSelectionDetails(string failure = null)
     {
         ShopOffer selected = null;
@@ -547,9 +636,12 @@ public class ShopUI : MonoBehaviour
         if (offers != null)
             foreach (var offer in offers)
                 if (offer.StableId == _selectedOfferId) { selected = offer; break; }
+        RefreshQuantityControls();
 
         if (buyButton) buyButton.interactable = selected != null &&
-            (selected.kind != ShopOfferKind.Supply || RunManager.Instance.CanPurchaseShopOffer(selected.StableId));
+            (selected.kind is ShopOfferKind.Supply or ShopOfferKind.Investment
+                ? RunManager.Instance.CanPurchaseShopOffer(selected.StableId)
+                : selected.kind != ShopOfferKind.Supply);
         if (!selectedOfferText) return;
         if (!string.IsNullOrEmpty(failure))
         {
@@ -566,9 +658,10 @@ public class ShopUI : MonoBehaviour
         var reason = RunManager.Instance.GetShopOfferUnavailableReason(_selectedOfferId);
         string status = string.IsNullOrEmpty(reason) ? "Ready to buy" : reason;
         string displayedPrice = selected.kind == ShopOfferKind.Investment
-            ? (selected.investmentStake > 0 ? $"{selected.investmentStake}g stake" : "Stake not set")
-            : selected.kind == ShopOfferKind.Supply ? $"{selected.supplyQuantity} cards × 3g (max {RunManager.Instance.GetSupplyMaximumQuantity()})"
-            : $"{selected.price}g";
+            ? $"{selected.investmentStake} Credits at risk"
+            : selected.kind == ShopOfferKind.Supply
+                ? $"{selected.supplyQuantity} cards — total {selected.supplyQuantity * 3} Credits (3 each; max {RunManager.Instance.GetSupplyMaximumQuantity()})"
+                : $"{selected.price}g";
         selectedOfferText.text = $"SELECTED: {selected.Icon} {selected.DisplayName} — {displayedPrice}\n" +
             $"{selected.Description(CardManager.Instance)}\n{status}";
     }
