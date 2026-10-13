@@ -74,7 +74,7 @@ public sealed class ShopOffer
         if (kind == ShopOfferKind.Consumable)
             return consumable != null ? consumable.description : string.Empty;
         if (kind == ShopOfferKind.Investment)
-            return "Invest Credits now; at the next Black Market, the investment may return more Credits or return nothing.";
+            return "Stake Credits now; at the next Black Market, receive 3× the stake or nothing.";
         if (kind == ShopOfferKind.Guidance)
             return "Reveal 1 random hidden node on the current district.";
         if (kind == ShopOfferKind.Supply)

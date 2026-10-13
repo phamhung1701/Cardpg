@@ -328,8 +328,8 @@ public class ActionButtonsUI : MonoBehaviour
 
         if (selectionLabel)
         {
-        if (cards.IsEnemyTargeting) selectionLabel.text = "Choose a target · Click a highlighted enemy · Cancel or Esc to go back";
-        else if (cards.IsHandEnhancementTargeting) selectionLabel.text = "Choose highlighted targets above · Confirm or Cancel";
+        if (cards.IsEnemyTargeting) selectionLabel.text = "Click a highlighted enemy to target it · Back or Esc cancels";
+        else if (cards.IsHandEnhancementTargeting) selectionLabel.text = "Select highlighted cards · Confirm to apply, Back to cancel";
         else selectionLabel.text = combat.currentState switch
             {
                 GameState.PlayerTurn when cards.HandCount == 0 =>
@@ -339,17 +339,17 @@ public class ActionButtonsUI : MonoBehaviour
                 GameState.PlayerTurn when GameplayEffectResolver.IsRoyalFamilyPartialSelection(cards.SelectedCards, cards) =>
                     $"Royal Family selection ({selectedCount}/5)  •  exact 10/J/Q/K/A, one effective suit; target will be instantly defeated when complete",
                 GameState.PlayerTurn when selectedCount == 2 && GameplayEffectResolver.CanPlayAsAcePair(cards.SelectedCards) =>
-                    $"Ace pair: {cards.SelectedCards[0].data.DisplayName} + {cards.SelectedCards[1].data.DisplayName}  •  Press Attack or drag to the enemy",
+                    $"Ace pair: {cards.SelectedCards[0].data.DisplayName} + {cards.SelectedCards[1].data.DisplayName}  •  Drag to an enemy to attack",
                 GameState.PlayerTurn when selectedCount >= 2 && GameplayEffectResolver.IsSameRankMultiCardAction(cards.SelectedCards, cards) =>
-                    $"Same-rank set ({selectedCount} cards): {cards.SelectedCards[0].data.Rank}  •  Press Attack or drag to the enemy",
+                    $"Same-rank set ({selectedCount} cards): {cards.SelectedCards[0].data.Rank}  •  Drag to an enemy to attack",
                 GameState.PlayerTurn when hasSelected =>
-                    $"Selected: {cards.selectedCard.data.DisplayName}  •  Press Attack or drag to the enemy",
-                GameState.PlayerTurn => "Select a card, then press Attack or drag it to the enemy",
+                    $"Selected: {cards.selectedCard.data.DisplayName}  •  Drag to an enemy to attack",
+                GameState.PlayerTurn => "Select a card to attack, or drag it to an enemy",
                 GameState.EnemyAttacking when hasSelected && combat.TryPreviewDefense(cards.SelectedCards, out int blocked, out int remaining) =>
                     $"{selectedCount} selected  •  Blocks {blocked} of {combat.PendingAttackCount} pending attacks  •  Remaining damage {remaining}",
                 GameState.EnemyAttacking when hasSelected =>
                     "Selected cards cannot each block a distinct pending attack",
-                GameState.EnemyAttacking => "Select cards to Block attacks, or Take Damage",
+                GameState.EnemyAttacking => "Block attacks with cards, or take the remaining damage",
                 GameState.GameWon => "Encounter cleared — choose the next route",
                 GameState.GameOver => "The run has ended",
                 _ => "Choose an available route on the map"
