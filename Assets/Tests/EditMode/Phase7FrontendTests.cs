@@ -245,12 +245,33 @@ public sealed class Phase7FrontendTests
 
         var resultHost = CreateGameObject("Result Host");
         resultHost.SetActive(false);
-        var panel = CreateGameObject("Result Panel");
-        panel.transform.SetParent(resultHost.transform);
+        var panel = new GameObject("Result Panel", typeof(RectTransform), typeof(Image));
+        _created.Add(panel);
+        panel.transform.SetParent(resultHost.transform, false);
+        panel.GetComponent<RectTransform>().sizeDelta = new Vector2(920f, 760f);
+        var viewportObject = new GameObject("Result Summary Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+        _created.Add(viewportObject);
+        viewportObject.transform.SetParent(panel.transform, false);
+        var viewport = (RectTransform)viewportObject.transform;
+        viewport.anchorMin = viewport.anchorMax = new Vector2(0.5f, 0.5f);
+        viewport.anchoredPosition = new Vector2(0f, 65f);
+        viewport.sizeDelta = new Vector2(700f, 330f);
+        var scroll = viewportObject.GetComponent<ScrollRect>();
+        scroll.viewport = viewport;
+        scroll.vertical = true;
+        scroll.horizontal = false;
         var title = CreateComponent<TextMeshProUGUI>("Result Title");
         title.transform.SetParent(panel.transform);
         var body = CreateComponent<TextMeshProUGUI>("Result Body");
-        body.transform.SetParent(panel.transform);
+        body.transform.SetParent(viewportObject.transform);
+        body.rectTransform.anchorMin = new Vector2(0f, 1f);
+        body.rectTransform.anchorMax = new Vector2(1f, 1f);
+        body.rectTransform.pivot = new Vector2(0.5f, 1f);
+        body.rectTransform.sizeDelta = new Vector2(0f, 0f);
+        var bodyFitter = body.gameObject.AddComponent<ContentSizeFitter>();
+        bodyFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        bodyFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        scroll.content = body.rectTransform;
         var result = resultHost.AddComponent<RunResultUI>();
         result.resultPanel = panel;
         result.resultTitleLabel = title;
@@ -262,9 +283,11 @@ public sealed class Phase7FrontendTests
 
         Assert.That(panel.activeSelf, Is.True);
         Assert.That(title.text, Is.EqualTo("RUN DEFEAT"));
-        Assert.That(body.text, Does.StartWith($"Seed  {run.RunSeed}\n"));
+        Assert.That(body.text, Does.Contain("SEED"));
+        Assert.That(body.text, Does.Contain(run.RunSeed));
+        Assert.That(body.text, Does.Contain("RUN TOTALS"));
         Assert.That(body.text, Does.Contain("Credits  27"));
-        Assert.That(body.text, Does.Contain("Headliners Defeated"));
+        Assert.That(body.text, Does.Contain("Headliners defeated"));
         Assert.That(body.text, Does.Contain("Total Run Time  01:08"));
         Assert.That(body.text, Does.Contain("District 1  01:02"));
         Assert.That(body.text, Does.Contain("District 2  00:05 (incomplete)"));
@@ -281,7 +304,8 @@ public sealed class Phase7FrontendTests
         typeof(RunResultUI).GetMethod("ShowResult", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.Invoke(result, new object[] { true });
         Assert.That(title.text, Is.EqualTo("RUN VICTORY"));
-        Assert.That(body.text, Does.StartWith($"Seed  {run.RunSeed}\n"));
+        Assert.That(body.text, Does.Contain(run.RunSeed));
+        Assert.That(body.text, Does.Contain("RUN TOTALS"));
         result.RetrySameSeed();
         Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));
     }

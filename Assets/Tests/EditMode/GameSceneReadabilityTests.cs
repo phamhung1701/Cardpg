@@ -31,6 +31,21 @@ public sealed class GameSceneReadabilityTests
     }
 
     [Test]
+    public void ResultSummaryIsScrollableAndKeepsDedicatedPrimaryAction()
+    {
+        var body = Find("FrontendOverlayCanvas/RunResultsPanel/RunResultsCard/ResultSummaryViewport/ResultBodyLabel");
+        var scroll = body != null ? body.GetComponentInParent<ScrollRect>(true) : null;
+        Assert.That(scroll, Is.Not.Null);
+        Assert.That(scroll.vertical, Is.True);
+        Assert.That(scroll.horizontal, Is.False);
+        Assert.That(scroll.content, Is.SameAs(body.GetComponent<RectTransform>()));
+        Assert.That(scroll.verticalScrollbar, Is.Not.Null);
+        Assert.That(scroll.viewport, Is.Not.Null);
+        Assert.That(scroll.viewport.rect.height, Is.GreaterThan(100f));
+        Assert.That(Find("FrontendOverlayCanvas/RunResultsPanel/RunResultsCard/RetrySameSeedButton"), Is.Not.Null);
+    }
+
+    [Test]
     public void PassActionIsAuthoredAsAReadableActionBarButton()
     {
         var actionButtons = Find("Canvas")?.GetComponent<ActionButtonsUI>();

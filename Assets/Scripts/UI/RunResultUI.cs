@@ -21,7 +21,9 @@ public class RunResultUI : MonoBehaviour
 
     string _lastBossRewardName;
     AttackCardPresentationUI _presentation;
-    bool _pendingVictoryResult;
+    bool _pendingResult;
+    bool _pendingResultVictory;
+    ScrollRect _summaryScroll;
 
     public static bool IsShowingResult { get; private set; }
 
@@ -88,8 +90,7 @@ public class RunResultUI : MonoBehaviour
 
     void HandleEncounterResult(EncounterResult result)
     {
-        if (result == EncounterResult.Defeat)
-            ShowResult(false);
+        if (result == EncounterResult.Defeat) ShowWhenPresentationIdle(false);
     }
 
     void HandleBossRewardGranted(CardInstance reward)
@@ -102,25 +103,32 @@ public class RunResultUI : MonoBehaviour
                 : string.Empty;
     }
 
-    void HandleRunCompleted()
+    void HandleRunCompleted() => ShowWhenPresentationIdle(true);
+
+    void ShowWhenPresentationIdle(bool victory)
     {
+        if (IsShowingResult || _pendingResult) return;
         EnsurePresentationSubscription();
         if (_presentation != null && _presentation.IsBusy)
         {
-            _pendingVictoryResult = true;
+            _pendingResult = true;
+            _pendingResultVictory = victory;
             return;
         }
-        ShowResult(true);
+        ShowResult(victory);
     }
 
-    void HandlePresentationCompleted()
+    void HandlePresentationCompleted() => ShowPendingResult();
+    void HandlePresentationCancelled() => ShowPendingResult();
+
+    void ShowPendingResult()
     {
-        if (!_pendingVictoryResult) return;
-        _pendingVictoryResult = false;
-        ShowResult(true);
+        if (!_pendingResult) return;
+        bool victory = _pendingResultVictory;
+        _pendingResult = false;
+        _pendingResultVictory = false;
+        ShowResult(victory);
     }
-
-    void HandlePresentationCancelled() => _pendingVictoryResult = false;
 
     void HandleEnemyChanged()
     {
@@ -130,7 +138,8 @@ public class RunResultUI : MonoBehaviour
 
     void HandleRunStarted(string _)
     {
-        _pendingVictoryResult = false;
+        _pendingResult = false;
+        _pendingResultVictory = false;
         HideAll();
     }
 
@@ -159,6 +168,7 @@ public class RunResultUI : MonoBehaviour
 
     void ShowResult(bool victory)
     {
+        if (IsShowingResult) return;
         var run = RunManager.Instance;
         var cards = CardManager.Instance;
         int totalBosses = run != null ? run.BossTotal : 12;
@@ -167,16 +177,17 @@ public class RunResultUI : MonoBehaviour
         string seed = run != null ? run.RunSeed : string.Empty;
         string artifacts = cards == null || cards.ownedArtifacts.Count == 0
             ? "None"
-            : string.Join(", ", cards.ownedArtifacts.Where(value => value != null).Select(value => value.displayName).Take(6));
+            : string.Join(", ", cards.ownedArtifacts.Where(value => value != null).Select(value => value.displayName));
         int enhanced = cards != null ? cards.ownedCards.Count(card => card.Enhancement != null) : 0;
         string goldDisplay = cards == null ? "0" : cards.HasInfiniteMoney ? "∞" : cards.gold.ToString();
-        string rewardLine = victory && !string.IsNullOrEmpty(_lastBossRewardName)
-            ? $"\nFinal reward: {_lastBossRewardName}"
-            : string.Empty;
 
         string timingSummary = BuildTimingSummary(run?.Timing, victory);
 
-        if (resultTitleLabel) resultTitleLabel.text = victory ? "RUN VICTORY" : "RUN DEFEAT";
+        if (resultTitleLabel)
+        {
+            resultTitleLabel.text = victory ? "RUN VICTORY" : "RUN DEFEAT";
+            resultTitleLabel.color = victory ? new Color(0.46f, 0.88f, 0.63f, 1f) : new Color(1f, 0.50f, 0.43f, 1f);
+        }
         if (retrySameSeedButton)
         {
             var retryLabel = retrySameSeedButton.GetComponentInChildren<TMP_Text>();
@@ -185,14 +196,15 @@ public class RunResultUI : MonoBehaviour
         }
         if (resultBodyLabel)
         {
+            resultBodyLabel.alignment = TextAlignmentOptions.TopLeft;
+            resultBodyLabel.overflowMode = TextOverflowModes.Overflow;
             resultBodyLabel.text =
-                $"Seed  {seed}\n" +
-                $"Progress  District {mapReached}/{totalBosses}\n" +
-                $"Headliners Defeated  {bossesDefeated}/{totalBosses}\n" +
-                $"Credits  {goldDisplay}\n" +
-                $"Gear  {artifacts}\n" +
-                $"Cards with Mods  {enhanced}{rewardLine}\n\n" +
-                timingSummary;
+                $"<size=85%><b><color=#F2B95E>SEED</color></b></size>\n{EscapeRichText(seed)}\n\n" +
+                $"<size=85%><b><color=#F2B95E>PROGRESS</color></b></size>\nDistrict {mapReached}/{totalBosses}  ·  Headliners defeated {bossesDefeated}/{totalBosses}\n\n" +
+                $"<size=85%><b><color=#F2B95E>RUN TOTALS</color></b></size>\nCredits  {goldDisplay}\nGear  {EscapeRichText(artifacts)}\nMods applied  {enhanced}" +
+                (victory && !string.IsNullOrEmpty(_lastBossRewardName)
+                    ? $"\nFinal reward  {EscapeRichText(_lastBossRewardName)}" : string.Empty) +
+                $"\n\n<size=85%><b><color=#F2B95E>TIMING</color></b></size>\n{timingSummary}";
         }
 
         IsShowingResult = true;
@@ -200,6 +212,21 @@ public class RunResultUI : MonoBehaviour
             coordinator.Push(this, resultPanel, retrySameSeedButton, GameplayInputBlockReason.RunResult);
         else if (resultPanel)
             resultPanel.SetActive(true);
+        RefreshSummaryScroll();
+    }
+
+    static string EscapeRichText(string value) => string.IsNullOrEmpty(value)
+        ? string.Empty
+        : value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+    void RefreshSummaryScroll()
+    {
+        if (resultBodyLabel == null) return;
+        _summaryScroll = resultBodyLabel.GetComponentInParent<ScrollRect>(true);
+        if (_summaryScroll == null) return;
+        _summaryScroll.content = resultBodyLabel.rectTransform;
+        Canvas.ForceUpdateCanvases();
+        _summaryScroll.verticalNormalizedPosition = 1f;
     }
 
     static string BuildTimingSummary(RunTimingStatistics timing, bool victory)
@@ -233,7 +260,8 @@ public class RunResultUI : MonoBehaviour
 
     void HideAll()
     {
-        _pendingVictoryResult = false;
+        _pendingResult = false;
+        _pendingResultVictory = false;
         _lastBossRewardName = null;
         if (rewardBanner) rewardBanner.SetActive(false);
         if (coordinator != null && coordinator.IsTop(this)) coordinator.Pop(this);
