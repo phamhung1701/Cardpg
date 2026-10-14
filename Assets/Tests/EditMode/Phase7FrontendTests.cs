@@ -54,6 +54,16 @@ public sealed class Phase7FrontendTests
         PlayerPrefs.Save();
     }
 
+    [TestCase(false, null, false)]
+    [TestCase(false, "disk write failed", true)]
+    [TestCase(true, "stale error", false)]
+    public void ExitCheckpointPolicy_BlocksOnlyWhenAnAttemptedSaveReportsFailure(bool checkpointed, string error, bool expectedAbort)
+    {
+        var policy = typeof(GameFlowService).GetMethod("ShouldAbortExit", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.That(policy, Is.Not.Null);
+        Assert.That((bool)policy.Invoke(null, new object[] { checkpointed, error }), Is.EqualTo(expectedAbort));
+    }
+
     [Test]
     public void LaunchContext_NormalizesAndConsumesRunAndMenuRequestsOnce()
     {

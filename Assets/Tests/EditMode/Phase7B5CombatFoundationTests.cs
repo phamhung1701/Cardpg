@@ -41,6 +41,52 @@ public sealed class Phase7B5CombatFoundationTests
     }
 
     [Test]
+    public void TryStartEncounter_ValidatesAllEnemiesBeforeMutatingCombatState()
+    {
+        var candidate = new EnemyRuntime(CreateEnemyType("Encounter Validation", 10, 1, 0));
+        Assert.Throws<System.ArgumentException>(() =>
+            _combat.TryStartEncounter(new EnemyRuntime[] { candidate, null }));
+        Assert.That(_combat.Enemies, Is.Empty);
+        Assert.That(_combat.currentEnemy, Is.Null);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.Idle));
+
+        Assert.Throws<System.ArgumentException>(() =>
+            _combat.TryStartEncounter(new[] { candidate, candidate }));
+        Assert.That(_combat.Enemies, Is.Empty);
+        Assert.That(_combat.currentEnemy, Is.Null);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.Idle));
+
+        Assert.That(_combat.TryStartEncounter(new[] { candidate }), Is.True);
+        Assert.That(_combat.Enemies, Is.EqualTo(new[] { candidate }));
+    }
+
+    [Test]
+    public void CombatReset_ClearsQueuedOverflowAndBonusActionState()
+    {
+        var enemy = new EnemyRuntime(CreateEnemyType("Overflow Reset", 100, 0, 0));
+        _combat.StartEnemy(enemy);
+        SetPrivateField("_overflowRootActive", true);
+        SetPrivateField("_overflowBudgetRemaining", 1);
+        SetPrivateField("_overflowRootActionId", 42L);
+        SetPrivateField("_executingOverflowAutoPlay", true);
+        SetPrivateField("_isBonusPlayerAction", true);
+        var card = HighestAttackView();
+        _combat.QueueOverflowAutoPlay(card);
+        Assert.That(_combat.QueuedOverflowAutoPlayCount, Is.EqualTo(1));
+
+        _combat.Reset();
+
+        Assert.That(_combat.QueuedOverflowAutoPlayCount, Is.Zero);
+        Assert.That(_combat.OverflowDrawAllowance, Is.Zero);
+        Assert.That(_combat.IsResolvingOverflowAttack, Is.False);
+        Assert.That(_combat.IsBonusPlayerAction, Is.False);
+        Assert.That(_combat.CanAutoPlayOverflow, Is.False);
+    }
+
+    void SetPrivateField(string name, object value) => typeof(CombatManager).GetField(name,
+        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(_combat, value);
+
+    [Test]
     public void DamageResult_DistinguishesModifierShieldHpLossOverkillAndLethality()
     {
         var guard = CreateAbility(EnemyAbilityEffect.ReduceIncomingCardDamage, 2);

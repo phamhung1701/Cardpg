@@ -10,7 +10,7 @@ public sealed class SavePromptUI : MonoBehaviour
 {
     static SavePromptUI _active;
     Action _confirm;
-    bool _closed, _previousGate;
+    bool _closed;
     GameObject _previousSelection;
     public static bool IsOpen => _active != null && !_active._closed;
     public static void AskReplacement(Action confirm) => Show("Replace saved run?",
@@ -25,8 +25,7 @@ public sealed class SavePromptUI : MonoBehaviour
         scaler.referenceResolution = new Vector2(1920, 1080); scaler.matchWidthOrHeight = 0.5f;
         var ui = root.GetComponent<SavePromptUI>(); _active = ui; ui._confirm = confirm;
         ui._previousSelection=EventSystem.current?EventSystem.current.currentSelectedGameObject:null;
-        ui._previousGate = (GameplayInputGate.Reasons & GameplayInputBlockReason.FrontendMenu) != 0;
-        GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, true);
+        GameplayInputGate.SetOwned(ui, GameplayInputBlockReason.FrontendMenu, true);
         var backdrop = new GameObject("Backdrop", typeof(RectTransform), typeof(Image));
         backdrop.transform.SetParent(root.transform, false);
         var br = (RectTransform)backdrop.transform; br.anchorMin = Vector2.zero; br.anchorMax = Vector2.one; br.sizeDelta = Vector2.zero;
@@ -50,14 +49,20 @@ public sealed class SavePromptUI : MonoBehaviour
     void Close()
     {
         _closed = true; _confirm = null;
-        GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, _previousGate);
+        GameplayInputGate.SetOwned(this, GameplayInputBlockReason.FrontendMenu, false);
         if (_active == this) _active = null;
         if(EventSystem.current&&_previousSelection&&_previousSelection.activeInHierarchy)EventSystem.current.SetSelectedGameObject(_previousSelection);
-        gameObject.SetActive(false); Destroy(gameObject);
+        gameObject.SetActive(false);
+        if (Application.isPlaying) Destroy(gameObject);
+        else DestroyImmediate(gameObject);
     }
     void OnDestroy()
     {
-        if (_active == this) { _active = null; GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, _previousGate); }
+        if (_active == this)
+        {
+            _active = null;
+            GameplayInputGate.SetOwned(this, GameplayInputBlockReason.FrontendMenu, false);
+        }
     }
     static TMP_Text Label(Transform parent, string value, Vector2 position, Vector2 size, int fontSize)
     {

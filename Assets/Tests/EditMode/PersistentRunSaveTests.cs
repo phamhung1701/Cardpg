@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
+using UnityEditor.SceneManagement;
 using Object = UnityEngine.Object;
 
 public sealed class PersistentRunSaveTests
@@ -294,6 +298,61 @@ public sealed class PersistentRunSaveTests
     {
         Assert.That(store.TryRead(catalog, out _, out var error), Is.False);
         Assert.That(error, Does.Contain("No active")); Assert.That(Directory.Exists(directory), Is.False);
+    }
+
+    [Test]
+    public void RelativeSavePath_WritesAndReadsWithoutParentDirectory()
+    {
+        string originalDirectory = Directory.GetCurrentDirectory();
+        Directory.CreateDirectory(directory);
+        try
+        {
+            Directory.SetCurrentDirectory(directory);
+            var relativeStore = new RunSaveStore("relative-save.json");
+            var saved = run.CaptureSave();
+            Assert.That(relativeStore.Write(saved, catalog, out var writeError), Is.True, writeError);
+            Assert.That(relativeStore.TryRead(catalog, out var loaded, out var readError), Is.True, readError);
+            Assert.That(JsonUtility.ToJson(loaded), Is.EqualTo(JsonUtility.ToJson(saved)));
+        }
+        finally { Directory.SetCurrentDirectory(originalDirectory); }
+    }
+
+    [Test]
+    public void FailedDiskCheckpoint_BlocksExitWhileUnsafeCheckpointRefusalRemainsAllowed()
+    {
+        var previousScene = SceneManager.GetActiveScene();
+        var gameScene = SceneManager.GetSceneByName(GameFlowService.GameSceneName);
+        bool createdScene = !gameScene.IsValid() || !gameScene.isLoaded;
+        if (createdScene) gameScene = SceneManager.CreateScene(GameFlowService.GameSceneName);
+        RunSaveAutosave writer = null;
+        try
+        {
+            Assert.That(SceneManager.SetActiveScene(gameScene), Is.True);
+            string directoryPrimary = System.IO.Path.Combine(directory, "blocked-primary");
+            Directory.CreateDirectory(directoryPrimary);
+            var failingStore = new RunSaveStore(directoryPrimary);
+            typeof(SaveGameService).GetField("StoreOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, failingStore);
+            typeof(SaveGameService).GetMethod("ClearError", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+            writer = run.gameObject.AddComponent<RunSaveAutosave>();
+
+            LogAssert.Expect(LogType.Warning, new Regex("Could not save run:"));
+            Assert.That(writer.Checkpoint(true), Is.False);
+            Assert.That(SaveGameService.LastError, Does.Contain("Could not save run:"));
+            var exitPolicy = typeof(GameFlowService).GetMethod("ShouldAbortExit", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(exitPolicy, Is.Not.Null);
+            Assert.That((bool)exitPolicy.Invoke(null, new object[] { false, SaveGameService.LastError }), Is.True,
+                "An actual failed disk write must prevent the menu/quit transition.");
+            Assert.That((bool)exitPolicy.Invoke(null, new object[] { false, null }), Is.False,
+                "A refused checkpoint at an unsafe combat boundary may use the last safe on-disk checkpoint.");
+        }
+        finally
+        {
+            if (writer != null) Object.DestroyImmediate(writer);
+            typeof(SaveGameService).GetField("StoreOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, null);
+            typeof(SaveGameService).GetMethod("ClearError", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+            if (previousScene.IsValid() && previousScene.isLoaded) SceneManager.SetActiveScene(previousScene);
+            if (createdScene && gameScene.IsValid() && gameScene.isLoaded) EditorSceneManager.CloseScene(gameScene, true);
+        }
     }
 
     [Test]

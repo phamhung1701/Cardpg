@@ -1326,6 +1326,7 @@ public partial class CardManager : Singleton<CardManager>
 
     void ClearCardState()
     {
+        EndEnemyTargeting();
         if (_activeDragCard != null)
             _activeDragCard.CancelActiveDrag();
         _activeDragCard = null;

@@ -175,6 +175,16 @@ public partial class CombatManager : Singleton<CombatManager>
             throw new ArgumentException("An encounter requires at least one enemy.", nameof(enemies));
         if (!CanStartEncounter) return false;
 
+        var uniqueEnemies = new HashSet<EnemyRuntime>();
+        var validatedEnemies = new List<EnemyRuntime>(enemies.Count);
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            var enemy = enemies[i];
+            if (enemy == null || !uniqueEnemies.Add(enemy))
+                throw new ArgumentException("Encounter enemies must be non-null unique instances.", nameof(enemies));
+            validatedEnemies.Add(enemy);
+        }
+
         UnsubscribeFromEnemies();
         CardManager.Instance?.CancelCardInteractions();
         _enemies.Clear();
@@ -185,14 +195,7 @@ public partial class CombatManager : Singleton<CombatManager>
         _parryDrawCandidates.Clear();
         _queuedPlayerTurnGrants.Clear();
         _completedPlayerTurnCount = 0;
-        var uniqueEnemies = new HashSet<EnemyRuntime>();
-        for (int i = 0; i < enemies.Count; i++)
-        {
-            var enemy = enemies[i];
-            if (enemy == null || !uniqueEnemies.Add(enemy))
-                throw new ArgumentException("Encounter enemies must be non-null unique instances.", nameof(enemies));
-            _enemies.Add(enemy);
-        }
+        _enemies.AddRange(validatedEnemies);
 
         currentEnemy = _enemies[0];
         player.HealingAllowed = CanPlayerHeal;
@@ -317,7 +320,7 @@ public partial class CombatManager : Singleton<CombatManager>
             Log($"Trick dealt {result.ActualHpLost} damage to {target.DisplayName}.");
             if (player.IsDefeated)
                 ResolveEncounter(EncounterResult.Defeat);
-            else if (_enemies.Count == 0 && currentState == GameState.PlayerTurn)
+            else if (_enemies.Count == 0)
                 ResolveEncounter(EncounterResult.Victory);
             return true;
         }
@@ -1922,6 +1925,12 @@ public partial class CombatManager : Singleton<CombatManager>
         _earnedCreditsReward = 0;
         _processedEnemyDeaths.Clear();
         _reactions.Clear();
+        _overflowAutoPlays.Clear();
+        _overflowBudgetRemaining = 0;
+        _overflowRootActionId = 0;
+        _overflowRootActive = false;
+        _executingOverflowAutoPlay = false;
+        _isBonusPlayerAction = false;
         _completedPlayerTurnCount = 0;
         _queuedPlayerTurnGrants.Clear();
         _nextActionId = 1;

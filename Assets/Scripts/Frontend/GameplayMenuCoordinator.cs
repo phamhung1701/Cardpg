@@ -21,6 +21,7 @@ public sealed class GameplayMenuCoordinator : MonoBehaviour
 
     readonly List<Layer> _layers = new();
     float _previousTimeScale = 1f;
+    GameplayInputBlockReason _appliedGateReasons;
 
     public int LayerCount => _layers.Count;
     public bool HasBlockingMenu => _layers.Count > 0;
@@ -115,9 +116,15 @@ public sealed class GameplayMenuCoordinator : MonoBehaviour
 
     void ApplyGateReasons()
     {
-        GameplayInputGate.Clear();
+        var reasons = GameplayInputBlockReason.None;
         foreach (var layer in _layers)
-            GameplayInputGate.Set(layer.reason, true);
+            reasons |= layer.reason;
+
+        // The coordinator owns only its own reasons; other systems may independently
+        // hold the same bit (or different bits) while a menu layer is pushed.
+        GameplayInputGate.SetOwned(this, _appliedGateReasons, false);
+        GameplayInputGate.SetOwned(this, reasons, true);
+        _appliedGateReasons = reasons;
     }
 
     void Select(Selectable preferred, GameObject fallback = null)
