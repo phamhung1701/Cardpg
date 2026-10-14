@@ -23,7 +23,10 @@ public class RunSeedUI : MonoBehaviour
 
     void Refresh()
     {
-        string seed = RunManager.Instance != null ? RunManager.Instance.RunSeed : string.Empty;
-        if (seedDisplayLabel) seedDisplayLabel.text = $"SEED  {seed}";
+        if (seedDisplayLabel)
+        {
+            seedDisplayLabel.text = string.Empty;
+            seedDisplayLabel.gameObject.SetActive(false);
+        }
     }
 }

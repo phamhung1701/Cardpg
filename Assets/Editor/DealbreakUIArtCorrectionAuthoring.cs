@@ -27,6 +27,7 @@ public static class DealbreakUIArtCorrectionAuthoring
         try{Portrait(enemy.GetComponent<EnemyDisplayUI>());PrefabUtility.SaveAsPrefabAsset(enemy,"Assets/Prefabs/EnemyView.prefab");}
         finally{Object.DestroyImmediate(enemy);}
         AssetDatabase.SaveAssets();
+        DealbreakCentralStageAuthoring.Apply();
     }
     static void ApplyScene(string path,System.Action<Scene> edit)
     {

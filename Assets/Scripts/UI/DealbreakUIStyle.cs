@@ -72,6 +72,7 @@ public static class DealbreakUIStyle
             bool paper=button.GetComponent<EditorialSurface>()?.treatment==EditorialSurface.Treatment.Paper;
             bool open=button.GetComponent<EditorialSurface>()?.treatment==EditorialSurface.Treatment.Open;
             Text(label,paper?Theme.bodyFont:offer?label.name.Contains("Price")?Theme.numericFont:Theme.bodyFont:Theme.headingFont,
+                button.name is "PlayButton" or "BlockButton" or "PassButton"?30:
                 paper?21:open?29:Mathf.Max(18,Mathf.Min(24,label.fontSize)),paper||!open&&role==EditorialButton.Role.Primary?Theme.ink:Theme.paper);
             label.margin=new Vector4(8,2,8,2);label.fontStyle=FontStyles.Normal;
         }

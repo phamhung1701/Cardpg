@@ -111,6 +111,14 @@ public sealed class ContextualTooltipUI : MonoBehaviour
         var layer=panel.GetComponent<Canvas>();if(layer){layer.overrideSorting=true;layer.sortingOrder=Mathf.Max(6,source.GetComponentsInParent<Canvas>().Select(c=>c.sortingOrder).DefaultIfEmpty().Max()+3);}
         bool hand=source.GetComponent<CardView>()?.homeField!=null;
         bool enemy=source.GetComponent<EnemyDisplayUI>()!=null;
+        if (DealbreakUIRuntime.CombatActive && parent.GetComponent<SharedContentStageUI>() &&
+            (hand || enemy || source.GetComponent<GearIconSlotUI>() || source.GetComponent<DrawDeckStackUI>() ||
+                source is ContextualInfoTrigger && source.GetComponent<Button>()))
+        {
+            // The stage ends before this right-hand inspect rail; portraits and targets stay clear.
+            DealbreakUIStyle.Place(rect, .889f, .525f, .992f, .89f);
+            return;
+        }
         float width=Mathf.Min(390,parent.rect.width*.38f);
         float height=Mathf.Min(parent.rect.height*.65f,Mathf.Clamp(body.GetPreferredValues(info.Body,width-44,0).y+140,220,440));
         if(DealbreakUIRuntime.CombatActive&&(hand||enemy||source.GetComponent<GearIconSlotUI>()||source.GetComponent<DrawDeckStackUI>()||source is ContextualInfoTrigger&&source.GetComponent<Button>()))

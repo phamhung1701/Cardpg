@@ -153,6 +153,8 @@ public class RunResultUI : MonoBehaviour
         else run?.RestartRun();
     }
 
+    public void ShowAbandonedRun() => ShowWhenPresentationIdle(false);
+
     public void NewRun()
     {
         HideAll();
@@ -191,6 +193,7 @@ public class RunResultUI : MonoBehaviour
         }
         if (retrySameSeedButton)
         {
+            retrySameSeedButton.gameObject.SetActive(run != null && run.CanContinueInfiniteMode);
             var retryLabel = retrySameSeedButton.GetComponentInChildren<TMP_Text>();
             if (retryLabel) retryLabel.text = run != null && run.CanContinueInfiniteMode
                 ? "CONTINUE INFINITE MODE" : "RETRY SAME SEED";
@@ -209,7 +212,9 @@ public class RunResultUI : MonoBehaviour
 
         IsShowingResult = true;
         if (coordinator != null)
-            coordinator.Push(this, resultPanel, retrySameSeedButton, GameplayInputBlockReason.RunResult);
+            coordinator.Push(this, resultPanel,
+                retrySameSeedButton && retrySameSeedButton.gameObject.activeSelf ? retrySameSeedButton : newRunButton,
+                GameplayInputBlockReason.RunResult);
         else if (resultPanel)
             resultPanel.SetActive(true);
         RefreshSummaryScroll();

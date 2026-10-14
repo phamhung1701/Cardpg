@@ -46,7 +46,9 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
         {
             var button=buttons[i];if(!button)continue;string description=details[i];
             var trigger=button.GetComponent<ContextualInfoTrigger>()??button.gameObject.AddComponent<ContextualInfoTrigger>();
-            trigger.describe=()=>button.IsInteractable()?null:new ContextualInfo("Combat action",button.GetComponentInChildren<TMP_Text>().text,
+            trigger.describe=()=>button==actions.passButton&&CombatManager.Instance?.currentState==GameState.EnemyAttacking
+                ?new ContextualInfo("Defense","PASS",$"Take {CombatManager.Instance.pendingDamage} remaining damage. Shield and other combat effects resolve normally.")
+                :button.IsInteractable()?null:new ContextualInfo("Combat action",button.GetComponentInChildren<TMP_Text>().text,
                 description+"\n\nUnavailable in the current state.");
         }
         if(actions.GetComponent<RunStatusUI>() is RunStatusUI status)
@@ -54,7 +56,7 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
             var headliner=status.headlinerProgressLabel.GetComponent<ContextualInfoTrigger>();
             if(headliner)headliner.describe=()=>new ContextualInfo("Headliner",RunManager.Instance?.CurrentHeadliner?.enemyName,RunManager.Instance?.CurrentHeadlinerDescription);
             var progress=status.runProgressLabel.GetComponent<ContextualInfoTrigger>();
-            if(progress)progress.describe=()=>new ContextualInfo("Run",status.runProgressLabel.text,$"Seed {RunManager.Instance?.RunSeed}");
+            if(progress)progress.describe=()=>new ContextualInfo("District",status.runProgressLabel.text,null);
         }
     }
     void LateUpdate()
@@ -71,15 +73,15 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
             bool hidden=overlay||RunResultUI.IsShowingResult||!CombatActive&&!choosingCard||choosingCard&&i>1;
             group.alpha=hidden?0:1;group.blocksRaycasts=!hidden;group.interactable=!hidden;
         }
-        bool hideInventory=map&&map.panel&&map.panel.activeInHierarchy||incident&&incident.panel&&incident.panel.activeInHierarchy||market&&market.storeComposition&&market.panel&&market.panel.activeInHierarchy;
+        bool hideInventory=RunResultUI.IsShowingResult;
         if(inventoryGroups!=null)foreach(var group in inventoryGroups)if(group){group.alpha=hideInventory?0:1;group.blocksRaycasts=!hideInventory;group.interactable=!hideInventory;}
         if(actions&&CombatActive)
         {
             bool defending=CombatManager.Instance.currentState==GameState.EnemyAttacking;
             if(playerState&&_lastDefenseLayout!=defending)
             {
-                DealbreakUIStyle.Place(playerState,.80f,defending?.035f:.06f,.98f,defending?.57f:.26f);
-                DealbreakUIStyle.Place(actions.playerHealthLabel.transform,.055f,defending?.70f:.1f,.945f,defending?.97f:.9f);
+                DealbreakUIStyle.Place(playerState,.025f,.035f,.235f,.25f);
+                DealbreakUIStyle.Place(actions.playerHealthLabel.transform,.055f,defending?.42f:.1f,.945f,.94f);
                 _lastDefenseLayout=defending;
             }
             var cards=CardManager.Instance;
@@ -89,7 +91,7 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
                 actions.selectionLabel.text=CombatDetailPanelUI.SelectionSummary(cards);
             if(actions.playButton)actions.playButton.GetComponentInChildren<TMP_Text>().text=cards.IsEnemyTargeting?"CANCEL":"ATTACK";
             if(actions.recoverButton)actions.recoverButton.gameObject.SetActive(CombatManager.Instance.currentState==GameState.PlayerTurn&&cards.HandCount==0);
-            if(actions.takeDamageButton)actions.takeDamageButton.gameObject.SetActive(CombatManager.Instance.currentState==GameState.EnemyAttacking);
+            if(actions.takeDamageButton)actions.takeDamageButton.gameObject.SetActive(false);
         }
         if(Time.unscaledTime<_nextStyleCheck)return;_nextStyleCheck=Time.unscaledTime+.35f;
         if(market&&market.panel&&market.panel.activeInHierarchy&&CardManager.Instance)

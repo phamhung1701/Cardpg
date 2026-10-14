@@ -128,6 +128,18 @@ public sealed class RunResultPresentationTests
     }
 
     [Test]
+    public void AbandonedRunShowsDefeatWithSeedAndNoOrdinaryRetryAction()
+    {
+        var retry = MakeObject("Retry", typeof(RectTransform), typeof(Image), typeof(Button));
+        _results.retrySameSeedButton = retry.GetComponent<Button>();
+        _results.ShowAbandonedRun();
+        Assert.That(_panel.activeSelf, Is.True);
+        Assert.That(_title.text, Is.EqualTo("RUN DEFEAT"));
+        Assert.That(_body.text, Does.Contain(_run.RunSeed));
+        Assert.That(retry.activeSelf, Is.False);
+    }
+
+    [Test]
     public void LongSeedAndBuildSummaryRemainScrollableWithoutVisibleTimers()
     {
         string longSeed = new string('S', 180) + "-END";

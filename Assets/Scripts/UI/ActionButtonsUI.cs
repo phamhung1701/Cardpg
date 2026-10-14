@@ -266,7 +266,8 @@ public class ActionButtonsUI : MonoBehaviour
         {
             bool combatPhase = combat.currentState is GameState.PlayerTurn or GameState.EnemyAttacking;
             if (passButton.gameObject.activeSelf != combatPhase) passButton.gameObject.SetActive(combatPhase);
-            passButton.interactable = !GameplayInputGate.IsBlocked && !targeting && combat.CanPassPlayerTurn;
+            passButton.interactable = !GameplayInputGate.IsBlocked && !targeting &&
+                (isDefense ? canTakeDamage : combat.CanPassPlayerTurn);
         }
         if (blockButton) blockButton.interactable = !targeting && isDefense && canDefend;
         if (rankSortButton) rankSortButton.interactable = cards.HandCount > 1;
@@ -290,7 +291,11 @@ public class ActionButtonsUI : MonoBehaviour
                 _ => "ACTION"
             };
         }
-        if (takeDamageButton) takeDamageButton.interactable = !targeting && canTakeDamage;
+        if (takeDamageButton)
+        {
+            takeDamageButton.interactable = !targeting && canTakeDamage;
+            takeDamageButton.gameObject.SetActive(false);
+        }
         if (recoverButton) recoverButton.interactable = !targeting && canRecover;
 
         RefreshBackpackSlots(cards, combat);
@@ -309,7 +314,7 @@ public class ActionButtonsUI : MonoBehaviour
             turnStateLabel.text = combat.currentState switch
             {
                 GameState.PlayerTurn => combat.IsBonusPlayerAction ? "PLAYER TURN  •  BONUS ACTION" : "PLAYER TURN",
-                GameState.EnemyAttacking => "BLOCKING PHASE  •  BLOCK OR TAKE DAMAGE",
+                GameState.EnemyAttacking => $"DEFENSE  ·  INCOMING {combat.pendingDamage}",
                 GameState.GameWon => "ENCOUNTER WON",
                 GameState.GameOver => "RUN DEFEAT",
                 _ => "CHOOSE A ROUTE"
@@ -322,7 +327,7 @@ public class ActionButtonsUI : MonoBehaviour
             pendingDamageLabel.gameObject.SetActive(showDamage);
             pendingDamageLabel.text = showDamage
                 ? combat.pendingDamage > 0
-                    ? $"INCOMING {combat.pendingDamage}  ·  {combat.PendingAttackCount} LEFT  ·  {combat.BlockedAttackCount} BLOCKED"
+                    ? $"INCOMING {combat.pendingDamage} · {combat.PendingAttackCount} ATTACKS"
                     : "ALL ATTACKS BLOCKED"
                 : string.Empty;
         }
@@ -525,7 +530,12 @@ public class ActionButtonsUI : MonoBehaviour
     void OnPassClicked()
     {
         var combat = CombatManager.Instance;
-        if (combat != null && combat.PassPlayerTurn()) RefreshAll();
+        var cards = CardManager.Instance;
+        if (combat == null || GameplayInputGate.IsBlocked ||
+            cards != null && (cards.IsEnemyTargeting || cards.IsHandEnhancementTargeting)) return;
+        if (combat.currentState == GameState.EnemyAttacking) combat.TakeRemainingDamage();
+        else combat.PassPlayerTurn();
+        RefreshAll();
     }
 
     void OnTakeDamageClicked() => CombatManager.Instance?.TakeRemainingDamage();

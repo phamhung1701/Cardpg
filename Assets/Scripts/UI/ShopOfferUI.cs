@@ -33,7 +33,7 @@ public sealed class ShopOfferUI : MonoBehaviour,IPointerEnterHandler,IPointerExi
         titleLabel.text=offer.DisplayName;
         descriptionLabel.text=offer.Description(CardManager.Instance);
         statusLabel.text=availability?.Replace("Backpack Full","Trick slots full");
-        priceLabel.text=offer.kind==ShopOfferKind.Investment?"STAKE":offer.kind==ShopOfferKind.Supply?"3 / CARD":$"{offer.price} Credits";
+        priceLabel.text=offer.kind==ShopOfferKind.Investment?"STAKE":offer.kind==ShopOfferKind.Supply?"3 / CARD":offer.price.ToString();
         var theme=DealbreakUIStyle.Theme;if(!theme)return;
         DealbreakUIStyle.Text(titleLabel,theme.headingFont,29,theme.ink);
         DealbreakUIStyle.Text(priceLabel,theme.numericFont,23,theme.ink);
@@ -76,7 +76,7 @@ public sealed class ShopOfferUI : MonoBehaviour,IPointerEnterHandler,IPointerExi
     {
         if(!purchaseButton)return;
         purchaseButton.interactable=string.IsNullOrEmpty(reason)&&!GameplayInputGate.IsBlocked;
-        purchaseButton.GetComponentInChildren<TMP_Text>(true).text=$"BUY  {cost} Credits";
+        purchaseButton.GetComponentInChildren<TMP_Text>(true).text=$"BUY  {cost}";
         DealbreakUIStyle.Button(purchaseButton,EditorialButton.Role.Primary);
     }
     TMP_Text Label(string name,float x1,float y1,float x2,float y2)

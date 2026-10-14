@@ -28,7 +28,7 @@ public sealed class PauseMenuUI : MonoBehaviour
         if (pauseButton) { pauseButton.onClick.AddListener(OpenPause); KeyButtonBorderStyle.Apply(pauseButton); }
         if (resumeButton) { resumeButton.onClick.AddListener(Resume); KeyButtonBorderStyle.Apply(resumeButton); }
         if (settingsButton) settingsButton.onClick.AddListener(OpenSettings);
-        if (restartButton) restartButton.onClick.AddListener(ConfirmRestart);
+        if (restartButton) restartButton.onClick.AddListener(BackToMainMenu);
         if (abandonButton) abandonButton.onClick.AddListener(ConfirmAbandon);
         if (panel) panel.SetActive(false);
 
@@ -44,7 +44,7 @@ public sealed class PauseMenuUI : MonoBehaviour
         if (pauseButton) pauseButton.onClick.RemoveListener(OpenPause);
         if (resumeButton) resumeButton.onClick.RemoveListener(Resume);
         if (settingsButton) settingsButton.onClick.RemoveListener(OpenSettings);
-        if (restartButton) restartButton.onClick.RemoveListener(ConfirmRestart);
+        if (restartButton) restartButton.onClick.RemoveListener(BackToMainMenu);
         if (abandonButton) abandonButton.onClick.RemoveListener(ConfirmAbandon);
         if (_pauseAction != null)
         {
@@ -105,15 +105,32 @@ public sealed class PauseMenuUI : MonoBehaviour
         settingsMenu.Open(coordinator, () => { });
     }
 
+    public void OpenInventory()
+    {
+        if (!IsOpen || !coordinator.IsTop(this)) return;
+        Resume();
+        Object.FindFirstObjectByType<BuildInventoryUI>()?.Open();
+    }
+
     public void ConfirmRestart()
     {
-        if (!IsOpen || confirmationDialog == null) return;
-        confirmationDialog.Open(
-            coordinator,
-            "RESTART RUN?",
-            "Restart from the beginning using the same seed? Current run progress will be lost.",
-            "RESTART SAME SEED",
-            RestartSameSeed);
+        BackToMainMenu(); // Retain the legacy callback for serialized bindings.
+    }
+
+    public void BackToMainMenu()
+    {
+        if (!IsOpen || GameFlowService.Instance == null) return;
+        var run = RunManager.Instance;
+        if (run != null && run.CanCaptureSave)
+        {
+            if (!SaveGameService.Checkpoint(run, true))
+            { SavePromptUI.ShowError(SaveGameService.LastError ?? "Could not save this checkpoint."); return; }
+            GameFlowService.Instance.ShowMainMenu(MainMenuDestination.Home);
+        }
+        else if (confirmationDialog)
+            confirmationDialog.Open(coordinator, "BACK TO MAIN MENU?",
+                "This encounter cannot be saved. Continue will return to the last saved checkpoint.",
+                "MAIN MENU", () => GameFlowService.Instance.ShowMainMenu(MainMenuDestination.Home));
     }
 
     public void ConfirmAbandon()
@@ -122,21 +139,16 @@ public sealed class PauseMenuUI : MonoBehaviour
         confirmationDialog.Open(
             coordinator,
             "ABANDON RUN?",
-            "Return to the Main Menu? Current run progress will be lost.",
+            "End this run in defeat? The current run save will be removed.",
             "ABANDON RUN",
             AbandonRun);
-    }
-
-    void RestartSameSeed()
-    {
-        if (coordinator != null) coordinator.ClearAll();
-        RunManager.Instance?.RestartRun();
     }
 
     void AbandonRun()
     {
         if (coordinator != null) coordinator.ClearAll();
+        AttackCardPresentationUI.Instance?.CancelAll();
         RunManager.Instance?.AbandonRun();
-        GameFlowService.Instance?.ShowMainMenu(MainMenuDestination.Home);
+        Object.FindFirstObjectByType<RunResultUI>()?.ShowAbandonedRun();
     }
 }

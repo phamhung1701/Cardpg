@@ -50,6 +50,38 @@ public sealed class CombatUISliceTests
     }
 
     [Test]
+    public void DefensePassResolvesRemainingDamageOnceWithoutDiscardingCards()
+    {
+        var actions = Make("Slice Actions", typeof(ActionButtonsUI)).GetComponent<ActionButtonsUI>();
+        var pass = Make("Slice Pass", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+        actions.passButton = pass;
+        typeof(ActionButtonsUI).GetMethod("OnEnable", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(actions, null);
+        var beforeHand = _cards.hand.Select(c => c.Id).ToArray();
+        _combat.PassPlayerTurn();
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        Assert.That(pass.interactable, Is.True);
+        GameplayInputGate.Set(GameplayInputBlockReason.FrontendMenu, true);
+        pass.onClick.Invoke();
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(30));
+        GameplayInputGate.Clear();
+        pass.onClick.Invoke();
+        Assert.That(_combat.player.currentHealth, Is.EqualTo(26));
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.PlayerTurn));
+        Assert.That(_combat.pendingDamage, Is.Zero);
+        Assert.That(_cards.hand.Select(c => c.Id), Is.EqualTo(beforeHand));
+    }
+
+    [Test]
+    public void SelectedCardKeepsStateWithoutSelectionOrderText()
+    {
+        var view = _field.GetComponentsInChildren<CardView>().First();
+        _cards.HandleCardClick(view);
+        Assert.That(_cards.SelectedCards, Does.Contain(view));
+        Assert.That(view.stateLabel.text, Is.Empty);
+        Assert.That(view.selectionBadge.activeSelf, Is.False);
+    }
+
+    [Test]
     public void HandHidesStatsWhileSnapshotsKeepTheirStatsAndRankSuitArtwork()
     {
         var view = _field.GetComponentsInChildren<CardView>().First(); view.RefreshContent();

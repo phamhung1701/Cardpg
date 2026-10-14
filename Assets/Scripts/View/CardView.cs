@@ -252,8 +252,8 @@ public class CardView : MonoBehaviour,
                 ? selected && state != State.Drag ? new Color(0.87f, 0.67f, 0.28f) : new Color(0.94f, 0.89f, 0.77f)
                 : state == State.Drag ? _dragColor : selected ? _selectedColor : new Color(0.28f, 1f, 0.52f);
         }
-        if (selectionBadge) selectionBadge.SetActive(state == State.Click);
-        if (stateLabel) stateLabel.text = state == State.Click ? _selectionOrder.ToString() : string.Empty;
+        if (selectionBadge) selectionBadge.SetActive(false);
+        if (stateLabel) stateLabel.text = string.Empty;
     }
 
     void EnsureVisualSorting()

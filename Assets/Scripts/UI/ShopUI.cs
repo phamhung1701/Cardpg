@@ -59,7 +59,8 @@ public class ShopUI : MonoBehaviour
             if(selected&&view.Offer.kind is ShopOfferKind.Supply or ShopOfferKind.Investment)
             {
                 var controls=new Transform[]{_quantityDecreaseButton?.transform,_investmentStakeInput?.transform,_quantityIncreaseButton?.transform};
-                float[] offsets={0,40,188};float[] widths={36,144,36};
+                float inputWidth=Mathf.Max(70,((RectTransform)view.transform).rect.width*.53f-90);
+                float[] offsets={0,40,44+inputWidth};float[] widths={36,inputWidth,36};
                 for(int i=0;i<controls.Length;i++)if(controls[i])
                 {
                     var rect=(RectTransform)controls[i];rect.SetParent(view.transform,false);
