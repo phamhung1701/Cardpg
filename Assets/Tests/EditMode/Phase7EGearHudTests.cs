@@ -84,7 +84,7 @@ public sealed class Phase7EGearHudTests
     public void EmptyCollection_ShowsZeroAndNoOwnedGear()
     {
         Assert.That(_cards.ownedGear, Is.Empty);
-        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
+        Assert.That(_gearLabel.text, Does.Contain("GEAR  •  0/5"));
         Assert.That(_gearLabel.text, Does.Contain("None owned"));
     }
 
@@ -93,7 +93,7 @@ public sealed class Phase7EGearHudTests
     {
         Assert.That(_cards.BuyGear(_gears[0], 0), Is.True);
         Assert.That(_cards.ownedGear, Has.Count.EqualTo(1));
-        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  1/5"));
+        Assert.That(_gearLabel.text, Does.Contain("GEAR  •  1/5"));
         Assert.That(_gearLabel.text, Does.Contain("Icon1 Artifact 1"));
         Assert.That(_gearLabel.text, Does.Not.Contain("Artifact 2"));
     }
@@ -105,7 +105,7 @@ public sealed class Phase7EGearHudTests
             _gears[i].capacityCategory = GearCapacityCategory.NonSlot;
         foreach (var gear in _gears)
             Assert.That(_cards.BuyGear(gear, 0), Is.True);
-        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  5/5"));
+        Assert.That(_gearLabel.text, Does.Contain("GEAR  •  5/5"));
         foreach (var gear in _gears)
             Assert.That(_gearLabel.text, Does.Contain($"{gear.icon} {gear.displayName}"));
         Assert.That(_gearLabel.text.IndexOf("Artifact 1"), Is.LessThan(_gearLabel.text.IndexOf("Artifact 8")));
@@ -119,7 +119,7 @@ public sealed class Phase7EGearHudTests
         _cards.BuyGear(_gears[1], 0);
         _cards.Reset();
         Assert.That(_cards.ownedGear, Is.Empty);
-        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
+        Assert.That(_gearLabel.text, Does.Contain("GEAR  •  0/5"));
         Assert.That(_gearLabel.text, Does.Contain("None owned"));
         Assert.That(_gearLabel.text, Does.Not.Contain("Artifact 1"));
     }
@@ -134,7 +134,7 @@ public sealed class Phase7EGearHudTests
         Assert.That(_gearLabel.text, Does.Contain("Artifact 2"));
         _run.RestartRun();
         Assert.That(_cards.ownedGear, Is.Empty);
-        Assert.That(_gearLabel.text, Does.Contain("ARTIFACTS  •  0/5"));
+        Assert.That(_gearLabel.text, Does.Contain("GEAR  •  0/5"));
         Assert.That(_gearLabel.text, Does.Not.Contain("Artifact 2"));
     }
 

@@ -11,6 +11,7 @@ public sealed class GearRailUI : MonoBehaviour
     public CardManager source;
     public RectTransform slotsRoot;
     public TMP_Text capacityLabel;
+    public float slotSize = 44f;
 
     [Header("Hover tooltip")]
     public GameObject tooltipPanel;
@@ -221,7 +222,7 @@ public sealed class GearRailUI : MonoBehaviour
         if (slotsRoot && slotsRoot.parent is RectTransform viewport && viewport.parent == controlsRoot)
         {
             _generatedControlsViewport = viewport;
-            viewport.offsetMin = new Vector2(viewport.offsetMin.x, 10f);
+            viewport.offsetMin = new Vector2(viewport.offsetMin.x, slotSize >= 60 ? 0f : 10f);
             viewport.offsetMax = new Vector2(viewport.offsetMax.x, -222f);
         }
     }
@@ -272,10 +273,11 @@ public sealed class GearRailUI : MonoBehaviour
 
     GearIconSlotUI CreateSlot()
     {
-        var go = new GameObject("Gear Icon", typeof(RectTransform), typeof(Image), typeof(GearIconSlotUI));
+        var go = new GameObject("Gear Icon", typeof(RectTransform), typeof(Image), typeof(GearIconSlotUI), typeof(CombatInspectUI), typeof(Selectable));
+        go.GetComponent<Selectable>().transition = Selectable.Transition.None;
         var rect = (RectTransform)go.transform;
         rect.SetParent(slotsRoot, false);
-        rect.sizeDelta = new Vector2(44f, 44f);
+        rect.sizeDelta = new Vector2(slotSize, slotSize);
         var image = go.GetComponent<Image>();
         image.type = Image.Type.Simple;
         image.preserveAspect = true;
@@ -403,7 +405,8 @@ public sealed class GearRailUI : MonoBehaviour
         bool canMergeMode = _ownedGearCount >= 2;
         if (_generatedControlsViewport)
             _generatedControlsViewport.offsetMax = new Vector2(_generatedControlsViewport.offsetMax.x,
-                _mergeSelecting ? -222f : canMergeMode ? -104f : -62f);
+                slotSize >= 60 ? _mergeSelecting ? -160f : canMergeMode ? -45f : 0f
+                    : _mergeSelecting ? -222f : canMergeMode ? -104f : -62f);
         if (mergeModeButton)
         {
             mergeModeButton.gameObject.SetActive(_mergeSelecting || canMergeMode);
@@ -433,6 +436,7 @@ public sealed class GearRailUI : MonoBehaviour
     void ShowTooltip(GearData gear)
     {
         _hovered = gear;
+        if (ContextualTooltipUI.Instance || CombatDetailPanelUI.IsCombatActive) return;
         if (_selectedInstanceId != 0 && detailPanel && detailPanel.activeSelf) HideTooltip();
         else
         {
@@ -449,6 +453,7 @@ public sealed class GearRailUI : MonoBehaviour
     void HideTooltip()
     {
         _hovered = null;
+        if (ContextualTooltipUI.Instance || CombatDetailPanelUI.IsCombatActive) return;
         if (tooltipPanel) tooltipPanel.SetActive(false);
     }
 
@@ -466,6 +471,7 @@ public sealed class GearRailUI : MonoBehaviour
         FindFirstObjectByType<ActionButtonsUI>()?.ClearSelectedConsumable();
         _selectedInstanceId = instanceId;
         HideTooltip();
+        if (ContextualTooltipUI.Instance || CombatDetailPanelUI.IsCombatActive) { Refresh(); return; }
         if (detailText) detailText.text = $"<size=22><b>{gear.displayName}</b></size>\n{gear.description}";
         PositionDetailBesideSlot(instanceId);
         if (detailPanel)

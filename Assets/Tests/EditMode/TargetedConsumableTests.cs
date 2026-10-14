@@ -106,6 +106,34 @@ public sealed class TargetedConsumableTests
     }
 
     [Test]
+    public void ThrowingKnife_KillingLastEnemyDuringBlockingResolvesVictoryImmediately()
+    {
+        var type = Enemy("Last Blocking Target", 5, 3, 7);
+        var target = new EnemyRuntime(type);
+        _combat.StartEncounter(new[] { target });
+        Assert.That(_cards.AddConsumable(_knife), Is.True);
+        Assert.That(_combat.PassPlayerTurn(), Is.True);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.EnemyAttacking));
+        Assert.That(_combat.pendingDamage, Is.EqualTo(3));
+        int results = 0;
+        _combat.OnEncounterResult += result =>
+        {
+            Assert.That(result, Is.EqualTo(EncounterResult.Victory));
+            results++;
+        };
+
+        Assert.That(_cards.UseConsumableAtSlot(0, _combat, target), Is.True);
+
+        Assert.That(target.IsDefeated, Is.True);
+        Assert.That(_combat.Enemies, Is.Empty);
+        Assert.That(_combat.currentState, Is.EqualTo(GameState.GameWon));
+        Assert.That(_combat.pendingDamage, Is.Zero);
+        Assert.That(_cards.credits, Is.EqualTo(7));
+        Assert.That(_cards.BackpackSlotsUsed, Is.Zero);
+        Assert.That(results, Is.EqualTo(1));
+    }
+
+    [Test]
     public void ThrowingKnife_CanTargetSpecificEnemyDuringBlockingWithoutAdvancingDefense()
     {
         var first = Enemy("First Blocking Target", 30, 0, 0);

@@ -70,11 +70,11 @@ public sealed class Phase7DMapVisibilityTests
                 ui.SetNode(new PathNode { kind = MapNodeType.Combat, revealed = true }, run);
                 Assert.That(label.text, Is.EqualTo("COMBAT"));
                 ui.SetNode(new PathNode { kind = MapNodeType.Elite, revealed = true }, run);
-                Assert.That(label.text, Is.EqualTo("ELITE"));
+                Assert.That(label.text, Is.EqualTo("ENFORCER"));
                 ui.SetNode(new PathNode { kind = MapNodeType.Shop, revealed = true }, run);
-                Assert.That(label.text, Is.EqualTo("SHOP"));
+                Assert.That(label.text, Is.EqualTo("BLACK\nMARKET"));
                 ui.SetNode(new PathNode { kind = MapNodeType.Event, revealed = true }, run);
-                Assert.That(label.text, Is.EqualTo("?"));
+                Assert.That(label.text, Is.EqualTo("INCIDENT"));
                 ui.SetNode(new PathNode { kind = MapNodeType.Risk, revealed = true }, run);
                 Assert.That(label.text, Is.EqualTo("?"));
                 ui.SetNode(new PathNode { kind = MapNodeType.Combat, revealed = false }, run);
@@ -104,7 +104,7 @@ public sealed class Phase7DMapVisibilityTests
             var ui = root.AddComponent<PathNodeButtonUI>();
             var node = new PathNode { kind = MapNodeType.Headliner, revealed = true };
             ui.SetNode(node, run);
-            Assert.That(labelObject.GetComponent<TextMeshProUGUI>().text, Is.EqualTo("HEADLINER FIGHT"));
+            Assert.That(labelObject.GetComponent<TextMeshProUGUI>().text, Is.EqualTo("HEADLINER"));
         }
         finally
         {

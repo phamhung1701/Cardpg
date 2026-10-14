@@ -50,11 +50,14 @@ public sealed class DeckViewerUITests
         _viewer.toggleButton = _toggleButton;
         _cards.Configure(null, null, _viewer.cardPrefab, System.Array.Empty<GearData>());
         viewerObject.SetActive(true);
+        // EditMode does not dispatch the runtime subscription/initialization callback.
+        typeof(DeckViewerUI).GetMethod("OnEnable", System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(_viewer,null);
     }
 
     [TearDown]
     public void TearDown()
     {
+        if(_viewer)typeof(DeckViewerUI).GetMethod("OnDisable", System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(_viewer,null);
         if (_cards != null) _cards.Reset();
         for (int i = _created.Count - 1; i >= 0; i--)
             if (_created[i] != null) Object.DestroyImmediate(_created[i]);

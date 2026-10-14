@@ -13,6 +13,8 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     public TMP_Text statusText;
     public Image portrait;
     public Slider healthBar;
+    public CombatPortraitCatalog combatPortraits;
+    public string DetailGuidance { get; private set; }
 
     EnemyRuntime _boundEnemy;
     bool _hasExplicitBinding;
@@ -94,6 +96,9 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     void RefreshEnemyTargetPresentation()
     {
+        var frame=transform.Find("Editorial Frame")?.GetComponent<EditorialFrame>();
+        if(frame&&DealbreakUIStyle.Theme)
+        {frame.rim=_enemyTargeting&&_enemyTargetEligible?DealbreakUIStyle.Theme.ochre:DealbreakUIStyle.Theme.slate;frame.border=_enemyTargeting&&_enemyTargetEligible?6:3;frame.Refresh();}
         if (!_enemyTargeting)
         {
             if (_targetCanvasGroup != null) _targetCanvasGroup.alpha = 1f;
@@ -101,14 +106,14 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             if (_baseTargetScale != Vector3.zero) transform.localScale = _baseTargetScale;
             return;
         }
-        if (statusText) statusText.text = _enemyTargetEligible ? "Click to target" : "Not a valid target";
+        if (statusText) statusText.text = _enemyTargetEligible ? "VALID TARGET" : "Not a valid target";
         if (_targetCanvasGroup != null) _targetCanvasGroup.alpha = _enemyTargetEligible ? 1f : 0.38f;
         if (_targetOutline != null)
         {
             _targetOutline.enabled = _enemyTargetEligible;
             _targetOutline.effectColor = _enemyPointerHovered
-                ? new Color(1f, 0.86f, 0.32f, 1f)
-                : new Color(0.36f, 1f, 0.52f, 1f);
+                ? new Color(0.87f, 0.67f, 0.28f, 1f)
+                : new Color(0.94f, 0.89f, 0.77f, 1f);
         }
         float scale = _enemyTargetEligible ? (_enemyPointerHovered ? 1.07f : 1.035f) : 0.96f;
         transform.localScale = _baseTargetScale * scale;
@@ -199,7 +204,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
         var enemy = DisplayedEnemy;
         bool hasEnemy = enemy != null;
 
-        if (nameText) nameText.text = hasEnemy ? enemy.DisplayName.ToUpperInvariant() : "AWAITING ENCOUNTER";
+        if (nameText) nameText.text = hasEnemy ? (combatPortraits?combatPortraits.DisplayName(enemy):enemy.DisplayName).ToUpperInvariant() : "AWAITING ENCOUNTER";
         if (hpText) hpText.text = hasEnemy ? $"HP  {enemy.currentHp}/{enemy.maxHp}" : "HP  —";
         if (atkText) atkText.text = hasEnemy ? $"ATTACK  {enemy.EffectiveAttack}" : "ATTACK  —";
         if (healthBar)
@@ -222,6 +227,8 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             ? CardManager.Instance?.cardPrefab?.ResolveCardSprite(headlinerCard)
             : null;
         Sprite enemySprite = enemy?.type ? enemy.type.portraitSprite : null;
+        Sprite combatSprite = combatPortraits != null ? combatPortraits.Resolve(enemy?.type) : null;
+        if (combatSprite != null) { enemySprite = combatSprite; headlinerSprite = null; }
         _isDisplayingHeadlinerCard = headlinerSprite != null;
         _isDisplayingAuthoredPortrait = !_isDisplayingHeadlinerCard && enemySprite != null;
 
@@ -232,8 +239,10 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             portrait.type = Image.Type.Simple;
             portrait.preserveAspect = true;
             portrait.color = Color.white;
-            rect.anchorMin = new Vector2(0.03f, 0.08f);
-            rect.anchorMax = new Vector2(0.30f, 0.92f);
+            rect.anchorMin = combatPortraits ? new Vector2(0.09f, 0.31f) : new Vector2(0.03f, 0.08f);
+            rect.anchorMax = combatPortraits ? new Vector2(0.91f, 0.92f) : new Vector2(0.30f, 0.92f);
+            if(rect.parent.name=="PortraitWindow")
+            {rect.anchorMin=new Vector2(-.025f,-.07f);rect.anchorMax=new Vector2(1.025f,1.03f);}
             rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = Vector2.zero;
         }
@@ -254,6 +263,27 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     }
 
     void RefreshHp() => RefreshDisplay();
+    void LateUpdate()
+    {
+        if (!CombatDetailPanelUI.IsCombatActive || _enemyTargeting || IsDefeatCuePlaying) return;
+        var cards = CardManager.Instance;
+        var combat = CombatManager.Instance;
+        bool selected = cards != null && cards.SelectedCards.Count > 0 && combat.currentState == GameState.PlayerTurn;
+        bool valid = selected && combat.CanPlayCards(cards.SelectedCards, DisplayedEnemy);
+        bool inspecting = TryGetComponent<CombatInspectUI>(out var inspect) && inspect.IsInspected;
+        if (portrait && _targetOutline == null)
+        {
+            _targetOutline = portrait.GetComponent<Outline>() ?? portrait.gameObject.AddComponent<Outline>();
+            _targetOutline.effectDistance = new Vector2(3f, -3f);
+        }
+        if (_targetOutline)
+        {
+            _targetOutline.enabled = selected || inspecting;
+            _targetOutline.effectColor = !selected || valid ? new Color(0.94f, 0.89f, 0.77f) : new Color(0.62f, 0.24f, 0.20f);
+        }
+        if (statusText) statusText.text = CompactIntent(DisplayedEnemy, combat.currentState) +
+            (selected ? valid ? "\nVALID TARGET" : "\nINVALID TARGET" : string.Empty);
+    }
     void HandlePendingDamageChanged(int _) => RefreshStateGuidance();
 
     void HandleDefenseAttackResolved(DefenseAttackResult result)
@@ -372,8 +402,9 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
                 guidance += $"\nShield: {enemy.ShieldCharges}";
             if (enemy != null && enemy.CaptainAttackBonus > 0)
                 guidance += "\nCaptain alive: +1 ATK";
+            DetailGuidance = guidance;
             string abilities = enemy?.AbilitySummary;
-            statusText.text = string.IsNullOrEmpty(abilities)
+            statusText.text = CombatDetailPanelUI.IsCombatActive ? CompactIntent(enemy, state) : string.IsNullOrEmpty(abilities)
                 ? guidance
                 : $"{guidance}\nTrait: {abilities}";
         }
@@ -393,5 +424,17 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
                 : isSelectedTarget ? new Color(0.42f, 0.52f, 0.72f)
                 : new Color(0.32f, 0.38f, 0.5f);
         }
+    }
+
+    static string CompactIntent(EnemyRuntime enemy, GameState state)
+    {
+        if (enemy == null) return string.Empty;
+        string intent = state == GameState.EnemyAttacking
+            ? $"INCOMING {CombatManager.Instance.GetPendingAttackDamage(enemy)}"
+            : enemy.NextAttackIsCharged ? "CHARGED ATTACK NEXT" : "ATTACK NEXT";
+        if (enemy.HasDoubleStrike) intent += " • 2 HITS";
+        if (enemy.ShieldCharges > 0) intent += $" • SHIELD {enemy.ShieldCharges}";
+        if (enemy.type.sourceCard) intent += $" • {enemy.type.sourceCard.DisplayName}";
+        return intent;
     }
 }

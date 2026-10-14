@@ -166,6 +166,9 @@ public class RunStatusUI : MonoBehaviour
             var slot = cards.GetConsumableInstanceAtSlot(i);
             int stackCount = cards.GetConsumableStackCountAtSlot(i);
             label.text = slot == null ? string.Empty :
+                DealbreakUIStyle.Theme != null ? $"{slot.Definition.icon}" +
+                (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
+                (slot.Definition.uses > 1 ? $" {slot.RemainingCharges}/{slot.Definition.uses}" : string.Empty) :
                 $"{slot.Definition.icon} {slot.Definition.displayName}" +
                 (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
                 (slot.Definition.uses > 1
@@ -179,7 +182,7 @@ public class RunStatusUI : MonoBehaviour
         if (!ownedGearLabel) return;
         int used = cards != null ? cards.GearSlotsUsed : 0;
         int capacity = cards != null ? cards.GearCapacity : CardManager.BASE_GEAR_CAPACITY;
-        var text = new StringBuilder($"<b>ARTIFACTS  •  {used}/{capacity}</b>\n");
+        var text = new StringBuilder($"<b>GEAR  •  {used}/{capacity}</b>\n");
         if (cards == null || cards.ownedGear.Count == 0)
         {
             text.Append("None owned");
@@ -202,6 +205,7 @@ public class RunStatusUI : MonoBehaviour
     void RefreshTiming()
     {
         if (!timingLabel) return;
+        timingLabel.gameObject.SetActive(false);
         var timing = RunManager.Instance?.Timing;
         timingLabel.text = timing == null
             ? "RUN —"

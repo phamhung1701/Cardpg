@@ -88,6 +88,7 @@ public class DeckViewerUI : MonoBehaviour
             Refresh();
             if (panel) panel.transform.SetAsLastSibling();
         }
+        else ClearSnapshots();
     }
 
     void Close()
@@ -193,7 +194,28 @@ public class DeckViewerUI : MonoBehaviour
             if (raycaster) raycaster.enabled = false;
             var canvasGroup = snapshot.canvasGroup;
             if (canvasGroup) { canvasGroup.interactable = false; canvasGroup.blocksRaycasts = false; }
-            _cardSnapshots.Add(snapshot.gameObject);
+            if (ContextualTooltipUI.Instance)
+            {
+                if (snapshot.statsPlate) snapshot.statsPlate.SetActive(false);
+                if (snapshot.nameLabel) snapshot.nameLabel.enabled = false;
+                // Inspect through a separate control; the card snapshot remains incapable of play or drag.
+                var inspection = new GameObject($"DeckInspect_{i}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(ContextualInfoTrigger));
+                var wrapper = (RectTransform)inspection.transform;
+                wrapper.SetParent(_content, false);
+                wrapper.anchorMin = rect.anchorMin; wrapper.anchorMax = rect.anchorMax; wrapper.pivot = rect.pivot;
+                wrapper.anchoredPosition = rect.anchoredPosition;
+                wrapper.sizeDelta = rect.sizeDelta * effectiveScale;
+                inspection.GetComponent<Image>().color = Color.clear;
+                inspection.AddComponent<EditorialSurface>().treatment = EditorialSurface.Treatment.Open;
+                inspection.GetComponent<Button>().transition = Selectable.Transition.None;
+                var detail = inspection.GetComponent<ContextualInfoTrigger>();
+                detail.pinOnClick = true;
+                detail.describe = () => ContextualTooltipUI.TryDescribe(snapshot, out var info) ? info : null;
+                rect.SetParent(wrapper, false);
+                rect.anchoredPosition = Vector2.zero;
+                _cardSnapshots.Add(inspection);
+            }
+            else _cardSnapshots.Add(snapshot.gameObject);
         }
         if (_scrollRect) _scrollRect.verticalNormalizedPosition = 1f;
     }

@@ -54,6 +54,16 @@ public sealed class Phase7FrontendTests
         PlayerPrefs.Save();
     }
 
+    [TestCase(false, null, false)]
+    [TestCase(false, "disk write failed", true)]
+    [TestCase(true, "stale error", false)]
+    public void ExitCheckpointPolicy_BlocksOnlyWhenAnAttemptedSaveReportsFailure(bool checkpointed, string error, bool expectedAbort)
+    {
+        var policy = typeof(GameFlowService).GetMethod("ShouldAbortExit", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.That(policy, Is.Not.Null);
+        Assert.That((bool)policy.Invoke(null, new object[] { checkpointed, error }), Is.EqualTo(expectedAbort));
+    }
+
     [Test]
     public void LaunchContext_NormalizesAndConsumesRunAndMenuRequestsOnce()
     {
@@ -288,9 +298,9 @@ public sealed class Phase7FrontendTests
         Assert.That(body.text, Does.Contain("RUN TOTALS"));
         Assert.That(body.text, Does.Contain("Credits  27"));
         Assert.That(body.text, Does.Contain("Headliners defeated"));
-        Assert.That(body.text, Does.Contain("Total Run Time  01:08"));
-        Assert.That(body.text, Does.Contain("District 1  01:02"));
-        Assert.That(body.text, Does.Contain("District 2  00:05 (incomplete)"));
+        Assert.That(body.text, Does.Not.Contain("Total Run Time"));
+        Assert.That(body.text, Does.Not.Contain("TIMING"));
+        Assert.That(run.Timing.TotalElapsedSeconds, Is.GreaterThan(68));
 
         result.RetrySameSeed();
         Assert.That(run.RunSeed, Is.EqualTo(generatedSeed));

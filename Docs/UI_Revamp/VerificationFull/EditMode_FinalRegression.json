@@ -1,0 +1,67 @@
+{
+    "RunId": "3e5dee1bee514ca892464316b54112ff",
+    "UnityRunGuid": "fd2a0c00-7beb-4eeb-a3c8-4876be6887c8",
+    "Status": "failed",
+    "Mode": "edit",
+    "CurrentTest": "",
+    "StartedAtTicks": 639275424671328638,
+    "FinishedAtTicks": 639275424916623254,
+    "DurationMs": 16566,
+    "Total": 333,
+    "Passed": 326,
+    "Failed": 6,
+    "Skipped": 1,
+    "Inconclusive": 0,
+    "Error": "",
+    "Failures": [
+        {
+            "FullName": "DeckMutationTests.CatalogDefinitions_AreAvailableFromShopDropsAndEvents",
+            "ResultState": "Failed",
+            "DurationMs": 13,
+            "Message": "  Expected: True\r\n  But was:  False\r\n",
+            "StackTrace": "at DeckMutationTests.CatalogDefinitions_AreAvailableFromShopDropsAndEvents () [0x0013c] in D:\\Dealbreak\\Cardpg\\Assets\\Tests\\EditMode\\DeckMutationTests.cs:201\r\n",
+            "Output": ""
+        },
+        {
+            "FullName": "DeckMutationTests.InputGate_BlocksMutationWithoutSpendingCharges",
+            "ResultState": "Failed",
+            "DurationMs": 8,
+            "Message": "  Expected: 3\r\n  But was:  1\r\n",
+            "StackTrace": "at DeckMutationTests.InputGate_BlocksMutationWithoutSpendingCharges () [0x00078] in D:\\Dealbreak\\Cardpg\\Assets\\Tests\\EditMode\\DeckMutationTests.cs:181\r\n",
+            "Output": ""
+        },
+        {
+            "FullName": "DeckMutationTests.Rune_SameSuitAndCancellationCostNothing_ThenSpendsThreeInOneSlot",
+            "ResultState": "Failed",
+            "DurationMs": 6,
+            "Message": "  Expected: 3\r\n  But was:  1\r\n",
+            "StackTrace": "at DeckMutationTests.Rune_SameSuitAndCancellationCostNothing_ThenSpendsThreeInOneSlot () [0x0008c] in D:\\Dealbreak\\Cardpg\\Assets\\Tests\\EditMode\\DeckMutationTests.cs:122\r\n",
+            "Output": ""
+        },
+        {
+            "FullName": "LowerEffortShopTests.Guidance_CostsFiveCreditsRevealsOneReachableHiddenEventOrRiskAndIsOneTime",
+            "ResultState": "Failed",
+            "DurationMs": 14,
+            "Message": "  Expected: True\r\n  But was:  False\r\n",
+            "StackTrace": "at LowerEffortShopTests.Guidance_CostsFiveCreditsRevealsOneReachableHiddenEventOrRiskAndIsOneTime () [0x00134] in D:\\Dealbreak\\Cardpg\\Assets\\Tests\\EditMode\\LowerEffortShopTests.cs:111\r\n",
+            "Output": ""
+        },
+        {
+            "FullName": "Phase7EGearCapacityTests.DuplicateRuleStillWinsAtCapacity_AndInvalidPriceDoesNotGrant",
+            "ResultState": "Failed",
+            "DurationMs": 19,
+            "Message": "  Expected string length 13 but was 18. Strings differ at index 0.\r\n  Expected: \"Already owned\"\r\n  But was:  \"Gear Capacity Full\"\r\n  -----------^\r\n",
+            "StackTrace": "at Phase7EGearCapacityTests.DuplicateRuleStillWinsAtCapacity_AndInvalidPriceDoesNotGrant () [0x0002a] in D:\\Dealbreak\\Cardpg\\Assets\\Tests\\EditMode\\Phase7EGearCapacityTests.cs:78\r\n",
+            "Output": ""
+        },
+        {
+            "FullName": "Phase7EGearCapacityTests.NonSlotGear_IsOwnedButDoesNotConsumeCapacity_AndDuplicateStillRejected",
+            "ResultState": "Failed",
+            "DurationMs": 17,
+            "Message": "  Expected: False\r\n  But was:  True\r\n",
+            "StackTrace": "at Phase7EGearCapacityTests.NonSlotGear_IsOwnedButDoesNotConsumeCapacity_AndDuplicateStillRejected () [0x000a6] in D:\\Dealbreak\\Cardpg\\Assets\\Tests\\EditMode\\Phase7EGearCapacityTests.cs:95\r\n",
+            "Output": ""
+        }
+    ],
+    "Results": []
+}

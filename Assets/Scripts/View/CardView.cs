@@ -45,7 +45,9 @@ public class CardView : MonoBehaviour,
 
     State _state = State.Idle;
     bool _isSelected;
+    bool _compactPresentation;
     bool _isPointerOver;
+    bool _isFocused;
     bool _isDragging;
     bool _isHandTargeting;
     bool _isHandTargetEligible;
@@ -85,6 +87,7 @@ public class CardView : MonoBehaviour,
     public float LayoutTargetScale => _layoutTargetScale;
     public bool IsDragging => _isDragging;
     public bool IsHovered => _isPointerOver;
+    public void SetInspectFocus(bool focused) { _isFocused = focused; RefreshState(); }
 
     public State CurrentState => _state;
     public bool IsSelected => _isSelected;
@@ -111,6 +114,7 @@ public class CardView : MonoBehaviour,
     {
         CancelActiveDrag();
         _isPointerOver = false;
+        _isFocused = false;
         _isHandTargeting = false;
         _isHandTargetEligible = false;
         RefreshState();
@@ -137,7 +141,10 @@ public class CardView : MonoBehaviour,
 
         bool hasData = data != null;
         bool hasEnhancement = hasData && data.Enhancement != null;
-        if (statsPlate) statsPlate.SetActive(hasData);
+        bool compactCombat = homeField != null && (CombatDetailPanelUI.IsCombatActive || ContextualTooltipUI.Instance) && sprite != null;
+        _compactPresentation = compactCombat;
+        if (statsPlate) statsPlate.SetActive(hasData && !compactCombat);
+        if (nameLabel) nameLabel.enabled = !compactCombat;
         if (enhancementPlate) enhancementPlate.SetActive(hasEnhancement);
 
         if (nameLabel)
@@ -194,7 +201,7 @@ public class CardView : MonoBehaviour,
             ? State.Drag
             : _isSelected
                 ? State.Click
-                : _isPointerOver
+                : _isPointerOver || _isFocused
                     ? State.Hover
                     : State.Idle;
 
@@ -220,19 +227,19 @@ public class CardView : MonoBehaviour,
             _visualCanvas.sortingOrder = state switch
             {
                 State.Drag => 21,
-                State.Click => _isPointerOver ? 4 : 3,
+                State.Click => _isPointerOver || _isFocused ? 4 : 3,
                 State.Hover => 2,
                 _ => 1
             };
-        _targetRaise = (_isDragging ? 0f : (_isSelected ? selectedRaise : 0f) + (_isPointerOver ? hoverRaise : 0f)) +
+        _targetRaise = (_isDragging ? 0f : (_isSelected ? selectedRaise : 0f) + (_isPointerOver || _isFocused ? hoverRaise : 0f)) +
             (_isHandTargetEligible ? 8f : 0f);
-        _targetScale = _isDragging ? 1.065f : 1f + (_isSelected ? 0.045f : 0f) + (_isPointerOver ? 0.035f : 0f);
+        _targetScale = _isDragging ? 1.065f : 1f + (_isSelected ? 0.045f : 0f) + (_isPointerOver || _isFocused ? 0.035f : 0f);
 
         if (face)
         {
             if (_isHandTargeting)
                 face.color = _isHandTargetEligible
-                    ? new Color(0.88f, 1f, 0.9f, 1f)
+                    ? (ContextualTooltipUI.Instance ? new Color(0.94f, 0.89f, 0.77f, 1f) : new Color(0.88f, 1f, 0.9f, 1f))
                     : new Color(0.48f, 0.48f, 0.48f, 0.58f);
             else
                 face.color = state == State.Idle ? new Color(0.97f, 0.97f, 0.97f, 1f) : Color.white;
@@ -240,11 +247,13 @@ public class CardView : MonoBehaviour,
         if (selectionOutline)
         {
             bool selected = state == State.Click || state == State.Drag;
-            selectionOutline.enabled = selected || IsHandTargetEligible;
-            selectionOutline.effectColor = state == State.Drag ? _dragColor : selected ? _selectedColor : new Color(0.28f, 1f, 0.52f, 1f);
+            selectionOutline.enabled = selected || IsHandTargetEligible || _isFocused;
+            selectionOutline.effectColor = CombatDetailPanelUI.IsCombatActive || ContextualTooltipUI.Instance
+                ? selected && state != State.Drag ? new Color(0.87f, 0.67f, 0.28f) : new Color(0.94f, 0.89f, 0.77f)
+                : state == State.Drag ? _dragColor : selected ? _selectedColor : new Color(0.28f, 1f, 0.52f);
         }
-        if (selectionBadge) selectionBadge.SetActive(state == State.Click);
-        if (stateLabel) stateLabel.text = state == State.Click ? _selectionOrder.ToString() : string.Empty;
+        if (selectionBadge) selectionBadge.SetActive(false);
+        if (stateLabel) stateLabel.text = string.Empty;
     }
 
     void EnsureVisualSorting()
@@ -267,6 +276,8 @@ public class CardView : MonoBehaviour,
     // One owner follows the base root target and layers artwork state on top.
     public void TickPresentation(float deltaTime)
     {
+        if (_compactPresentation != (homeField != null && (CombatDetailPanelUI.IsCombatActive || ContextualTooltipUI.Instance) && ResolveCardSprite(data) != null))
+            RefreshContent();
         if (deltaTime <= 0f) return;
         if (_hasLayoutTarget && !_isDragging && homeField != null && transform.parent == homeField.cardsHolder)
         {
@@ -358,6 +369,7 @@ public class CardView : MonoBehaviour,
         if (_isDragging || _suppressClick) return;
         var manager = CardManager.Instance;
         if (manager == null || GameplayInputGate.IsBlocked && !manager.CanRouteHandEnhancementTargetClick ||
+            !DealbreakUIRuntime.CombatActive && !manager.CanRouteHandEnhancementTargetClick ||
             eventData.button != PointerEventData.InputButton.Left) return;
         manager.HandleCardClick(this);
     }
@@ -370,9 +382,11 @@ public class CardView : MonoBehaviour,
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (GameplayInputGate.IsBlocked || eventData.button != PointerEventData.InputButton.Left || _isDragging) return;
+        if (eventData.button != PointerEventData.InputButton.Left || _isDragging) return;
         var manager = CardManager.Instance;
-        if (manager == null || manager.dragCanvas == null || homeField == null)
+        if (GameplayInputGate.IsBlocked && (manager == null || !manager.CanRouteHandEnhancementTargetClick) ||
+            manager == null || !DealbreakUIRuntime.CombatActive && !manager.CanRouteHandEnhancementTargetClick ||
+            manager.dragCanvas == null || homeField == null)
             return;
 
         if (!_hasGrabPoint) CaptureGrabPoint(eventData);

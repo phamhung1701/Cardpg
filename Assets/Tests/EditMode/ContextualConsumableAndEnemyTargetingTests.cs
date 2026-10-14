@@ -88,6 +88,22 @@ public sealed class ContextualConsumableAndEnemyTargetingTests
         _created.Clear();
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ClearingCardState_CancelsEnemyTargeting(bool rebuildDeck)
+    {
+        bool notified = false;
+        _cards.BeginEnemyTargeting(_ => Assert.Fail("Stale target callback invoked."), _ => true);
+        _cards.OnEnemyTargetingChanged += active => { if (!active) notified = true; };
+
+        if (rebuildDeck) _cards.BuildDeck();
+        else _cards.Reset();
+
+        Assert.That(_cards.IsEnemyTargeting, Is.False);
+        Assert.That(notified, Is.True);
+        Assert.That(_cards.HandleEnemyTargetClick(null), Is.False);
+    }
+
     [Test]
     public void ConsumableClickSelectsWithoutUsing_SellIsShopGatedAndDelegatesToRunManager()
     {

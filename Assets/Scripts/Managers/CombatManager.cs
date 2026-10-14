@@ -175,6 +175,17 @@ public partial class CombatManager : Singleton<CombatManager>
             throw new ArgumentException("An encounter requires at least one enemy.", nameof(enemies));
         if (!CanStartEncounter) return false;
 
+        var uniqueEnemies = new HashSet<EnemyRuntime>();
+        var validatedEnemies = new List<EnemyRuntime>(enemies.Count);
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            var enemy = enemies[i];
+            if (enemy == null || !uniqueEnemies.Add(enemy))
+                throw new ArgumentException("Encounter enemies must be non-null unique instances.", nameof(enemies));
+            validatedEnemies.Add(enemy);
+        }
+
+        GameplayBalanceTelemetry.EncounterStarted(validatedEnemies, encounterKind);
         UnsubscribeFromEnemies();
         CardManager.Instance?.CancelCardInteractions();
         _enemies.Clear();
@@ -185,14 +196,7 @@ public partial class CombatManager : Singleton<CombatManager>
         _parryDrawCandidates.Clear();
         _queuedPlayerTurnGrants.Clear();
         _completedPlayerTurnCount = 0;
-        var uniqueEnemies = new HashSet<EnemyRuntime>();
-        for (int i = 0; i < enemies.Count; i++)
-        {
-            var enemy = enemies[i];
-            if (enemy == null || !uniqueEnemies.Add(enemy))
-                throw new ArgumentException("Encounter enemies must be non-null unique instances.", nameof(enemies));
-            _enemies.Add(enemy);
-        }
+        _enemies.AddRange(validatedEnemies);
 
         currentEnemy = _enemies[0];
         player.HealingAllowed = CanPlayerHeal;
@@ -317,7 +321,7 @@ public partial class CombatManager : Singleton<CombatManager>
             Log($"Trick dealt {result.ActualHpLost} damage to {target.DisplayName}.");
             if (player.IsDefeated)
                 ResolveEncounter(EncounterResult.Defeat);
-            else if (_enemies.Count == 0 && currentState == GameState.PlayerTurn)
+            else if (_enemies.Count == 0)
                 ResolveEncounter(EncounterResult.Victory);
             return true;
         }
@@ -555,6 +559,7 @@ public partial class CombatManager : Singleton<CombatManager>
         {
             if (!cm.TryDiscardCards(cards)) return false;
             _playerAttackActionCount++;
+            GameplayBalanceTelemetry.Record("attack_action", "", cards.Count);
             ConsumeAndAdvancePhase7ActionState(cardInstances, isOverflowAutoPlay);
             if (vampiricCost > 0) TakeRunDamage(vampiricCost);
 
@@ -628,6 +633,7 @@ public partial class CombatManager : Singleton<CombatManager>
                 if (!reactionFailed && !player.IsDefeated && isRoyalFamily && !target.IsDefeated)
                 {
                     // Explicit defeat outcome: never encode instant defeat as an oversized damage request.
+                    GameplayBalanceTelemetry.Record("instant_defeat", target.DisplayName, target.currentHp);
                     target.DefeatInstantly();
                     HandleEnemyDefeated(target);
                 }
@@ -918,6 +924,7 @@ public partial class CombatManager : Singleton<CombatManager>
             {
                 if (reductions[i] <= 0) continue;
                 int remainingDamage = Mathf.Max(0, incomingAttacks[i] - reductions[i]);
+                GameplayBalanceTelemetry.Record("block", "", reductions[i], effectiveBlocks[i]);
                 OnDefenseAttackResolved?.Invoke(new DefenseAttackResult(
                     attackSources[i], i, incomingAttacks[i], effectiveBlocks[i], reductions[i], remainingDamage));
             }
@@ -1275,6 +1282,7 @@ public partial class CombatManager : Singleton<CombatManager>
             _encounterActualHpLost += result.ActualHpLost;
             NotifyPlayerHealthChanged();
         }
+        GameplayBalanceTelemetry.Damage(result);
         OnDamageResolved?.Invoke(result);
         return result;
     }
@@ -1519,6 +1527,7 @@ public partial class CombatManager : Singleton<CombatManager>
     {
         if (_reactionFaulted || _encounterResolved) return;
         _reactionFaulted = true;
+        GameplayBalanceTelemetry.Invalidate("reaction_fault:" + phase);
         _queuedPlayerTurnGrants.Clear();
         Log($"Encounter halted after reaction processing failed during {phase}. No victory or rewards will be granted.");
         ResolveEncounter(EncounterResult.Defeat);
@@ -1549,6 +1558,7 @@ public partial class CombatManager : Singleton<CombatManager>
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (_encounterResolved || _reactionFaulted || _isResolvingAction || AttackCardPresentationUI.Instance != null && AttackCardPresentationUI.Instance.IsBusy) return false;
+        GameplayBalanceTelemetry.Invalidate("forced_defeat");
         ResolveEncounter(EncounterResult.Defeat);
         return true;
 #else
@@ -1605,6 +1615,7 @@ public partial class CombatManager : Singleton<CombatManager>
             Log("Player defeated! Game Over!");
         }
 
+        GameplayBalanceTelemetry.EncounterEnded(result);
         OnEncounterResult?.Invoke(result);
     }
 
@@ -1651,6 +1662,7 @@ public partial class CombatManager : Singleton<CombatManager>
     {
         if (!CanTakeRunDamage(amount)) return 0;
         int dealt = player.TakeDamage(amount);
+        if (dealt > 0) GameplayBalanceTelemetry.Record("run_hp_cost", "", dealt);
         if (dealt > 0) NotifyPlayerHealthChanged();
         return dealt;
     }
@@ -1870,6 +1882,7 @@ public partial class CombatManager : Singleton<CombatManager>
 
     void NotifyPlayerHealthChanged()
     {
+        GameplayBalanceTelemetry.Health(player.currentHealth, player.maxHealth);
         OnPlayerHealthChanged?.Invoke(player.currentHealth, player.maxHealth);
     }
 
@@ -1902,11 +1915,13 @@ public partial class CombatManager : Singleton<CombatManager>
     void SetState(GameState state)
     {
         currentState = state;
+        if (state == GameState.PlayerTurn) GameplayBalanceTelemetry.Record("player_turn");
         OnStateChanged?.Invoke(state);
     }
 
     public void Reset()
     {
+        GameplayBalanceTelemetry.Finish("interrupted");
         UnsubscribeFromEnemies();
         _enemies.Clear();
         _pendingAttacks.Clear();
@@ -1922,6 +1937,12 @@ public partial class CombatManager : Singleton<CombatManager>
         _earnedCreditsReward = 0;
         _processedEnemyDeaths.Clear();
         _reactions.Clear();
+        _overflowAutoPlays.Clear();
+        _overflowBudgetRemaining = 0;
+        _overflowRootActionId = 0;
+        _overflowRootActive = false;
+        _executingOverflowAutoPlay = false;
+        _isBonusPlayerAction = false;
         _completedPlayerTurnCount = 0;
         _queuedPlayerTurnGrants.Clear();
         _nextActionId = 1;

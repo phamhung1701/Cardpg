@@ -71,7 +71,7 @@ public sealed class GameFlowService : MonoBehaviour
 
     public void ShowMainMenu(MainMenuDestination destination = MainMenuDestination.Home)
     {
-        SaveGameService.Checkpoint(RunManager.Instance, true);
+        if (!TryCheckpointBeforeExit()) return;
         DevModeRuntime.Disable();
         RestoreGlobalRuntimeState();
         FrontendLaunchContext.RequestMainMenu(destination);
@@ -80,7 +80,7 @@ public sealed class GameFlowService : MonoBehaviour
 
     public void Quit()
     {
-        SaveGameService.Checkpoint(RunManager.Instance, true);
+        if (!TryCheckpointBeforeExit()) return;
         RestoreGlobalRuntimeState();
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
@@ -88,6 +88,21 @@ public sealed class GameFlowService : MonoBehaviour
         Application.Quit();
 #endif
     }
+
+    static bool TryCheckpointBeforeExit()
+    {
+        // A false result at an unsafe combat boundary is expected: keep the last safe save
+        // and allow exit if no prior save failure remains outstanding. A failed attempted
+        // write leaves LastError set, so do not discard that warning before checking it.
+        bool checkpointed = SaveGameService.Checkpoint(RunManager.Instance, true);
+        string error = SaveGameService.LastError;
+        if (!ShouldAbortExit(checkpointed, error)) return true;
+        SavePromptUI.ShowError(error);
+        return false;
+    }
+
+    internal static bool ShouldAbortExit(bool checkpointed, string error) =>
+        !checkpointed && !string.IsNullOrEmpty(error);
 
     public static void RestoreGlobalRuntimeState()
     {

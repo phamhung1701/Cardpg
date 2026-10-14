@@ -506,6 +506,7 @@ public partial class CardManager : Singleton<CardManager>
             if (_backpack[slotIndex].Count == 0) _backpack.RemoveAt(slotIndex);
         }
         OnConsumablesChanged?.Invoke();
+        GameplayBalanceTelemetry.TrickUsed(item.Definition.id, wasInEncounter);
         OnConsumableUsed?.Invoke(item.Definition);
         if (!wasInEncounter)
         {
@@ -1269,7 +1270,9 @@ public partial class CardManager : Singleton<CardManager>
             OnCreditsChanged?.Invoke(credits);
             return;
         }
+        int previousCredits = credits;
         credits = (int)Math.Clamp((long)credits + amount, 0L, int.MaxValue);
+        GameplayBalanceTelemetry.Record("credits", "adjustment", credits - previousCredits, credits);
         OnCreditsChanged?.Invoke(credits);
     }
 
@@ -1284,6 +1287,7 @@ public partial class CardManager : Singleton<CardManager>
             return true;
         }
         credits -= amount;
+        GameplayBalanceTelemetry.Record("credits", "spend", -amount, credits);
         OnCreditsChanged?.Invoke(credits);
         return true;
     }
@@ -1326,6 +1330,7 @@ public partial class CardManager : Singleton<CardManager>
 
     void ClearCardState()
     {
+        EndEnemyTargeting();
         if (_activeDragCard != null)
             _activeDragCard.CancelActiveDrag();
         _activeDragCard = null;

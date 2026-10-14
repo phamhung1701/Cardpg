@@ -153,6 +153,8 @@ public class RunResultUI : MonoBehaviour
         else run?.RestartRun();
     }
 
+    public void ShowAbandonedRun() => ShowWhenPresentationIdle(false);
+
     public void NewRun()
     {
         HideAll();
@@ -182,15 +184,16 @@ public class RunResultUI : MonoBehaviour
         int enhanced = cards != null ? cards.ownedCards.Count(card => card.Enhancement != null) : 0;
         string creditsDisplay = cards == null ? "0" : cards.HasInfiniteMoney ? "∞" : cards.credits.ToString();
 
-        string timingSummary = BuildTimingSummary(run?.Timing, victory);
-
         if (resultTitleLabel)
         {
             resultTitleLabel.text = victory ? "RUN VICTORY" : "RUN DEFEAT";
-            resultTitleLabel.color = victory ? new Color(0.46f, 0.88f, 0.63f, 1f) : new Color(1f, 0.50f, 0.43f, 1f);
+            resultTitleLabel.color = DealbreakUIStyle.Theme
+                ? victory ? DealbreakUIStyle.Theme.ochre : DealbreakUIStyle.Theme.paper
+                : victory ? new Color(0.46f, 0.88f, 0.63f, 1f) : new Color(1f, 0.50f, 0.43f, 1f);
         }
         if (retrySameSeedButton)
         {
+            retrySameSeedButton.gameObject.SetActive(run != null && run.CanContinueInfiniteMode);
             var retryLabel = retrySameSeedButton.GetComponentInChildren<TMP_Text>();
             if (retryLabel) retryLabel.text = run != null && run.CanContinueInfiniteMode
                 ? "CONTINUE INFINITE MODE" : "RETRY SAME SEED";
@@ -204,13 +207,14 @@ public class RunResultUI : MonoBehaviour
                 $"<size=85%><b><color=#F2B95E>PROGRESS</color></b></size>\nDistrict {mapReached}/{totalHeadliners}  ·  Headliners defeated {headlinersDefeated}/{totalHeadliners}\n\n" +
                 $"<size=85%><b><color=#F2B95E>RUN TOTALS</color></b></size>\nCredits  {creditsDisplay}\nGear  {EscapeRichText(gearItems)}\nMods applied  {enhanced}" +
                 (victory && !string.IsNullOrEmpty(_lastHeadlinerRewardName)
-                    ? $"\nFinal reward  {EscapeRichText(_lastHeadlinerRewardName)}" : string.Empty) +
-                $"\n\n<size=85%><b><color=#F2B95E>TIMING</color></b></size>\n{timingSummary}";
+                    ? $"\nFinal reward  {EscapeRichText(_lastHeadlinerRewardName)}" : string.Empty);
         }
 
         IsShowingResult = true;
         if (coordinator != null)
-            coordinator.Push(this, resultPanel, retrySameSeedButton, GameplayInputBlockReason.RunResult);
+            coordinator.Push(this, resultPanel,
+                retrySameSeedButton && retrySameSeedButton.gameObject.activeSelf ? retrySameSeedButton : newRunButton,
+                GameplayInputBlockReason.RunResult);
         else if (resultPanel)
             resultPanel.SetActive(true);
         RefreshSummaryScroll();

@@ -54,12 +54,18 @@ public sealed class RunSaveStore
         { error = e.Message; return false; }
     }
 
+    static void EnsureParentDirectory(string path)
+    {
+        string directory = System.IO.Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+    }
+
     public bool Write(RunSaveData data, SaveContentCatalog catalog, out string error)
     {
         if (!RunSaveValidation.Validate(data, catalog, out error)) return false;
         try
         {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
+            EnsureParentDirectory(Path);
             string payload = JsonUtility.ToJson(data);
             var bytes = Encoding.UTF8.GetBytes(JsonUtility.ToJson(new RunSaveEnvelope { checksum = Checksum(payload), payload = payload }, true));
             if (bytes.LongLength > MaximumBytes) { error = "Save file too large."; return false; }
@@ -94,7 +100,7 @@ public sealed class RunSaveStore
     {
         try
         {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
+            EnsureParentDirectory(Path);
             // A durable tombstone prevents backup resurrection if deletion is interrupted.
             using (var stream = new FileStream(DeletedPath, FileMode.Create, FileAccess.Write, FileShare.None))
             { stream.WriteByte(1); stream.Flush(true); }

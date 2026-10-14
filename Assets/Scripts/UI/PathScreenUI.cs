@@ -27,9 +27,17 @@ public class PathScreenUI : MonoBehaviour
 
     readonly Dictionary<int, Vector2> _nodePositions = new();
     Vector2 _lastMapSize;
+    DeckViewerUI _deckViewer;
 
     void LateUpdate()
     {
+        if (!_deckViewer) _deckViewer = GetComponent<DeckViewerUI>();
+        if (_mapVisibilityButton)
+        {
+            bool visible = _mapToggleEnabled && !GameplayInputGate.IsBlocked &&
+                !(_deckViewer && _deckViewer.panel && _deckViewer.panel.activeInHierarchy);
+            if (_mapVisibilityButton.gameObject.activeSelf != visible) SetMapVisibilityControl(visible);
+        }
         if (panel != null && panel.activeInHierarchy && mapContainer is RectTransform bounds &&
             (bounds.rect.size - _lastMapSize).sqrMagnitude > 1f)
             BuildMap();
@@ -153,10 +161,7 @@ public class PathScreenUI : MonoBehaviour
     void HandleCycleStarted(string header)
     {
         var run = RunManager.Instance;
-        string headlinerDescription = run != null ? run.CurrentHeadlinerDescription : string.Empty;
-        if (headerText) headerText.text = string.IsNullOrEmpty(headlinerDescription)
-            ? header
-            : $"{header}\n<size=80%>{headlinerDescription}</size>";
+        if (headerText) headerText.text = header;
         BuildMap();
     }
 
@@ -228,7 +233,7 @@ public class PathScreenUI : MonoBehaviour
         var run = RunManager.Instance;
         if (run == null || run.currentPath == null || run.currentPath.Count == 0) return;
 
-        Vector2 nodeSize = new Vector2(Mathf.Clamp(bounds.rect.width / 12f, 62f, 88f), 62f);
+        Vector2 nodeSize = new Vector2(Mathf.Clamp(bounds.rect.width / 12f, 62f, DealbreakUIStyle.Theme?72f:88f), 62f);
         float halfH = nodeSize.y * 0.5f;
         float usableWidth = Mathf.Max(0f, bounds.rect.width - nodeSize.x - 2f * horizontalInset);
         var displayColumns = run.currentPath.Select(node => node.col).Distinct().OrderBy(value => value).ToList();
@@ -286,6 +291,10 @@ public class PathScreenUI : MonoBehaviour
             var nodeButtonUI = buttonObject.GetComponent<PathNodeButtonUI>();
             if (nodeButtonUI == null) nodeButtonUI = buttonObject.AddComponent<PathNodeButtonUI>();
             nodeButtonUI.SetNode(node, run);
+            MapNodePresentation.Apply(buttonObject,node);
+            // Node labels are intentionally the only hover-free route identity presentation.
+            // Hidden nodes stay "?" and are never given a contextual description.
+            DealbreakUIStyle.ApplyHierarchy(buttonObject.transform);
             PlaceNode(buttonObject.GetComponent<RectTransform>(), _nodePositions[node.id], nodeSize);
 
             var button = buttonObject.GetComponent<Button>();
@@ -301,6 +310,7 @@ public class PathScreenUI : MonoBehaviour
                 int id = node.id;
                 button.onClick.AddListener(() => run.OnPathChosen(id));
             }
+            MapNodePresentation.Apply(buttonObject,node);
         }
     }
 
@@ -314,6 +324,9 @@ public class PathScreenUI : MonoBehaviour
         if (image) image.color = new Color(0.28f, 0.34f, 0.44f);
         var text = endpoint.GetComponentInChildren<TMP_Text>();
         if (text) text.text = "START";
+        var surface=endpoint.GetComponent<EditorialSurface>();if(!surface)surface=endpoint.AddComponent<EditorialSurface>();surface.treatment=EditorialSurface.Treatment.Open;
+        DealbreakUIStyle.Frame(endpoint.transform,false,true);
+        if(text){text.fontSize=18;text.textWrappingMode=TextWrappingModes.NoWrap;text.overflowMode=TextOverflowModes.Overflow;}
         PlaceNode(endpoint.GetComponent<RectTransform>(), position, nodeSize);
     }
 
@@ -340,8 +353,8 @@ public class PathScreenUI : MonoBehaviour
 
     void CreateConnection(RouteEdge edge, Vector2 nodeSize)
     {
-        CreateLineSegment(edge.from, edge.to, 2f,
-            new Color(0.43f, 0.57f, 0.59f, 0.42f), "RouteConnection");
+        CreateLineSegment(edge.from, edge.to, 3.5f,
+            new Color(0.71f, 0.68f, 0.57f, 0.65f), "RouteConnection");
     }
 
     void DrawCrossingBridges(IReadOnlyList<RouteEdge> edges, RectTransform bounds, Vector2 nodeSize)

@@ -1,0 +1,17 @@
+{
+  "missingScripts": 0,
+  "brokenReferences": 0,
+  "failures": [],
+  "productionSaves": [
+    {
+      "path": "C:/Users/Admin/AppData/LocalLow/hwng/Dealbreak\\active-run.json",
+      "unchanged": true
+    },
+    {
+      "path": "C:/Users/Admin/AppData/LocalLow/hwng/Dealbreak\\active-run.json.bak",
+      "unchanged": true
+    }
+  ],
+  "compiling": false,
+  "dirtyScenes": 0
+}

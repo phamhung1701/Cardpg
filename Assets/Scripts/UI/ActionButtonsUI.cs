@@ -266,7 +266,8 @@ public class ActionButtonsUI : MonoBehaviour
         {
             bool combatPhase = combat.currentState is GameState.PlayerTurn or GameState.EnemyAttacking;
             if (passButton.gameObject.activeSelf != combatPhase) passButton.gameObject.SetActive(combatPhase);
-            passButton.interactable = !GameplayInputGate.IsBlocked && !targeting && combat.CanPassPlayerTurn;
+            passButton.interactable = !GameplayInputGate.IsBlocked && !targeting &&
+                (isDefense ? canTakeDamage : combat.CanPassPlayerTurn);
         }
         if (blockButton) blockButton.interactable = !targeting && isDefense && canDefend;
         if (rankSortButton) rankSortButton.interactable = cards.HandCount > 1;
@@ -290,7 +291,11 @@ public class ActionButtonsUI : MonoBehaviour
                 _ => "ACTION"
             };
         }
-        if (takeDamageButton) takeDamageButton.interactable = !targeting && canTakeDamage;
+        if (takeDamageButton)
+        {
+            takeDamageButton.interactable = !targeting && canTakeDamage;
+            takeDamageButton.gameObject.SetActive(false);
+        }
         if (recoverButton) recoverButton.interactable = !targeting && canRecover;
 
         RefreshBackpackSlots(cards, combat);
@@ -309,7 +314,7 @@ public class ActionButtonsUI : MonoBehaviour
             turnStateLabel.text = combat.currentState switch
             {
                 GameState.PlayerTurn => combat.IsBonusPlayerAction ? "PLAYER TURN  •  BONUS ACTION" : "PLAYER TURN",
-                GameState.EnemyAttacking => "BLOCKING PHASE  •  BLOCK OR TAKE DAMAGE",
+                GameState.EnemyAttacking => $"DEFENSE  ·  INCOMING {combat.pendingDamage}",
                 GameState.GameWon => "ENCOUNTER WON",
                 GameState.GameOver => "RUN DEFEAT",
                 _ => "CHOOSE A ROUTE"
@@ -322,7 +327,7 @@ public class ActionButtonsUI : MonoBehaviour
             pendingDamageLabel.gameObject.SetActive(showDamage);
             pendingDamageLabel.text = showDamage
                 ? combat.pendingDamage > 0
-                    ? $"INCOMING {combat.pendingDamage}  ·  {combat.PendingAttackCount} LEFT  ·  {combat.BlockedAttackCount} BLOCKED"
+                    ? $"INCOMING {combat.pendingDamage} · {combat.PendingAttackCount} ATTACKS"
                     : "ALL ATTACKS BLOCKED"
                 : string.Empty;
         }
@@ -525,7 +530,12 @@ public class ActionButtonsUI : MonoBehaviour
     void OnPassClicked()
     {
         var combat = CombatManager.Instance;
-        if (combat != null && combat.PassPlayerTurn()) RefreshAll();
+        var cards = CardManager.Instance;
+        if (combat == null || GameplayInputGate.IsBlocked ||
+            cards != null && (cards.IsEnemyTargeting || cards.IsHandEnhancementTargeting)) return;
+        if (combat.currentState == GameState.EnemyAttacking) combat.TakeRemainingDamage();
+        else combat.PassPlayerTurn();
+        RefreshAll();
     }
 
     void OnTakeDamageClicked() => CombatManager.Instance?.TakeRemainingDamage();
@@ -678,6 +688,7 @@ public class ActionButtonsUI : MonoBehaviour
         _consumableUseButton.onClick.AddListener(UseSelectedConsumable);
         _consumableSellButton.onClick.AddListener(SellOrCancelSelectedConsumable);
         _consumableDiscardButton.onClick.AddListener(DiscardSelectedConsumable);
+        DealbreakUIStyle.Frame(_consumableContextPanel.transform);
         _consumableContextPanel.SetActive(false);
     }
 
@@ -747,7 +758,7 @@ public class ActionButtonsUI : MonoBehaviour
         {
             int stackCount = cards.GetConsumableStackCountAtSlot(_selectedConsumableSlot);
             string details = $"<size=115%><b>{definition.displayName}</b></size>" +
-                (stackCount > 1 ? $" — {stackCount} copies" : string.Empty) + $"\n{definition.description}";
+                (stackCount > 1 ? $" — {stackCount} copies" : string.Empty) + (ContextualTooltipUI.Instance?string.Empty:$"\n{definition.description}");
             if (definition.effectType == ConsumableEffectType.ApplyEnhancement)
                 details += selectedCards.Count == 1
                     ? validEnhancementTarget
@@ -766,7 +777,7 @@ public class ActionButtonsUI : MonoBehaviour
         if (_consumableUseButton)
         {
             bool canUse = definition.effectType == ConsumableEffectType.ApplyEnhancement
-                ? validEnhancementTarget
+                ? validEnhancementTarget || selectedCards.Count!=1&&ContextualTooltipUI.Instance&&_enhancementTargetUI&&_enhancementTargetUI.CanOpenConsumableTarget&&cards.CanUseConsumableAtSlot(_selectedConsumableSlot,CombatManager.Instance)
                 : cards.CanUseConsumableAtSlot(_selectedConsumableSlot, CombatManager.Instance);
             _consumableUseButton.interactable = !_discardConfirmationArmed && canUse && !GameplayInputGate.IsBlocked;
         }
@@ -804,6 +815,28 @@ public class ActionButtonsUI : MonoBehaviour
             local.x -= _consumableContextRect.rect.width + buttonRect.rect.width + 24f;
         local.x = Mathf.Clamp(local.x, parentRect.rect.xMin + halfWidth, parentRect.rect.xMax - halfWidth);
         local.y += buttonRect.rect.height * 0.5f;
+        // Keep the action cluster clear of every Trick and Gear slot, not only its source slot.
+        float controlsLeft=float.PositiveInfinity,controlsRight=float.NegativeInfinity;
+        void IncludeControl(RectTransform control)
+        {
+            if(!control)return;
+            control.GetWorldCorners(corners);
+            for(int i=0;i<corners.Length;i++)
+            {
+                float x=parentRect.InverseTransformPoint(corners[i]).x;
+                controlsLeft=Mathf.Min(controlsLeft,x);controlsRight=Mathf.Max(controlsRight,x);
+            }
+        }
+        if(backpackSlotButtons!=null)foreach(var slot in backpackSlotButtons)if(slot&&slot.gameObject.activeInHierarchy)IncludeControl(slot.transform as RectTransform);
+        var gearRail=FindFirstObjectByType<GearRailUI>();
+        if(gearRail)foreach(var gearSlot in gearRail.GetComponentsInChildren<GearIconSlotUI>(true))if(gearSlot.gameObject.activeInHierarchy)IncludeControl(gearSlot.transform as RectTransform);
+        if(!float.IsInfinity(controlsRight)&&_consumableContextRect.rect.width>0)
+        {
+            if(local.x-halfWidth<controlsRight+12f)local.x=controlsRight+12f+halfWidth;
+            if(local.x+halfWidth>parentRect.rect.xMax-12f&&!float.IsInfinity(controlsLeft))
+                local.x=controlsLeft-halfWidth-12f;
+        }
+        local.x = Mathf.Clamp(local.x, parentRect.rect.xMin + halfWidth, parentRect.rect.xMax - halfWidth);
         // On narrower canvases the fan can reach into the side context. Keep details above
         // actual visible cards rather than covering a target or shrinking the text.
         var holder = (handField != null ? handField : CardManager.Instance?.handField)?.cardsHolder;
@@ -846,7 +879,13 @@ public class ActionButtonsUI : MonoBehaviour
         var definition = _selectedConsumable.Definition;
         if (definition.effectType == ConsumableEffectType.ApplyEnhancement)
         {
-            if (cards.SelectedCards.Count != 1) { RefreshAll(); return; }
+            if (cards.SelectedCards.Count != 1)
+            {
+                if(ContextualTooltipUI.Instance&&_enhancementTargetUI&&_enhancementTargetUI.CanOpenConsumableTarget&&cards.CanUseConsumableAtSlot(_selectedConsumableSlot,combat))
+                {int slot=_selectedConsumableSlot;ClearSelectedConsumable();_enhancementTargetUI.OpenConsumableTarget(slot);}
+                else RefreshAll();
+                return;
+            }
             var target = cards.SelectedCards[0]?.data;
             if (target == null || !ReferenceEquals(cards.FindOwnedCard(target.Id), target) ||
                 !cards.CanTargetConsumableAtSlot(_selectedConsumableSlot, target.Id))
@@ -906,7 +945,18 @@ public class ActionButtonsUI : MonoBehaviour
             RefreshAll();
             return;
         }
-        SellSelectedConsumable();
+        var dialog=Object.FindFirstObjectByType<ConfirmationDialogUI>();
+        var coordinator=Object.FindFirstObjectByType<GameplayMenuCoordinator>();
+        if(ContextualTooltipUI.Instance&&dialog&&coordinator&&RunManager.Instance?.CanSellItems==true&&_selectedConsumable!=null&&!GameplayInputGate.IsBlocked)
+        {
+            int slot=_selectedConsumableSlot;var item=_selectedConsumable;int price=item.Definition.price;
+            dialog.Open(coordinator,"Sell Trick?",$"Sell {item.Definition.displayName} for {price/2} Credits? This removes this copy and its remaining charges.","SELL",()=>
+            {
+                if(CardManager.Instance.GetConsumableInstanceAtSlot(slot)==item&&item.Definition.price==price&&
+                    RunManager.Instance.SellConsumable(slot,item,price)){ClearSelectedConsumable();RefreshAll();}
+            });
+        }
+        else SellSelectedConsumable();
     }
 
     void DiscardSelectedConsumable()
@@ -976,6 +1026,7 @@ public class ActionButtonsUI : MonoBehaviour
             var consumable = cards.GetConsumableAtSlot(i);
             bool isSelected = _selectedConsumableSlot == i && ReferenceEquals(_selectedConsumable, cards.GetConsumableInstanceAtSlot(i)) &&
                 !cards.IsEnemyTargeting && !cards.IsHandEnhancementTargeting;
+            var style=button.GetComponent<EditorialButton>();if(style)style.selected=isSelected;
             if (button.targetGraphic) button.targetGraphic.color = consumable == null
                 ? new Color(0.14f, 0.22f, 0.23f, 0.3f)
                 : isSelected ? new Color(0.32f, 0.58f, 0.78f, 1f) : new Color(0.25f, 0.34f, 0.30f, 0.85f);
@@ -983,13 +1034,20 @@ public class ActionButtonsUI : MonoBehaviour
             {
                 int stackCount = cards.GetConsumableStackCountAtSlot(i);
                 var activeItem = cards.GetConsumableInstanceAtSlot(i);
+                string compactIcon = consumable != null ? consumable.icon ?? string.Empty : string.Empty;
+                if (DealbreakUIStyle.Theme && compactIcon.Length > 2) compactIcon = compactIcon.Substring(0, 2);
                 label.text = consumable == null
                     ? string.Empty
-                    : $"{consumable.icon} {consumable.displayName}" +
+                    : (DealbreakUIStyle.Theme?compactIcon:$"{consumable.icon} {consumable.displayName}") +
                         (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
                         (consumable.uses > 1 && activeItem != null
-                            ? $" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
+                            ? DealbreakUIStyle.Theme?$" {activeItem.RemainingCharges}/{consumable.uses}":$" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
                 label.gameObject.SetActive(consumable != null);
+                if (DealbreakUIStyle.Theme)
+                {
+                    label.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+                    label.overflowMode = TMPro.TextOverflowModes.Truncate;
+                }
             }
             // Keep slots raycastable for drag/reorder even when use is currently unavailable;
             // CardManager revalidates every click/drop against current combat state.

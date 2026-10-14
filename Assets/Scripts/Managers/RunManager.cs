@@ -153,6 +153,7 @@ public partial class RunManager : Singleton<RunManager>
 
     protected override void OnDestroy()
     {
+        GameplayBalanceTelemetry.Finish("interrupted");
         UnsubscribeFromCombatResults();
         Reset();
         base.OnDestroy();
@@ -203,6 +204,7 @@ public partial class RunManager : Singleton<RunManager>
         CardManager.Instance.DealHand();
         BuildHeadlinerDeck();
         Timing.StartNewRun(CurrentMapIndex);
+        GameplayBalanceTelemetry.Begin(runSeed);
         OnRunStarted?.Invoke(runSeed);
         NextCycle();
         SaveGameService.Checkpoint(this, true);
@@ -2287,6 +2289,7 @@ public partial class RunManager : Singleton<RunManager>
             Timing.CompleteCurrentMap(false);
             Timing.StopRun();
             IsRunCompleted = true;
+            GameplayBalanceTelemetry.Finish("completed");
             OnRunCompleted?.Invoke();
             return;
         }
@@ -2297,6 +2300,7 @@ public partial class RunManager : Singleton<RunManager>
         {
             Timing.StopRun();
             IsRunCompleted = true;
+            GameplayBalanceTelemetry.Finish("completed");
             OnRunCompleted?.Invoke();
             return;
         }
@@ -2335,6 +2339,7 @@ public partial class RunManager : Singleton<RunManager>
 
     public void AbandonRun()
     {
+        GameplayBalanceTelemetry.Finish("abandoned");
         SaveGameService.EndRun(this);
         Timing.StopRun();
     }

@@ -171,6 +171,12 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             !cards.CanUseConsumableAtSlot(slotIndex, CombatManager.Instance)) return;
         Hide();
         _sourceConsumable = cards.GetConsumableInstanceAtSlot(slotIndex);
+        if(ContextualTooltipUI.Instance)
+        {
+            var market=Object.FindFirstObjectByType<ShopUI>();
+            if(market&&market.panel&&market.panel.activeInHierarchy)
+            {_originPanel=market.panel;_restoreOriginOnClose=true;_originPanel.SetActive(false);}
+        }
         _consumableSlotIndex = slotIndex;
         _mutationSlotIndex = item.effectType == ConsumableEffectType.ApplyEnhancement ? -1 : slotIndex;
         _targetingCombatState = CombatManager.Instance.currentState;
@@ -233,6 +239,13 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             _targetListViewport.SetActive(true);
             CompactRect(_targetListViewport.transform as RectTransform, new Vector2(0.04f, 0.15f), new Vector2(0.96f, 0.67f), Vector2.zero);
         }
+        if (ContextualTooltipUI.Instance && cardsContainer && cardsContainer.TryGetComponent<GridLayoutGroup>(out var grid))
+        {
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 3;
+            grid.cellSize = new Vector2(184f, 54f);
+            grid.spacing = new Vector2(10f, 10f);
+        }
     }
 
     public void OpenEventEnhancement(int choiceIndex)
@@ -266,7 +279,9 @@ public sealed class EnhancementTargetUI : MonoBehaviour
             var obj = Instantiate(cardButtonPrefab, cardsContainer);
             obj.name = $"EventEnhancement_{enhancement.id}";
             var label = obj.GetComponentInChildren<TMP_Text>();
-            if (label) label.text = $"{enhancement.icon} {enhancement.displayName}\n{enhancement.description}";
+            if (label) label.text = $"{enhancement.icon} {enhancement.displayName}"+(ContextualTooltipUI.Instance?string.Empty:$"\n{enhancement.description}");
+            var detail=obj.GetComponent<ContextualInfoTrigger>()??obj.AddComponent<ContextualInfoTrigger>();
+            detail.category="Mod";detail.title=enhancement.displayName;detail.description=enhancement.description;detail.allowWhileBlocked=true;
             var button = obj.GetComponent<Button>();
             if (button) button.onClick.AddListener(() => SelectEventEnhancement(enhancement));
         }
