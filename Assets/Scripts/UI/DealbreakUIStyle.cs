@@ -27,7 +27,23 @@ public static class DealbreakUIStyle
         var frame=rect.GetComponent<EditorialFrame>();frame.raycastTarget=false;
         frame.ink=Theme.ink;frame.rim=Theme.slate;frame.fill=paper?Theme.paper:Theme.charcoal;
         frame.accent=Theme.brick;frame.compact=compact;frame.border=compact?4:9;frame.corner=compact?13:25;frame.Refresh();
-        if(!compact)
+        var surface=target.GetComponent<EditorialSurface>();
+        frame.enabled=!surface||surface.treatment!=EditorialSurface.Treatment.Open;
+        if(surface)
+        {
+            frame.corner=surface.treatment==EditorialSurface.Treatment.Dialog?25:surface.treatment==EditorialSurface.Treatment.Node?26:0;
+            frame.border=surface.treatment==EditorialSurface.Treatment.Open?0:3;
+            frame.fill=surface.treatment is EditorialSurface.Treatment.Paper or EditorialSurface.Treatment.Portrait?Theme.paper:Theme.charcoal;
+            frame.showAccent=false;frame.showShadow=surface.treatment is EditorialSurface.Treatment.Paper or EditorialSurface.Treatment.Portrait or EditorialSurface.Treatment.Dialog;
+        }
+        else if(compact){frame.corner=0;frame.border=2;frame.showAccent=false;frame.showShadow=false;}
+        foreach(Transform child in rect)child.gameObject.SetActive(!surface&&!compact);
+        if(surface&&surface.treatment is EditorialSurface.Treatment.Paper or EditorialSurface.Treatment.Portrait)
+        {
+            var grain=Child(rect,"Paper Grain",typeof(RawImage));Place(grain,.015f,.015f,.985f,.985f);
+            var image=grain.GetComponent<RawImage>();image.texture=Theme.paperTexture;image.uvRect=new Rect(.10f,.15f,.8f,.7f);image.color=new Color(1,1,1,.045f);image.raycastTarget=false;grain.gameObject.SetActive(true);
+        }
+        if(!surface&&!compact)
         {
             TextureStrip(rect,"Paper Print",paper?Theme.paperTexture:Theme.slateTexture,new Rect(0,.75f,1,.2f),.07f,true);
             var accent=Child(rect,"Ink Corner",typeof(RawImage));Place(accent,.01f,.80f,.13f,.99f);
@@ -53,22 +69,24 @@ public static class DealbreakUIStyle
         foreach(var label in button.GetComponentsInChildren<TMP_Text>(true))
         {
             bool offer=button.GetComponent<ShopOfferUI>()!=null;
-            Text(label,offer?label.name.Contains("Price")?Theme.numericFont:Theme.bodyFont:Theme.headingFont,
-                Mathf.Max(18,Mathf.Min(24,label.fontSize)),role==EditorialButton.Role.Primary?Theme.ink:Theme.paper);
+            bool paper=button.GetComponent<EditorialSurface>()?.treatment==EditorialSurface.Treatment.Paper;
+            bool open=button.GetComponent<EditorialSurface>()?.treatment==EditorialSurface.Treatment.Open;
+            Text(label,paper?Theme.bodyFont:offer?label.name.Contains("Price")?Theme.numericFont:Theme.bodyFont:Theme.headingFont,
+                paper?21:open?29:Mathf.Max(18,Mathf.Min(24,label.fontSize)),paper||!open&&role==EditorialButton.Role.Primary?Theme.ink:Theme.paper);
             label.margin=new Vector4(8,2,8,2);label.fontStyle=FontStyles.Normal;
         }
     }
     public static void Text(TMP_Text text,TMP_FontAsset font,float size,Color color)
     {
         if(!text)return;text.font=font;text.fontSize=size;text.fontSizeMin=size;text.fontSizeMax=size;
-        text.enableAutoSizing=false;text.color=color;text.raycastTarget=text.GetComponent<ContextualInfoTrigger>()!=null;
+        text.enableAutoSizing=false;text.color=color;text.raycastTarget=text.GetComponent<ContextualInfoTrigger>()!=null||text.GetComponentInParent<PathNodeButtonUI>()!=null;
     }
     public static void ApplyHierarchy(Transform root)
     {
         if(!root||!Theme)return;
         foreach(var text in root.GetComponentsInChildren<TMP_Text>(true))
         {
-            if(text.GetComponentInParent<CardView>()!=null)continue;
+            if(text.GetComponentInParent<CardView>()!=null||text.GetComponentInParent<ShopOfferUI>()!=null)continue;
             string name=text.name.ToLowerInvariant();
             bool numeric=name.Contains("health")||name.Contains("hp")||name.Contains("credits")||name.Contains("count")||name.Contains("capacity")||name.Contains("damage");
             bool heading=name.Contains("title")||name.Contains("heading")||name.Contains("header");
@@ -98,7 +116,7 @@ public static class DealbreakUIStyle
         foreach(var button in root.GetComponentsInChildren<Button>(true))
         {
             string name=button.name.ToLowerInvariant();
-            if(name=="blocker")continue;
+            if(name=="blocker"||button.GetComponent<ShopOfferUI>())continue;
             var role=name.Contains("discard")||name.Contains("abandon")||name.Contains("delete")||name.Contains("quit")||name.Contains("replace")?EditorialButton.Role.Destructive:
                 name.Contains("confirm")||name.Contains("buy")||name.Contains("play")||name.Contains("newrun")||name.Contains("start")||name.Contains("apply")||name.StartsWith("use")?EditorialButton.Role.Primary:
                 name.Contains("back")||name.Contains("cancel")||name.Contains("sort")||name.Contains("pass")||name.Contains("pause")||name.Contains("build")?EditorialButton.Role.Quiet:EditorialButton.Role.Secondary;
@@ -142,7 +160,7 @@ public static class DealbreakUIStyle
         {Frame(input.transform,false,true);input.transition=Selectable.Transition.None;}
         foreach(var toggle in root.GetComponentsInChildren<Toggle>(true))
         {
-            var backing=toggle.transform.Find("Background");if(!backing)continue;
+            var backing=toggle.transform.Find("Background")??toggle.transform.Find("Box");if(!backing)continue;
             var frame=Frame(backing,false,true);frame.corner=4;frame.border=2;frame.showAccent=false;frame.Refresh();
             toggle.transition=Selectable.Transition.None;if(toggle.graphic)toggle.graphic.color=Theme.ochre;
         }

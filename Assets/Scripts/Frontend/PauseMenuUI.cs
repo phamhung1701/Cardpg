@@ -78,6 +78,9 @@ public sealed class PauseMenuUI : MonoBehaviour
         }
         if (coordinator != null && !coordinator.HasBlockingMenu)
         {
+            var market=Object.FindFirstObjectByType<ShopUI>();
+            if(market&&market.storeComposition&&market.panel&&market.panel.activeInHierarchy&&!string.IsNullOrEmpty(market.SelectedOfferId))
+            {market.ClearOfferSelection();return;}
             if (ContextualTooltipUI.Instance && ContextualTooltipUI.Instance.DismissPinned()) return;
             OpenPause();
         }

@@ -57,7 +57,7 @@ public static class DealbreakUIOverhaulAuthoring
     public static void ApplyAll()
     {
         if(Application.isPlaying)throw new System.InvalidOperationException("Author UI in Edit Mode.");
-        BuildDesignSystem();ApplyGame();ApplyMainMenu();ApplyPrefabs();AssetDatabase.SaveAssets();
+        BuildDesignSystem();ApplyGame();ApplyMainMenu();ApplyPrefabs();DealbreakUIArtCorrectionAuthoring.Apply();AssetDatabase.SaveAssets();
     }
     public static void ApplyGame()
     {

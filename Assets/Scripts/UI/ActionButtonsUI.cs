@@ -1002,13 +1002,20 @@ public class ActionButtonsUI : MonoBehaviour
             {
                 int stackCount = cards.GetConsumableStackCountAtSlot(i);
                 var activeItem = cards.GetConsumableInstanceAtSlot(i);
+                string compactIcon = consumable != null ? consumable.icon ?? string.Empty : string.Empty;
+                if (DealbreakUIStyle.Theme && compactIcon.Length > 2) compactIcon = compactIcon.Substring(0, 2);
                 label.text = consumable == null
                     ? string.Empty
-                    : (DealbreakUIStyle.Theme?$"{consumable.icon}":$"{consumable.icon} {consumable.displayName}") +
+                    : (DealbreakUIStyle.Theme?compactIcon:$"{consumable.icon} {consumable.displayName}") +
                         (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
                         (consumable.uses > 1 && activeItem != null
                             ? DealbreakUIStyle.Theme?$" {activeItem.RemainingCharges}/{consumable.uses}":$" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
                 label.gameObject.SetActive(consumable != null);
+                if (DealbreakUIStyle.Theme)
+                {
+                    label.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+                    label.overflowMode = TMPro.TextOverflowModes.Truncate;
+                }
             }
             // Keep slots raycastable for drag/reorder even when use is currently unavailable;
             // CardManager revalidates every click/drop against current combat state.

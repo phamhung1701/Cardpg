@@ -386,6 +386,52 @@ public sealed class Phase7EShopSelectionTests
 
     ShopOffer GearOffer() => _run.GetCurrentShopOffers().First(offer => offer.kind == ShopOfferKind.Gear);
 
+    [Test]
+    public void InlineBuy_SelectsWithoutPayment_ThenPurchasesOnceAndRemovesStock()
+    {
+        _ui.storeComposition=true;_cards.AddCredits(50);_ui.RefreshPresentation();
+        var offer=GearOffer();string id=offer.StableId;int before=_cards.credits;
+        Click(offer);var view=ButtonFor(offer).GetComponent<ShopOfferUI>();
+        Assert.That(_cards.credits,Is.EqualTo(before));
+        Assert.That(view.descriptionLabel.text,Does.Contain(offer.gear.description));
+        Assert.That(view.purchaseButton.gameObject.activeSelf,Is.True);
+        view.purchaseButton.onClick.Invoke();
+        Assert.That(_cards.credits,Is.EqualTo(before-offer.price));
+        Assert.That(_cards.ownedGear,Has.Count.EqualTo(1));
+        Assert.That(_ui.panel.GetComponentsInChildren<ShopOfferUI>().Any(v=>v.Offer.StableId==id),Is.False);
+        _ui.PurchaseInline(id); // A queued/stale submit must not charge or grant again.
+        Assert.That(_cards.credits,Is.EqualTo(before-offer.price));
+        Assert.That(_cards.ownedGear,Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void InlineSelection_SwitchesAndCancelsWithoutPurchasing()
+    {
+        _ui.storeComposition=true;_cards.AddCredits(50);_ui.RefreshPresentation();
+        var offers=_run.GetCurrentShopOffers().Where(o=>!o.IsService).Take(2).ToArray();
+        Click(offers[0]);Click(offers[1]);
+        Assert.That(ButtonFor(offers[0]).GetComponent<ShopOfferUI>().purchaseButton.gameObject.activeSelf,Is.False);
+        Assert.That(ButtonFor(offers[1]).GetComponent<ShopOfferUI>().purchaseButton.gameObject.activeSelf,Is.True);
+        _ui.ClearOfferSelection();_ui.PurchaseInline(offers[1].StableId);
+        Assert.That(_ui.SelectedOfferId,Is.Null);Assert.That(_cards.credits,Is.EqualTo(50));Assert.That(_cards.ownedGear,Is.Empty);
+    }
+
+    [Test]
+    public void InlineStake_UsesEmbeddedControlsAndRemovesCompletedService()
+    {
+        _ui.storeComposition=true;_cards.AddCredits(10);_ui.RefreshPresentation();
+        var offer=ReplaceCurrentServiceWith(ShopOfferKind.Investment);
+        Click(offer);InvokeUi("AdjustSelectedQuantityUp");
+        Assert.That(offer.investmentStake,Is.EqualTo(2));
+        var view=ButtonFor(offer).GetComponent<ShopOfferUI>();
+        var input=_ui.panel.GetComponentsInChildren<TMP_InputField>().Single();
+        Assert.That(input.transform.parent,Is.EqualTo(view.transform));
+        Assert.That(view.statusLabel.text,Is.Empty);
+        view.purchaseButton.onClick.Invoke();_ui.PurchaseInline(offer.StableId);
+        Assert.That(_cards.credits,Is.EqualTo(8));Assert.That(_run.PendingInvestmentCount,Is.EqualTo(1));
+        Assert.That(_ui.panel.GetComponentsInChildren<ShopOfferUI>().Any(v=>v.Offer.StableId==offer.StableId),Is.False);
+    }
+
     Button ButtonFor(ShopOffer offer) => _ui.panel.GetComponentsInChildren<Button>(true)
         .Last(button => button && button.name == $"ShopOffer_{offer.StableId.Replace(':', '_')}");
 

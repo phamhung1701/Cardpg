@@ -96,6 +96,9 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     void RefreshEnemyTargetPresentation()
     {
+        var frame=transform.Find("Editorial Frame")?.GetComponent<EditorialFrame>();
+        if(frame&&DealbreakUIStyle.Theme)
+        {frame.rim=_enemyTargeting&&_enemyTargetEligible?DealbreakUIStyle.Theme.ochre:DealbreakUIStyle.Theme.slate;frame.border=_enemyTargeting&&_enemyTargetEligible?6:3;frame.Refresh();}
         if (!_enemyTargeting)
         {
             if (_targetCanvasGroup != null) _targetCanvasGroup.alpha = 1f;
@@ -103,7 +106,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             if (_baseTargetScale != Vector3.zero) transform.localScale = _baseTargetScale;
             return;
         }
-        if (statusText) statusText.text = _enemyTargetEligible ? "Click to target" : "Not a valid target";
+        if (statusText) statusText.text = _enemyTargetEligible ? "VALID TARGET" : "Not a valid target";
         if (_targetCanvasGroup != null) _targetCanvasGroup.alpha = _enemyTargetEligible ? 1f : 0.38f;
         if (_targetOutline != null)
         {
@@ -236,8 +239,10 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             portrait.type = Image.Type.Simple;
             portrait.preserveAspect = true;
             portrait.color = Color.white;
-            rect.anchorMin = combatPortraits ? new Vector2(0.03f, 0.28f) : new Vector2(0.03f, 0.08f);
-            rect.anchorMax = combatPortraits ? new Vector2(0.97f, 0.97f) : new Vector2(0.30f, 0.92f);
+            rect.anchorMin = combatPortraits ? new Vector2(0.09f, 0.31f) : new Vector2(0.03f, 0.08f);
+            rect.anchorMax = combatPortraits ? new Vector2(0.91f, 0.92f) : new Vector2(0.30f, 0.92f);
+            if(rect.parent.name=="PortraitWindow")
+            {rect.anchorMin=new Vector2(-.025f,-.07f);rect.anchorMax=new Vector2(1.025f,1.03f);}
             rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = Vector2.zero;
         }

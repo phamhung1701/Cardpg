@@ -206,6 +206,7 @@ public class DeckViewerUI : MonoBehaviour
                 wrapper.anchoredPosition = rect.anchoredPosition;
                 wrapper.sizeDelta = rect.sizeDelta * effectiveScale;
                 inspection.GetComponent<Image>().color = Color.clear;
+                inspection.AddComponent<EditorialSurface>().treatment = EditorialSurface.Treatment.Open;
                 inspection.GetComponent<Button>().transition = Selectable.Transition.None;
                 var detail = inspection.GetComponent<ContextualInfoTrigger>();
                 detail.pinOnClick = true;

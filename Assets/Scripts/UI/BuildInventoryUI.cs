@@ -20,10 +20,11 @@ public sealed class BuildInventoryUI : MonoBehaviour
     {
         if(!coordinator||GameplayInputGate.IsBlocked||!CardManager.Instance)return;
         Rebuild();
-        var card=(RectTransform)panel.transform.GetChild(0);var parent=(RectTransform)panel.transform;
+        var card=(RectTransform)panel.transform.Find("Build Inventory Card");var parent=(RectTransform)panel.transform;
         int count=Mathf.Max(CardManager.Instance.ownedGear.Count,CardManager.Instance.BackpackSlotsUsed);
-        card.anchorMin=card.anchorMax=new Vector2(.5f,.5f);card.anchoredPosition=Vector2.zero;
-        card.sizeDelta=new Vector2(Mathf.Min(1100,parent.rect.width*.72f),Mathf.Min(parent.rect.height*.78f,260+Mathf.Clamp(count,1,4)*80));
+        if(card.GetComponent<EditorialSurface>()?.treatment==EditorialSurface.Treatment.Open)DealbreakUIStyle.Place(card,0,0,1,1);
+        else {card.anchorMin=card.anchorMax=new Vector2(.5f,.5f);card.anchoredPosition=Vector2.zero;
+        card.sizeDelta=new Vector2(Mathf.Min(1100,parent.rect.width*.72f),Mathf.Min(parent.rect.height*.78f,260+Mathf.Clamp(count,1,4)*80));}
         coordinator.Push(this,panel,closeButton);
     }
     public void Close(){if(coordinator&&coordinator.IsTop(this))coordinator.Pop(this);}
@@ -35,7 +36,7 @@ public sealed class BuildInventoryUI : MonoBehaviour
         for(int i=0;i<cards.ownedGear.Count;i++)
         {
             var gear=cards.ownedGear[i];if(!gear)continue;
-            var row=Row(gearRows,gear.displayName,"Inspect in Gear rail",new ContextualInfo("Gear",gear.displayName,gear.description));
+            var row=Row(gearRows,gear.displayName,gear.description,new ContextualInfo("Gear",gear.displayName,gear.description));
             long id=cards.GetGearInstanceAt(i)?.Id??0;
             row.onClick.AddListener(()=>{
                 Close();var rail=Object.FindFirstObjectByType<GearRailUI>();
@@ -48,22 +49,23 @@ public sealed class BuildInventoryUI : MonoBehaviour
         {
             var item=cards.GetConsumableInstanceAtSlot(i);if(item==null)continue;
             int slot=i;
-            var row=Row(trickRows,item.Definition.displayName,$"{cards.GetConsumableStackCountAtSlot(i)} copies • {item.RemainingCharges} charges",
+            var row=Row(trickRows,item.Definition.displayName,$"Stack {cards.GetConsumableStackCountAtSlot(i)} • Charges {item.RemainingCharges}\n{item.Definition.description}",
                 new ContextualInfo("Trick",item.Definition.displayName,item.Definition.description));
             row.onClick.AddListener(()=>{Close();if(cards.GetConsumableInstanceAtSlot(slot)==item)actions.backpackSlotButtons[slot].onClick.Invoke();});
         }
-        if(gearRows.childCount==0)Row(gearRows,"No Gear equipped","Acquire Gear in the Black Market.",new ContextualInfo("Gear","Empty build","Your equipped Gear will appear here."));
-        if(trickRows.childCount==0)Row(trickRows,"No Tricks carried","Acquire Tricks in the Black Market.",new ContextualInfo("Trick","Empty slots","Your carried Tricks will appear here."));
+        if(gearRows.childCount==0)Row(gearRows,"No Gear equipped",string.Empty,new ContextualInfo("Gear","Empty build",string.Empty));
+        if(trickRows.childCount==0)Row(trickRows,"No Tricks carried",string.Empty,new ContextualInfo("Trick","Empty slots",string.Empty));
         DealbreakUIStyle.ApplyHierarchy(panel.transform);
     }
     static void Clear(Transform rows){while(rows.childCount>0){var child=rows.GetChild(0);child.SetParent(null);child.gameObject.SetActive(false);Destroy(child.gameObject);}}
     static Button Row(Transform rows,string name,string subtitle,ContextualInfo info)
     {
         var r=DealbreakUIStyle.Child(rows,"Item "+rows.childCount,typeof(Image),typeof(Button),typeof(LayoutElement));
-        r.GetComponent<LayoutElement>().preferredHeight=80;
+        r.gameObject.AddComponent<EditorialSurface>().treatment=EditorialSurface.Treatment.Paper;
         var text=DealbreakUIStyle.Child(r,"Item name",typeof(TextMeshProUGUI));DealbreakUIStyle.Place(text,.06f,.15f,.94f,.90f);
-        var label=text.GetComponent<TMP_Text>();label.text=$"{name}\n<size=70%>{subtitle}</size>";label.fontSize=22;label.alignment=TextAlignmentOptions.MidlineLeft;
-        var trigger=r.gameObject.AddComponent<ContextualInfoTrigger>();trigger.describe=()=>info;trigger.allowWhileBlocked=true;
+        var label=text.GetComponent<TMP_Text>();label.text=$"<size=125%><b>{name}</b></size>\n{subtitle}";DealbreakUIStyle.Text(label,DealbreakUIStyle.Theme.bodyFont,21,DealbreakUIStyle.Theme.ink);label.alignment=TextAlignmentOptions.TopLeft;
+        r.GetComponent<LayoutElement>().preferredHeight=Mathf.Max(100,label.GetPreferredValues(label.text,Mathf.Max(240,((RectTransform)rows).rect.width*.88f),0).y+36);
+        var trigger=r.gameObject.AddComponent<ContextualInfoTrigger>();trigger.describe=()=>info;trigger.allowWhileBlocked=true;trigger.enabled=false;
         return r.GetComponent<Button>();
     }
 }

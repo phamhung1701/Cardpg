@@ -75,9 +75,10 @@ public sealed class ConsumableRewardUI : MonoBehaviour
             instance.name = $"RewardChoice_{i}_{item.id}";
             var label = instance.GetComponentInChildren<TMP_Text>(true);
             if (label) label.text = (_selectedChoice == i ? "SELECTED  " : string.Empty) +
-                $"{item.icon} {item.displayName}"+(ContextualTooltipUI.Instance?string.Empty:$"\n{item.description}");
+                $"<size=125%><b>{item.displayName}</b></size>\n{item.description}";
             var detail=instance.GetComponent<ContextualInfoTrigger>()??instance.AddComponent<ContextualInfoTrigger>();
-            detail.category="Trick reward";detail.title=item.displayName;detail.description=item.description;detail.allowWhileBlocked=true;
+            detail.category="Trick reward";detail.title=item.displayName;detail.description=item.description;detail.allowWhileBlocked=true;detail.enabled=false;
+            var surface=instance.GetComponent<EditorialSurface>();if(!surface)surface=instance.AddComponent<EditorialSurface>();surface.treatment=EditorialSurface.Treatment.Paper;
             var button = instance.GetComponent<Button>();
             if (button) button.onClick.AddListener(() => SelectChoice(choiceIndex));
         }

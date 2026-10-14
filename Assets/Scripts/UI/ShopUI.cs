@@ -16,6 +16,8 @@ public class ShopUI : MonoBehaviour
     public TMP_Text selectedOfferText;
     public Button buyButton;
     public EnhancementTargetUI enhancementTargetUI;
+    public bool storeComposition;
+    Transform _controlHome;
     TMP_InputField _investmentStakeInput;
     TMP_Text _investmentResultText;
     Button _quantityDecreaseButton;
@@ -34,6 +36,83 @@ public class ShopUI : MonoBehaviour
     public string SelectedOfferId => _selectedOfferId;
     public bool SellingMode => _sellingMode;
     public void RefreshPresentation() => RefreshItems();
+
+    public void PurchaseInline(string stableId)
+    {
+        if (_selectedOfferId != stableId || _sellingMode || GameplayInputGate.IsBlocked) return;
+        OnBuy(); // Existing RunManager transaction guards, identity checks and payment authority.
+    }
+    void ReturnQuantityControls()
+    {
+        if(!_controlHome)return;
+        if(_investmentStakeInput)_investmentStakeInput.transform.SetParent(_controlHome,false);
+        if(_quantityDecreaseButton)_quantityDecreaseButton.transform.SetParent(_controlHome,false);
+        if(_quantityIncreaseButton)_quantityIncreaseButton.transform.SetParent(_controlHome,false);
+    }
+    void ShowInlineSelection()
+    {
+        if(!storeComposition)return;
+        foreach(var view in panel.GetComponentsInChildren<ShopOfferUI>())
+        {
+            bool selected=view.Offer?.StableId==_selectedOfferId;
+            view.SetSelected(selected);
+            if(selected&&view.Offer.kind is ShopOfferKind.Supply or ShopOfferKind.Investment)
+            {
+                var controls=new Transform[]{_quantityDecreaseButton?.transform,_investmentStakeInput?.transform,_quantityIncreaseButton?.transform};
+                float[] offsets={0,40,188};float[] widths={36,144,36};
+                for(int i=0;i<controls.Length;i++)if(controls[i])
+                {
+                    var rect=(RectTransform)controls[i];rect.SetParent(view.transform,false);
+                    rect.anchorMin=rect.anchorMax=new Vector2(.05f,0);rect.pivot=new Vector2(0,0);
+                    rect.anchoredPosition=new Vector2(offsets[i],14);rect.sizeDelta=new Vector2(widths[i],46);
+                }
+            }
+        }
+        RefreshInlinePrices();
+        Canvas.ForceUpdateCanvases();
+        var selectedView=panel.GetComponentsInChildren<ShopOfferUI>().FirstOrDefault(v=>v.Offer?.StableId==_selectedOfferId);
+        var scroll=selectedView?selectedView.GetComponentInParent<ScrollRect>():null;
+        if(scroll&&scroll.viewport&&scroll.content)
+        {
+            var bounds=RectTransformUtility.CalculateRelativeRectTransformBounds(scroll.viewport,selectedView.transform);
+            float below=scroll.viewport.rect.yMin-bounds.min.y;
+            if(below>0)scroll.content.anchoredPosition+=Vector2.up*below;
+            scroll.velocity=Vector2.zero;
+        }
+    }
+    void RefreshInlinePrices()
+    {
+        if(!storeComposition||!panel)return;
+        foreach(var view in panel.GetComponentsInChildren<ShopOfferUI>())
+        {
+            var offer=view.Offer;if(offer==null)continue;
+            int cost=offer.kind==ShopOfferKind.Investment?offer.investmentStake:offer.kind==ShopOfferKind.Supply?offer.supplyQuantity*3:offer.price;
+            string reason=RunManager.Instance.GetShopOfferUnavailableReason(offer.StableId);
+            view.statusLabel.text=reason.Replace("Backpack Full","Trick slots full");view.RefreshPurchase(reason,cost);
+            if(_investmentStakeInput&&_investmentStakeInput.textComponent)
+            {var text=_investmentStakeInput.textComponent;text.alignment=TextAlignmentOptions.Midline;text.font=DealbreakUIStyle.Theme.numericFont;text.fontSize=22;}
+        }
+    }
+    public void ClearOfferSelection()
+    {
+        ReturnQuantityControls();_selectedOfferId=null;
+        if(_investmentStakeInput)_investmentStakeInput.gameObject.SetActive(false);
+        if(_quantityDecreaseButton)_quantityDecreaseButton.gameObject.SetActive(false);
+        if(_quantityIncreaseButton)_quantityIncreaseButton.gameObject.SetActive(false);
+        ShowInlineSelection();UpdateSelectionDetails();
+    }
+    void Update()
+    {
+        if(!storeComposition||!panel||!panel.activeInHierarchy||GameplayInputGate.IsBlocked||_sellingMode)return;
+        if(UnityEngine.InputSystem.Keyboard.current?.escapeKey.wasPressedThisFrame==true)
+        {if(!Object.FindFirstObjectByType<PauseMenuUI>())ClearOfferSelection();return;}
+        var mouse=UnityEngine.InputSystem.Mouse.current;
+        if(mouse?.leftButton.wasPressedThisFrame!=true||UnityEngine.EventSystems.EventSystem.current==null)return;
+        var pointer=new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current){position=mouse.position.ReadValue()};
+        var hits=new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
+        UnityEngine.EventSystems.EventSystem.current.RaycastAll(pointer,hits);
+        if(hits.Count>0&&!hits[0].gameObject.GetComponentInParent<ShopOfferUI>())ClearOfferSelection();
+    }
 
     void OnEnable()
     {
@@ -83,6 +162,7 @@ public class ShopUI : MonoBehaviour
     {
         if (panel == null || _investmentStakeInput != null) return;
         var card = itemsContainer != null ? itemsContainer.parent : panel.transform;
+        _controlHome=card;
         _selectedOfferRect = selectedOfferText != null ? selectedOfferText.rectTransform : null;
         if (_selectedOfferRect != null) _selectedOfferAnchorMax = _selectedOfferRect.anchorMax;
         var inputObject = new GameObject("InvestmentStakeInput", typeof(RectTransform), typeof(Image), typeof(TMP_InputField));
@@ -157,6 +237,7 @@ public class ShopUI : MonoBehaviour
             _sellModeLabel.raycastTarget = false;
         }
         _sellModeButton.onClick.RemoveListener(ToggleSellingMode);
+        if(storeComposition)DealbreakUIStyle.Place(_sellModeButton.transform,.055f,.04f,.20f,.10f);
         _sellModeButton.onClick.AddListener(ToggleSellingMode);
         if (buyButton)
         {
@@ -168,23 +249,7 @@ public class ShopUI : MonoBehaviour
 
     void OnBuyOrConfirmSale()
     {
-        if (_sellingMode) OnConfirmSale();
-        else
-        {
-            var offer=FindOffer(_selectedOfferId);
-            var dialog=Object.FindFirstObjectByType<ConfirmationDialogUI>();
-            var coordinator=Object.FindFirstObjectByType<GameplayMenuCoordinator>();
-            if(ContextualTooltipUI.Instance&&dialog&&coordinator&&offer!=null&&offer.kind!=ShopOfferKind.Enhancement&&
-                RunManager.Instance.CanPurchaseShopOffer(offer.StableId)&&!GameplayInputGate.IsBlocked)
-            {
-                string id=offer.StableId;
-                dialog.Open(coordinator,"Confirm purchase",selectedOfferText?selectedOfferText.text:offer.DisplayName,"BUY",()=>
-                {
-                    if(_selectedOfferId==id)OnBuy();
-                });
-            }
-            else OnBuy();
-        }
+        if (_sellingMode) OnConfirmSale(); else OnBuy();
     }
 
     void ToggleSellingMode()
@@ -302,6 +367,7 @@ public class ShopUI : MonoBehaviour
         scroll.viewport = sr; scroll.content = cr; scroll.horizontal = false; scroll.vertical = true;
         scroll.movementType = ScrollRect.MovementType.Clamped;
         _servicesContainer = cr;
+        if(storeComposition){DealbreakUIStyle.Place(viewport,.055f,.15f,.62f,.80f);DealbreakUIStyle.Place(sr,.66f,.15f,.95f,.80f);}
         foreach (var text in parent.GetComponentsInChildren<TMP_Text>(true))
             if (text.text == "ARTIFACT & ENHANCEMENT SHOP") text.text = "SHOP — GOODS & SERVICES";
     }
@@ -325,6 +391,7 @@ public class ShopUI : MonoBehaviour
     void HandleInvestmentStakeEdited(string value)
     {
         var selected = FindOffer(_selectedOfferId);
+        if(selected==null||selected.kind is not (ShopOfferKind.Supply or ShopOfferKind.Investment))return;
         if (selected != null && selected.kind == ShopOfferKind.Supply)
         {
             var run = RunManager.Instance;
@@ -399,6 +466,7 @@ public class ShopUI : MonoBehaviour
             return;
         }
 #endif
+        ReturnQuantityControls();
         _selectedOfferId = null;
         if (_investmentStakeInput) _investmentStakeInput.gameObject.SetActive(false);
         if (_quantityDecreaseButton) _quantityDecreaseButton.gameObject.SetActive(false);
@@ -432,7 +500,7 @@ public class ShopUI : MonoBehaviour
         AddSectionHeading("GOODS", itemsContainer);
         AddGoodsRefreshButton();
         AddSectionHeading("SERVICES — once per Shop", _servicesContainer ?? itemsContainer);
-        foreach (var offer in offers.OrderBy(offer => offer.IsService ? 1 : 0))
+        foreach (var offer in offers.Where(offer=>!offer.purchased).OrderBy(offer => offer.IsService ? 1 : 0))
         {
             string unavailableReason = RunManager.Instance != null
                 ? RunManager.Instance.GetShopOfferUnavailableReason(offer.StableId)
@@ -458,7 +526,7 @@ public class ShopUI : MonoBehaviour
 
             var button = btn.GetComponent<Button>();
             var inspect=btn.GetComponent<ContextualInfoTrigger>()??btn.AddComponent<ContextualInfoTrigger>();
-            inspect.pinOnClick=true;
+            inspect.pinOnClick=false;inspect.enabled=!storeComposition;
             string inspectedId=offer.StableId;
             inspect.describe=()=>
             {
@@ -469,7 +537,9 @@ public class ShopUI : MonoBehaviour
                     live.Description(CardManager.Instance)+$"\n\n{price}\n"+RunManager.Instance.GetShopOfferUnavailableReason(inspectedId));
             };
             DealbreakUIStyle.ApplyHierarchy(btn.transform);
-            (btn.GetComponent<ShopOfferUI>()??btn.AddComponent<ShopOfferUI>()).Bind(offer,unavailableReason);
+            var offerView=btn.GetComponent<ShopOfferUI>();if(!offerView)offerView=btn.AddComponent<ShopOfferUI>();
+            offerView.Bind(offer,unavailableReason);
+            string purchaseId=offer.StableId;offerView.purchaseButton.onClick.AddListener(()=>PurchaseInline(purchaseId));
             if (button)
             {
                 // Unavailable offers remain inspectable; Buy always revalidates in RunManager.
@@ -613,6 +683,7 @@ public class ShopUI : MonoBehaviour
             outline.enabled = selected;
         }
         UpdateSelectionDetails();
+        ShowInlineSelection();
     }
 
     void RefreshQuantityControls()
@@ -669,12 +740,15 @@ public class ShopUI : MonoBehaviour
             foreach (var offer in offers)
                 if (offer.StableId == _selectedOfferId) { selected = offer; break; }
         RefreshQuantityControls();
+        RefreshInlinePrices();
+        if(buyButton&&storeComposition)buyButton.gameObject.SetActive(_sellingMode);
 
         if (buyButton) buyButton.interactable = selected != null &&
             (selected.kind is ShopOfferKind.Supply or ShopOfferKind.Investment
                 ? RunManager.Instance.CanPurchaseShopOffer(selected.StableId)
                 : selected.kind != ShopOfferKind.Supply);
         if (!selectedOfferText) return;
+        if(storeComposition)selectedOfferText.gameObject.SetActive(_sellingMode||!string.IsNullOrEmpty(failure));
         if (!string.IsNullOrEmpty(failure))
         {
             selectedOfferText.text = failure;
@@ -682,9 +756,7 @@ public class ShopUI : MonoBehaviour
         }
         if (selected == null)
         {
-            selectedOfferText.text = _sellingMode
-                ? "Select a Gear item to sell, or select a backpack Trick to use or sell it."
-                : "Select an offer to inspect before buying.";
+            selectedOfferText.text = string.Empty;
             return;
         }
         var reason = RunManager.Instance.GetShopOfferUnavailableReason(_selectedOfferId);

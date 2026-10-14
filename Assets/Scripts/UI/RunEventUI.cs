@@ -8,6 +8,7 @@ using UnityEngine.UI;
 [UnityEngine.Scripting.APIUpdating.MovedFrom(true, sourceNamespace: "", sourceAssembly: "CardPG.Runtime", sourceClassName: "RunEventUI")]
 public class RunEventUI : MonoBehaviour
 {
+    public bool editorialLayout;
     public GameObject panel;
     public TMP_Text titleLabel;
     public TMP_Text descriptionLabel;
@@ -73,6 +74,7 @@ public class RunEventUI : MonoBehaviour
             int choiceIndex = i;
             var choice = definition.choices[i];
             var buttonObject = Instantiate(choiceButtonPrefab, choicesContainer);
+            if(editorialLayout){var surface=buttonObject.GetComponent<EditorialSurface>();if(!surface)surface=buttonObject.AddComponent<EditorialSurface>();surface.treatment=EditorialSurface.Treatment.Paper;}
             buttonObject.name = $"EventChoice_{choiceIndex + 1}";
             string unavailableReason = RunManager.Instance.GetEventOptionUnavailableReason(choiceIndex);
             if (string.IsNullOrEmpty(unavailableReason) && !HasRequiredInteractionUI(choice.interaction))
@@ -89,9 +91,9 @@ public class RunEventUI : MonoBehaviour
                     description = description.Replace("owned cards", "cards in your hand")
                         .Replace("owned card", "card in your hand")
                         .Replace("then a card.", "then click a card in your hand.");
-                label.text = ContextualTooltipUI.Instance?$"<b>{choice.label}</b>{status}":$"<b>{choice.label}</b>\n{description}{status}";
+                label.text = $"<size=125%><b>{choice.label}</b></size>\n{description}{status}";
                 var detail=buttonObject.GetComponent<ContextualInfoTrigger>()??buttonObject.AddComponent<ContextualInfoTrigger>();
-                detail.category="Incident choice";detail.title=choice.label;detail.description=description+"\n"+unavailableReason;
+                detail.category="Incident choice";detail.title=choice.label;detail.description=description+"\n"+unavailableReason;detail.enabled=false;
             }
 
             var button = buttonObject.GetComponent<Button>();
@@ -246,6 +248,7 @@ public class RunEventUI : MonoBehaviour
 
     void ConfigureChoicesViewport()
     {
+        if(editorialLayout&&_choicesViewport){DealbreakUIStyle.Place(_choicesViewport,.46f,.12f,.94f,.80f);return;}
         if (_choicesViewport == null || _choicesViewport.parent is not RectTransform card) return;
         Rect cardRect = card.rect;
         if (cardRect.width <= 0f || cardRect.height <= 0f) return;

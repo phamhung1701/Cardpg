@@ -24,10 +24,13 @@ public sealed class EditorialButton : MonoBehaviour, IPointerEnterHandler, IPoin
             _labels=GetComponentsInChildren<TMPro.TMP_Text>(true);
             _lastAvailable=available;
         }
-        foreach(var label in _labels)if(label)label.color=available&&role==Role.Primary?theme.ink:theme.paper;
+        bool open=GetComponent<EditorialSurface>()?.treatment==EditorialSurface.Treatment.Open;
+        bool paper=GetComponent<EditorialSurface>()?.treatment==EditorialSurface.Treatment.Paper;
+        foreach(var label in _labels)if(label)label.color=paper?theme.ink:open&&available&&(_hover||_focus||selected)?theme.ochre:!open&&available&&role==Role.Primary?theme.ink:theme.paper;
         if(button.targetGraphic)button.targetGraphic.color=Color.clear;
         Color fill=role==Role.Primary?theme.ochre:role==Role.Destructive?theme.brick:role==Role.Quiet?theme.charcoal:theme.slate;
-        if (!available) fill=Color.Lerp(fill,theme.charcoal,.68f);
+        if(paper)fill=theme.paper;
+        if (!available) fill=Color.Lerp(fill,paper?theme.slate:theme.charcoal,paper?.2f:.68f);
         else if (_hover||_focus||selected) fill=Color.Lerp(fill,theme.paper,.13f);
         if (_pressed&&available) fill=Color.Lerp(fill,theme.ink,.2f);
         Color rim=selected||available&&(_hover||_focus)?theme.paper:theme.slate;

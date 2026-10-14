@@ -1,0 +1,18 @@
+{
+    "RunId": "8a8c7f6935a44104bdf78d61a2d6da31",
+    "UnityRunGuid": "77e48962-9ba5-4d85-becd-236e4ea02e97",
+    "Status": "passed",
+    "Mode": "play",
+    "CurrentTest": "",
+    "StartedAtTicks": 639275535071551029,
+    "FinishedAtTicks": 639275535149284805,
+    "DurationMs": 2017,
+    "Total": 7,
+    "Passed": 7,
+    "Failed": 0,
+    "Skipped": 0,
+    "Inconclusive": 0,
+    "Error": "",
+    "Failures": [],
+    "Results": []
+}

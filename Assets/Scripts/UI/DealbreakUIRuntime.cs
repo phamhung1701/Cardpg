@@ -46,15 +46,15 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
         {
             var button=buttons[i];if(!button)continue;string description=details[i];
             var trigger=button.GetComponent<ContextualInfoTrigger>()??button.gameObject.AddComponent<ContextualInfoTrigger>();
-            trigger.describe=()=>new ContextualInfo("Combat action",button.GetComponentInChildren<TMP_Text>().text,
-                description+(button.IsInteractable()?string.Empty:"\n\nUnavailable in the current state."));
+            trigger.describe=()=>button.IsInteractable()?null:new ContextualInfo("Combat action",button.GetComponentInChildren<TMP_Text>().text,
+                description+"\n\nUnavailable in the current state.");
         }
         if(actions.GetComponent<RunStatusUI>() is RunStatusUI status)
         {
             var headliner=status.headlinerProgressLabel.GetComponent<ContextualInfoTrigger>();
             if(headliner)headliner.describe=()=>new ContextualInfo("Headliner",RunManager.Instance?.CurrentHeadliner?.enemyName,RunManager.Instance?.CurrentHeadlinerDescription);
             var progress=status.runProgressLabel.GetComponent<ContextualInfoTrigger>();
-            if(progress)progress.describe=()=>new ContextualInfo("Run",status.runProgressLabel.text,$"Seed {RunManager.Instance?.RunSeed}\n\nChoose and inspect routes on the Map.");
+            if(progress)progress.describe=()=>new ContextualInfo("Run",status.runProgressLabel.text,$"Seed {RunManager.Instance?.RunSeed}");
         }
     }
     void LateUpdate()
@@ -71,7 +71,7 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
             bool hidden=overlay||RunResultUI.IsShowingResult||!CombatActive&&!choosingCard||choosingCard&&i>1;
             group.alpha=hidden?0:1;group.blocksRaycasts=!hidden;group.interactable=!hidden;
         }
-        bool hideInventory=map&&map.panel&&map.panel.activeInHierarchy||incident&&incident.panel&&incident.panel.activeInHierarchy;
+        bool hideInventory=map&&map.panel&&map.panel.activeInHierarchy||incident&&incident.panel&&incident.panel.activeInHierarchy||market&&market.storeComposition&&market.panel&&market.panel.activeInHierarchy;
         if(inventoryGroups!=null)foreach(var group in inventoryGroups)if(group){group.alpha=hideInventory?0:1;group.blocksRaycasts=!hideInventory;group.interactable=!hideInventory;}
         if(actions&&CombatActive)
         {

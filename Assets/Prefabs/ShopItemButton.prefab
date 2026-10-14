@@ -154,7 +154,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &5647996790518046239
 RectTransform:
   m_ObjectHideFlags: 0
@@ -365,7 +365,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &5464798541123115689
 RectTransform:
   m_ObjectHideFlags: 0
@@ -484,10 +484,10 @@ MonoBehaviour:
   rim: {r: 0.29, g: 0.36, b: 0.41, a: 1}
   fill: {r: 0.105, g: 0.13, b: 0.155, a: 1}
   accent: {r: 0.66, g: 0.27, b: 0.22, a: 1}
-  border: 4
-  corner: 13
-  showShadow: 1
-  showAccent: 1
+  border: 2
+  corner: 0
+  showShadow: 0
+  showAccent: 0
   compact: 1
   shadowOffset: {x: 8, y: -9}
 --- !u!222 &5284777504311542198
@@ -515,7 +515,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &8817450307225518700
 RectTransform:
   m_ObjectHideFlags: 0

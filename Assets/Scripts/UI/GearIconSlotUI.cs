@@ -115,6 +115,8 @@ public sealed class GearIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPoint
             iconLabel.color = _mergeSelected||_detailSelected ? new Color(0.11f, 0.13f, 0.2f) : new Color(0.96f, 0.92f, 0.78f);
             iconLabel.text = gear != null && !string.IsNullOrWhiteSpace(gear.icon)
                 ? gear.icon : "?";
+            if(DealbreakUIStyle.Theme&&iconLabel.text.Length>2)iconLabel.text=iconLabel.text.Substring(0,2);
+            if(DealbreakUIStyle.Theme){iconLabel.fontSize=21;iconLabel.textWrappingMode=TextWrappingModes.NoWrap;iconLabel.overflowMode=TextOverflowModes.Truncate;}
             iconLabel.gameObject.SetActive(!hasAuthoredIcon);
         }
     }
