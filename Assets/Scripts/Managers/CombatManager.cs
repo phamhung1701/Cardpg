@@ -185,6 +185,7 @@ public partial class CombatManager : Singleton<CombatManager>
             validatedEnemies.Add(enemy);
         }
 
+        GameplayBalanceTelemetry.EncounterStarted(validatedEnemies, encounterKind);
         UnsubscribeFromEnemies();
         CardManager.Instance?.CancelCardInteractions();
         _enemies.Clear();
@@ -558,6 +559,7 @@ public partial class CombatManager : Singleton<CombatManager>
         {
             if (!cm.TryDiscardCards(cards)) return false;
             _playerAttackActionCount++;
+            GameplayBalanceTelemetry.Record("attack_action", "", cards.Count);
             ConsumeAndAdvancePhase7ActionState(cardInstances, isOverflowAutoPlay);
             if (vampiricCost > 0) TakeRunDamage(vampiricCost);
 
@@ -631,6 +633,7 @@ public partial class CombatManager : Singleton<CombatManager>
                 if (!reactionFailed && !player.IsDefeated && isRoyalFamily && !target.IsDefeated)
                 {
                     // Explicit defeat outcome: never encode instant defeat as an oversized damage request.
+                    GameplayBalanceTelemetry.Record("instant_defeat", target.DisplayName, target.currentHp);
                     target.DefeatInstantly();
                     HandleEnemyDefeated(target);
                 }
@@ -921,6 +924,7 @@ public partial class CombatManager : Singleton<CombatManager>
             {
                 if (reductions[i] <= 0) continue;
                 int remainingDamage = Mathf.Max(0, incomingAttacks[i] - reductions[i]);
+                GameplayBalanceTelemetry.Record("block", "", reductions[i], effectiveBlocks[i]);
                 OnDefenseAttackResolved?.Invoke(new DefenseAttackResult(
                     attackSources[i], i, incomingAttacks[i], effectiveBlocks[i], reductions[i], remainingDamage));
             }
@@ -1278,6 +1282,7 @@ public partial class CombatManager : Singleton<CombatManager>
             _encounterActualHpLost += result.ActualHpLost;
             NotifyPlayerHealthChanged();
         }
+        GameplayBalanceTelemetry.Damage(result);
         OnDamageResolved?.Invoke(result);
         return result;
     }
@@ -1522,6 +1527,7 @@ public partial class CombatManager : Singleton<CombatManager>
     {
         if (_reactionFaulted || _encounterResolved) return;
         _reactionFaulted = true;
+        GameplayBalanceTelemetry.Invalidate("reaction_fault:" + phase);
         _queuedPlayerTurnGrants.Clear();
         Log($"Encounter halted after reaction processing failed during {phase}. No victory or rewards will be granted.");
         ResolveEncounter(EncounterResult.Defeat);
@@ -1552,6 +1558,7 @@ public partial class CombatManager : Singleton<CombatManager>
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (_encounterResolved || _reactionFaulted || _isResolvingAction || AttackCardPresentationUI.Instance != null && AttackCardPresentationUI.Instance.IsBusy) return false;
+        GameplayBalanceTelemetry.Invalidate("forced_defeat");
         ResolveEncounter(EncounterResult.Defeat);
         return true;
 #else
@@ -1608,6 +1615,7 @@ public partial class CombatManager : Singleton<CombatManager>
             Log("Player defeated! Game Over!");
         }
 
+        GameplayBalanceTelemetry.EncounterEnded(result);
         OnEncounterResult?.Invoke(result);
     }
 
@@ -1654,6 +1662,7 @@ public partial class CombatManager : Singleton<CombatManager>
     {
         if (!CanTakeRunDamage(amount)) return 0;
         int dealt = player.TakeDamage(amount);
+        if (dealt > 0) GameplayBalanceTelemetry.Record("run_hp_cost", "", dealt);
         if (dealt > 0) NotifyPlayerHealthChanged();
         return dealt;
     }
@@ -1873,6 +1882,7 @@ public partial class CombatManager : Singleton<CombatManager>
 
     void NotifyPlayerHealthChanged()
     {
+        GameplayBalanceTelemetry.Health(player.currentHealth, player.maxHealth);
         OnPlayerHealthChanged?.Invoke(player.currentHealth, player.maxHealth);
     }
 
@@ -1905,11 +1915,13 @@ public partial class CombatManager : Singleton<CombatManager>
     void SetState(GameState state)
     {
         currentState = state;
+        if (state == GameState.PlayerTurn) GameplayBalanceTelemetry.Record("player_turn");
         OnStateChanged?.Invoke(state);
     }
 
     public void Reset()
     {
+        GameplayBalanceTelemetry.Finish("interrupted");
         UnsubscribeFromEnemies();
         _enemies.Clear();
         _pendingAttacks.Clear();
