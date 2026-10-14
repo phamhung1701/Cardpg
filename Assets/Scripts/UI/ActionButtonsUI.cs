@@ -815,6 +815,28 @@ public class ActionButtonsUI : MonoBehaviour
             local.x -= _consumableContextRect.rect.width + buttonRect.rect.width + 24f;
         local.x = Mathf.Clamp(local.x, parentRect.rect.xMin + halfWidth, parentRect.rect.xMax - halfWidth);
         local.y += buttonRect.rect.height * 0.5f;
+        // Keep the action cluster clear of every Trick and Gear slot, not only its source slot.
+        float controlsLeft=float.PositiveInfinity,controlsRight=float.NegativeInfinity;
+        void IncludeControl(RectTransform control)
+        {
+            if(!control)return;
+            control.GetWorldCorners(corners);
+            for(int i=0;i<corners.Length;i++)
+            {
+                float x=parentRect.InverseTransformPoint(corners[i]).x;
+                controlsLeft=Mathf.Min(controlsLeft,x);controlsRight=Mathf.Max(controlsRight,x);
+            }
+        }
+        if(backpackSlotButtons!=null)foreach(var slot in backpackSlotButtons)if(slot&&slot.gameObject.activeInHierarchy)IncludeControl(slot.transform as RectTransform);
+        var gearRail=FindFirstObjectByType<GearRailUI>();
+        if(gearRail)foreach(var gearSlot in gearRail.GetComponentsInChildren<GearIconSlotUI>(true))if(gearSlot.gameObject.activeInHierarchy)IncludeControl(gearSlot.transform as RectTransform);
+        if(!float.IsInfinity(controlsRight)&&_consumableContextRect.rect.width>0)
+        {
+            if(local.x-halfWidth<controlsRight+12f)local.x=controlsRight+12f+halfWidth;
+            if(local.x+halfWidth>parentRect.rect.xMax-12f&&!float.IsInfinity(controlsLeft))
+                local.x=controlsLeft-halfWidth-12f;
+        }
+        local.x = Mathf.Clamp(local.x, parentRect.rect.xMin + halfWidth, parentRect.rect.xMax - halfWidth);
         // On narrower canvases the fan can reach into the side context. Keep details above
         // actual visible cards rather than covering a target or shrinking the text.
         var holder = (handField != null ? handField : CardManager.Instance?.handField)?.cardsHolder;

@@ -10,6 +10,7 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
         CombatManager.Instance.currentState is GameState.PlayerTurn or GameState.EnemyAttacking;
     public TMP_Text handCount,trickCapacity;
     public RectTransform playerState;
+    public RectTransform handFrame;
     public CanvasGroup[] combatGroups;
     public CanvasGroup[] inventoryGroups;
     public ActionButtonsUI actions;
@@ -20,7 +21,13 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
     int _lastSignature;
     int _lastShopCredits=int.MinValue;
     bool? _lastDefenseLayout;
-    void Start(){RefreshStyles();BindTricks();BindControls();}
+    Vector2 _handAnchorMin,_handAnchorMax;
+    void Start()
+    {
+        if(!handFrame&&actions&&actions.handField)handFrame=actions.handField.transform.parent as RectTransform;
+        if(handFrame){_handAnchorMin=handFrame.anchorMin;_handAnchorMax=handFrame.anchorMax;}
+        RefreshStyles();BindTricks();BindControls();
+    }
     public void RefreshStyles(){DealbreakUIStyle.ApplyHierarchy(transform);}
     void BindTricks()
     {
@@ -65,12 +72,22 @@ public sealed class DealbreakUIRuntime : MonoBehaviour
         if(trickCapacity&&CardManager.Instance!=null)trickCapacity.text=$"{CardManager.Instance.BackpackSlotsUsed}/{CardManager.Instance.BackpackCapacity}";
         bool overlay=map&&map.panel&&map.panel.activeInHierarchy||market&&market.panel&&market.panel.activeInHierarchy||
             incident&&incident.panel&&incident.panel.activeInHierarchy;
+        bool compactHand=overlay&&!RunResultUI.IsShowingResult;
+        if(handFrame)
+        {
+            Vector2 targetMin=compactHand?new Vector2(.17f,.02f):_handAnchorMin;
+            Vector2 targetMax=compactHand?new Vector2(.83f,.46f):_handAnchorMax;
+            handFrame.anchorMin=Vector2.Lerp(handFrame.anchorMin,targetMin,1f-Mathf.Exp(-Time.unscaledDeltaTime*9f));
+            handFrame.anchorMax=Vector2.Lerp(handFrame.anchorMax,targetMax,1f-Mathf.Exp(-Time.unscaledDeltaTime*9f));
+        }
         bool choosingCard=CardManager.Instance&&CardManager.Instance.IsHandEnhancementTargeting;
         if(combatGroups!=null)for(int i=0;i<combatGroups.Length;i++)
         {
             var group=combatGroups[i];if(!group)continue;
-            // Keep the hand and its capacity available to the existing targeting input route.
-            bool hidden=overlay||RunResultUI.IsShowingResult||!CombatActive&&!choosingCard||choosingCard&&i>1;
+            // Keep the original hand renderer visible in a compact bottom strip on route/shop screens.
+            bool handVisual=compactHand&&i==0;
+            bool handCounter=compactHand&&i==1;
+            bool hidden=overlay&&!handVisual&&!handCounter||RunResultUI.IsShowingResult||!CombatActive&&!choosingCard&&!handVisual&&!handCounter||choosingCard&&i>1;
             group.alpha=hidden?0:1;group.blocksRaycasts=!hidden;group.interactable=!hidden;
         }
         bool hideInventory=RunResultUI.IsShowingResult;

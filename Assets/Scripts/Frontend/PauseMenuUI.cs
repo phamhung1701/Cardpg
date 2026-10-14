@@ -25,7 +25,13 @@ public sealed class PauseMenuUI : MonoBehaviour
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         DevModePanelUI.InstallGame(this);
 #endif
-        if (pauseButton) { pauseButton.onClick.AddListener(OpenPause); KeyButtonBorderStyle.Apply(pauseButton); }
+        if (pauseButton)
+        {
+            pauseButton.onClick.AddListener(OpenPause);
+            KeyButtonBorderStyle.Apply(pauseButton);
+            var style=pauseButton.GetComponent<EditorialButton>();
+            if(style)style.emphasized=true;
+        }
         if (resumeButton) { resumeButton.onClick.AddListener(Resume); KeyButtonBorderStyle.Apply(resumeButton); }
         if (settingsButton) settingsButton.onClick.AddListener(OpenSettings);
         if (restartButton) restartButton.onClick.AddListener(BackToMainMenu);
@@ -103,13 +109,6 @@ public sealed class PauseMenuUI : MonoBehaviour
     {
         if (!IsOpen || settingsMenu == null || coordinator == null) return;
         settingsMenu.Open(coordinator, () => { });
-    }
-
-    public void OpenInventory()
-    {
-        if (!IsOpen || !coordinator.IsTop(this)) return;
-        Resume();
-        Object.FindFirstObjectByType<BuildInventoryUI>()?.Open();
     }
 
     public void ConfirmRestart()

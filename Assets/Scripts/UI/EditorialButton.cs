@@ -11,6 +11,7 @@ public sealed class EditorialButton : MonoBehaviour, IPointerEnterHandler, IPoin
     public EditorialFrame frame;
     public Button button;
     public bool selected;
+    public bool emphasized;
     bool _hover,_pressed,_focus;
     TMPro.TMP_Text[] _labels;
     bool? _lastAvailable;
@@ -31,10 +32,11 @@ public sealed class EditorialButton : MonoBehaviour, IPointerEnterHandler, IPoin
         Color fill=role==Role.Primary?theme.ochre:role==Role.Destructive?theme.brick:role==Role.Quiet?theme.charcoal:theme.slate;
         if(paper)fill=theme.paper;
         if (!available) fill=Color.Lerp(fill,paper?theme.slate:theme.charcoal,paper?.2f:.68f);
-        else if (_hover||_focus||selected) fill=Color.Lerp(fill,theme.paper,.13f);
-        if (_pressed&&available) fill=Color.Lerp(fill,theme.ink,.2f);
-        Color rim=selected||available&&(_hover||_focus)?theme.paper:theme.slate;
-        if(fill!=frame.fill||rim!=frame.rim){frame.fill=fill;frame.rim=rim;frame.Refresh();}
+        else if (_hover||_focus||selected) fill=Color.Lerp(fill,emphasized?theme.ochre:theme.paper,emphasized?.24f:.13f);
+        if (_pressed&&available) fill=Color.Lerp(fill,emphasized?theme.brick:theme.ink,emphasized?.36f:.2f);
+        Color rim=_pressed&&available&&emphasized?theme.brick:selected||available&&(_hover||_focus)?theme.paper:emphasized?theme.ochre:theme.slate;
+        float border=emphasized?Mathf.Max(4f,frame.border):frame.border;
+        if(fill!=frame.fill||rim!=frame.rim||border!=frame.border){frame.border=border;frame.fill=fill;frame.rim=rim;frame.Refresh();}
         var rect=frame.rectTransform;
         var target=new Vector2(0,_pressed&&available?-2:available&&(_hover||_focus)?2:0);
         rect.anchoredPosition=Vector2.Lerp(rect.anchoredPosition,target,1-Mathf.Exp(-Time.unscaledDeltaTime*24));

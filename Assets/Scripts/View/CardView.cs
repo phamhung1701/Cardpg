@@ -369,6 +369,7 @@ public class CardView : MonoBehaviour,
         if (_isDragging || _suppressClick) return;
         var manager = CardManager.Instance;
         if (manager == null || GameplayInputGate.IsBlocked && !manager.CanRouteHandEnhancementTargetClick ||
+            !DealbreakUIRuntime.CombatActive && !manager.CanRouteHandEnhancementTargetClick ||
             eventData.button != PointerEventData.InputButton.Left) return;
         manager.HandleCardClick(this);
     }
@@ -381,9 +382,11 @@ public class CardView : MonoBehaviour,
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (GameplayInputGate.IsBlocked || eventData.button != PointerEventData.InputButton.Left || _isDragging) return;
+        if (eventData.button != PointerEventData.InputButton.Left || _isDragging) return;
         var manager = CardManager.Instance;
-        if (manager == null || manager.dragCanvas == null || homeField == null)
+        if (GameplayInputGate.IsBlocked && (manager == null || !manager.CanRouteHandEnhancementTargetClick) ||
+            manager == null || !DealbreakUIRuntime.CombatActive && !manager.CanRouteHandEnhancementTargetClick ||
+            manager.dragCanvas == null || homeField == null)
             return;
 
         if (!_hasGrabPoint) CaptureGrabPoint(eventData);

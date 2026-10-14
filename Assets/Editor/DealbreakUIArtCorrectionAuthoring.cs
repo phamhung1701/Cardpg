@@ -1,7 +1,6 @@
 using System.Linq;
 using TMPro;
 using UnityEditor;
-using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -82,9 +81,8 @@ public static class DealbreakUIArtCorrectionAuthoring
         DealbreakUIStyle.Place(shop.buyButton.transform,.55f,.04f,.74f,.10f);shop.buyButton.gameObject.SetActive(false);
         DealbreakUIStyle.Place(shop.selectedOfferText.transform,.055f,.04f,.52f,.11f);shop.selectedOfferText.text=string.Empty;
         var inventory=front.GetComponentInChildren<BuildInventoryUI>(true);
-        var build=Button(store,"ShopBuild","BUILD",.23f,.04f,.38f,.10f);
-        for(int i=build.onClick.GetPersistentEventCount()-1;i>=0;i--)UnityEventTools.RemovePersistentListener(build.onClick,i);
-        if(inventory)UnityEventTools.AddPersistentListener(build.onClick,inventory.Open);
+        if(inventory){inventory.enabled=false;if(inventory.panel)inventory.panel.SetActive(false);}
+        var build=store.Find("ShopBuild");if(build)build.gameObject.SetActive(false);
         var map=root.GetComponent<PathScreenUI>();Environment(map.panel.transform);OpenPanel(map.panel.transform);
         map.laneSpacing=190;
         DealbreakUIStyle.Place(map.mapContainer,.05f,.24f,.95f,.80f);

@@ -132,7 +132,10 @@ public static class DealbreakUIOverhaulAuthoring
         var front=scene.GetRootGameObjects().First(g=>g.name=="FrontendOverlayCanvas").transform;
         foreach(Transform child in front)StyleOverlay(child);
         var styles=front.GetComponent<DealbreakUIRuntime>()??front.gameObject.AddComponent<DealbreakUIRuntime>();
-        Inventory(front,root,a);
+        var buildInventory=front.GetComponent<BuildInventoryUI>();
+        if(buildInventory){buildInventory.enabled=false;if(buildInventory.panel)buildInventory.panel.SetActive(false);}
+        foreach(var obsolete in root.GetComponentsInChildren<Transform>(true).Where(t=>t.name is "Inspect Build Button" or "Pause Inventory" or "ShopBuild"))
+            obsolete.gameObject.SetActive(false);
         CompactModal(front.Find("PausePanel"),.34f,.18f,.66f,.82f);
         CompactModal(front.Find("ConfirmationPanel"),.29f,.30f,.71f,.70f);
         // Keep bound scroll views and command callbacks; only their visual grouping changes.
@@ -166,39 +169,6 @@ public static class DealbreakUIOverhaulAuthoring
         var group=target.GetComponent<CanvasGroup>();
         if(!group)group=target.gameObject.AddComponent<CanvasGroup>();
         return group;
-    }
-    static void Inventory(Transform front,Transform root,ActionButtonsUI actions)
-    {
-        var view=front.GetComponent<BuildInventoryUI>()??front.gameObject.AddComponent<BuildInventoryUI>();
-        view.coordinator=front.GetComponent<GameplayMenuCoordinator>();view.actions=actions;
-        var panel=DealbreakUIStyle.Child(front,"BuildInventoryPanel",typeof(Image));DealbreakUIStyle.Place(panel,0,0,1,1);
-        panel.GetComponent<Image>().color=new Color(.025f,.03f,.04f,.95f);
-        var card=DealbreakUIStyle.Child(panel,"Build Inventory Card");DealbreakUIStyle.Place(card,.18f,.13f,.82f,.87f);DealbreakUIStyle.Frame(card);
-        var heading=DealbreakUIStyle.Child(card,"Inventory Header",typeof(TextMeshProUGUI));DealbreakUIStyle.Place(heading,.06f,.80f,.80f,.95f);
-        heading.GetComponent<TMP_Text>().text="YOUR BUILD";heading.GetComponent<TMP_Text>().fontSize=32;heading.GetComponent<TMP_Text>().overflowMode=TextOverflowModes.Overflow;
-        var capacity=DealbreakUIStyle.Child(card,"Inventory Capacity",typeof(TextMeshProUGUI));DealbreakUIStyle.Place(capacity,.06f,.68f,.92f,.78f);
-        view.capacity=capacity.GetComponent<TMP_Text>();view.capacity.fontSize=19;
-        view.gearRows=InventoryList(card,"GEAR",.06f,.47f);view.trickRows=InventoryList(card,"TRICKS",.53f,.94f);
-        var close=DealbreakUIStyle.Child(card,"Close Inventory",typeof(Image),typeof(Button));DealbreakUIStyle.Place(close,.77f,.06f,.94f,.14f);
-        close.anchorMin=close.anchorMax=new Vector2(.86f,.11f);close.anchoredPosition=Vector2.zero;close.sizeDelta=new Vector2(180,44);
-        var label=DealbreakUIStyle.Child(close,"Label",typeof(TextMeshProUGUI));DealbreakUIStyle.Place(label,0,0,1,1);label.GetComponent<TMP_Text>().text="BACK";label.GetComponent<TMP_Text>().alignment=TextAlignmentOptions.Center;
-        view.closeButton=close.GetComponent<Button>();view.panel=panel.gameObject;panel.gameObject.SetActive(false);
-        var button=DealbreakUIStyle.Child(root,"Inspect Build Button",typeof(Image),typeof(Button));DealbreakUIStyle.Place(button,.69f,.934f,.795f,.977f);
-        label=DealbreakUIStyle.Child(button,"Label",typeof(TextMeshProUGUI));DealbreakUIStyle.Place(label,0,0,1,1);label.GetComponent<TMP_Text>().text="BUILD";label.GetComponent<TMP_Text>().alignment=TextAlignmentOptions.Center;
-        var command=button.GetComponent<Button>();
-        while(command.onClick.GetPersistentEventCount()>0)UnityEditor.Events.UnityEventTools.RemovePersistentListener(command.onClick,0);
-        if(command.onClick.GetPersistentEventCount()==0)UnityEditor.Events.UnityEventTools.AddPersistentListener(command.onClick,view.Open);
-    }
-    static RectTransform InventoryList(Transform card,string title,float x1,float x2)
-    {
-        var heading=DealbreakUIStyle.Child(card,title+" Heading",typeof(TextMeshProUGUI));DealbreakUIStyle.Place(heading,x1,.57f,x2,.66f);heading.GetComponent<TMP_Text>().text=title;heading.GetComponent<TMP_Text>().fontSize=22;heading.GetComponent<TMP_Text>().overflowMode=TextOverflowModes.Overflow;
-        var viewport=DealbreakUIStyle.Child(card,title+" Viewport",typeof(Image),typeof(RectMask2D),typeof(ScrollRect));DealbreakUIStyle.Place(viewport,x1,.19f,x2,.55f);viewport.GetComponent<Image>().color=Color.clear;
-        var rows=DealbreakUIStyle.Child(viewport,"Rows",typeof(VerticalLayoutGroup),typeof(ContentSizeFitter));
-        rows.anchorMin=new(0,1);rows.anchorMax=new(1,1);rows.pivot=new(.5f,1);rows.sizeDelta=Vector2.zero;
-        var layout=rows.GetComponent<VerticalLayoutGroup>();layout.spacing=10;layout.childControlHeight=true;layout.childForceExpandHeight=false;layout.childControlWidth=true;
-        rows.GetComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
-        var scroll=viewport.GetComponent<ScrollRect>();scroll.viewport=viewport;scroll.content=rows;scroll.horizontal=false;scroll.movementType=ScrollRect.MovementType.Clamped;
-        return rows;
     }
     static void DetailFrame(ContextualTooltipUI tooltip)
     {

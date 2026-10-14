@@ -9,6 +9,8 @@ public sealed class MapNodePresentation : MaskableGraphic
     public MapNodeType kind;
     public bool unknown,completed,available;
     bool _focused;
+    float _nextPulse;
+    float _pulse=1f;
     public static void Apply(GameObject obj,PathNode node)
     {
         var surface=obj.GetComponent<EditorialSurface>();if(!surface)surface=obj.AddComponent<EditorialSurface>();surface.treatment=EditorialSurface.Treatment.Open;
@@ -26,7 +28,9 @@ public sealed class MapNodePresentation : MaskableGraphic
         vh.Clear();var r=rectTransform.rect;float radius=Mathf.Min(r.width,r.height)*.5f;
         bool focus=EventSystem.current&&EventSystem.current.currentSelectedGameObject==transform.parent.gameObject;
         Color edge=focus?DealbreakUIStyle.Theme.ochre:completed?DealbreakUIStyle.Theme.paper:available?DealbreakUIStyle.Theme.ochre:DealbreakUIStyle.Theme.slate;
-        Draw(vh,r.center,radius,edge);Draw(vh,r.center,radius-3,DealbreakUIStyle.Theme.ink);
+        float thickness=available?6f:completed?4f:3f;
+        if(available)edge=Color.Lerp(edge,new Color(1f,.35f,.12f,1f),_pulse*.42f);
+        Draw(vh,r.center,radius,edge);Draw(vh,r.center,radius-thickness,DealbreakUIStyle.Theme.ink);
         Draw(vh,r.center,radius-7,completed?DealbreakUIStyle.Theme.slate:DealbreakUIStyle.Theme.charcoal);
     }
     void Draw(VertexHelper vh,Vector2 center,float radius,Color tint)
@@ -40,7 +44,13 @@ public sealed class MapNodePresentation : MaskableGraphic
     void Update()
     {
         bool focused=EventSystem.current&&EventSystem.current.currentSelectedGameObject==transform.parent.gameObject;
-        if(focused==_focused)return;
-        _focused=focused;SetVerticesDirty();
+        bool changed=focused!=_focused;
+        if(changed){_focused=focused;SetVerticesDirty();}
+        if(available&&Time.unscaledTime>=_nextPulse)
+        {
+            _nextPulse=Time.unscaledTime+.08f;
+            float pulse=.5f+.5f*Mathf.Sin(Time.unscaledTime*3.6f);
+            if(Mathf.Abs(pulse-_pulse)>.04f){_pulse=pulse;SetVerticesDirty();}
+        }
     }
 }

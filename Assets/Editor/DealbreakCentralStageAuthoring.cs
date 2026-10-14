@@ -1,7 +1,6 @@
 using System.Linq;
 using TMPro;
 using UnityEditor;
-using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -103,7 +102,7 @@ public static class DealbreakCentralStageAuthoring
         DealbreakUIStyle.Place(status.runProgressLabel.transform, .215f, .52f, .72f, 1);
         DealbreakUIStyle.Place(status.headlinerProgressLabel.transform, .215f, .05f, .76f, .49f);
         status.runProgressLabel.alignment = status.headlinerProgressLabel.alignment = TextAlignmentOptions.Left;
-        status.runProgressLabel.fontSize = 29; status.headlinerProgressLabel.fontSize = 22;
+        status.runProgressLabel.fontSize = 27.5f; status.headlinerProgressLabel.fontSize = 22;
         var logo = DealbreakUIStyle.Child(root.transform, "Dealbreak Shell Title", typeof(TextMeshProUGUI));
         DealbreakUIStyle.Place(logo, .025f, .905f, .18f, .985f);
         logo.GetComponent<TMP_Text>().text = "DEALBREAK";
@@ -136,19 +135,12 @@ public static class DealbreakCentralStageAuthoring
         pause.restartButton.name = "BackToMainMenuButton";
         var result = root.GetComponent<RunResultUI>();
         if (result && result.retrySameSeedButton) result.retrySameSeedButton.gameObject.SetActive(false);
-        // Preserve inventory access without returning a Build control to the Combat HUD.
-        var inventory = scene.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<BuildInventoryUI>(true)).First();
-        var card = pause.resumeButton.transform.parent;
-        var inventoryButton = DealbreakUIStyle.Child(card, "Pause Inventory", typeof(Image), typeof(Button));
-        DealbreakUIStyle.Place(inventoryButton, .08f, .48f, .92f, .56f);
-        var label = DealbreakUIStyle.Child(inventoryButton, "Label", typeof(TextMeshProUGUI));
-        DealbreakUIStyle.Place(label, 0, 0, 1, 1); label.GetComponent<TMP_Text>().text = "INVENTORY";
-        label.GetComponent<TMP_Text>().alignment = TextAlignmentOptions.Center;
-        var button = inventoryButton.GetComponent<Button>();
-        for (int i = button.onClick.GetPersistentEventCount() - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(button.onClick, i);
-        UnityEventTools.AddPersistentListener(button.onClick, pause.OpenInventory);
-        DealbreakUIStyle.Button(button);
-        // Explicit vertical rhythm for the expanded Pause navigation.
+        var inventory = scene.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<BuildInventoryUI>(true)).FirstOrDefault();
+        if (inventory) { inventory.enabled = false; if (inventory.panel) inventory.panel.SetActive(false); }
+        foreach (var obsolete in scene.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<Transform>(true))
+            .Where(t => t.name is "Inspect Build Button" or "Pause Inventory" or "ShopBuild"))
+            obsolete.gameObject.SetActive(false);
+        // Inventory data and its Gear/Trick HUD actions remain owned by gameplay systems.
         DealbreakUIStyle.Place(pause.resumeButton.transform, .08f, .68f, .92f, .76f);
         DealbreakUIStyle.Place(pause.settingsButton.transform, .08f, .58f, .92f, .66f);
         DealbreakUIStyle.Place(pause.restartButton.transform, .08f, .33f, .92f, .42f);

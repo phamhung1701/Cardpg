@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
@@ -16,6 +17,9 @@ public sealed class ContextualTooltipUI : MonoBehaviour
     float _leaveUntil;
     string _lastHeading,_lastBody;
     float _lastWidth;
+    readonly Vector3[] _positionCorners=new Vector3[4];
+    readonly List<CardView> _positionHandViews=new();
+    RectTransform _trickActionsPanel;
     void OnEnable(){Instance=this;Hide();}
     void OnDisable(){if(Instance==this)Instance=null;Hide();}
     public void Inspect(MonoBehaviour source){if(!source)return;_source=source;_dismissed=null;_leaveUntil=float.PositiveInfinity;}
@@ -104,6 +108,68 @@ public sealed class ContextualTooltipUI : MonoBehaviour
         {var c=CardManager.Instance;info=new("Deck","Draw Pile",$"Draw {c.deck.Count}\nDiscard {c.discardPile.Count}\nHand {c.HandCount}/{c.HandCapacity}\n\nSelect to inspect the deck.");return true;}
         return false;
     }
+    bool GetHandBounds(RectTransform parent,out float left,out float right,out float bottom,out float top)
+    {
+        left=bottom=float.PositiveInfinity;right=top=float.NegativeInfinity;
+        var holder=CardManager.Instance?.handField?.cardsHolder;if(!holder)return false;
+        holder.GetComponentsInChildren(false,_positionHandViews);
+        foreach(var view in _positionHandViews)
+        {
+            if(!view||view.data==null)continue;
+            var card=view.visualRoot?view.visualRoot:view.transform as RectTransform;if(!card)continue;
+            card.GetWorldCorners(_positionCorners);
+            foreach(var corner in _positionCorners)
+            {
+                var point=parent.InverseTransformPoint(corner);
+                left=Mathf.Min(left,point.x);right=Mathf.Max(right,point.x);
+                bottom=Mathf.Min(bottom,point.y);top=Mathf.Max(top,point.y);
+            }
+        }
+        return !float.IsInfinity(left);
+    }
+
+    void PositionTrickTooltip(MonoBehaviour source,RectTransform rect,RectTransform parent,float width,float height)
+    {
+        rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.pivot=new Vector2(.5f,.5f);rect.sizeDelta=new Vector2(width,height);
+        var actions=source.GetComponentInParent<Canvas>()?.GetComponent<ActionButtonsUI>();
+        float controlsLeft=float.PositiveInfinity,controlsRight=float.NegativeInfinity;
+        if(actions&&actions.backpackSlotButtons!=null)
+            foreach(var button in actions.backpackSlotButtons)
+            {
+                if(!button||!button.gameObject.activeInHierarchy)continue;
+                var control=button.transform as RectTransform;control.GetWorldCorners(_positionCorners);
+                for(int i=0;i<_positionCorners.Length;i++){float controlX=parent.InverseTransformPoint(_positionCorners[i]).x;controlsLeft=Mathf.Min(controlsLeft,controlX);controlsRight=Mathf.Max(controlsRight,controlX);}
+            }
+        float halfWidth=width*.5f,halfHeight=height*.5f;
+        float x=float.IsInfinity(controlsRight)?parent.rect.xMin+halfWidth+12:controlsRight+halfWidth+12;
+        if(x+halfWidth>parent.rect.xMax-12&&!float.IsInfinity(controlsLeft))x=controlsLeft-halfWidth-12;
+
+        float handTop=float.NegativeInfinity;
+        var holder=(actions&&actions.handField?actions.handField:CardManager.Instance?.handField)?.cardsHolder;
+        if(holder)
+        {
+            holder.GetComponentsInChildren(false,_positionHandViews);
+            foreach(var view in _positionHandViews)
+            {
+                if(!view||view.data==null)continue;
+                var card=view.visualRoot?view.visualRoot:view.transform as RectTransform;if(!card)continue;
+                card.GetWorldCorners(_positionCorners);
+                for(int i=0;i<_positionCorners.Length;i++)handTop=Mathf.Max(handTop,parent.InverseTransformPoint(_positionCorners[i]).y);
+            }
+            if(float.IsNegativeInfinity(handTop)){holder.GetWorldCorners(_positionCorners);for(int i=0;i<_positionCorners.Length;i++)handTop=Mathf.Max(handTop,parent.InverseTransformPoint(_positionCorners[i]).y);}
+        }
+        float y=float.IsNegativeInfinity(handTop)?0:handTop+halfHeight+12;
+        if(!_trickActionsPanel&&actions)_trickActionsPanel=actions.transform.Find("Selected Consumable Actions") as RectTransform;
+        if(_trickActionsPanel&&_trickActionsPanel.gameObject.activeInHierarchy)
+        {
+            _trickActionsPanel.GetWorldCorners(_positionCorners);float actionTop=float.NegativeInfinity;
+            for(int i=0;i<_positionCorners.Length;i++)actionTop=Mathf.Max(actionTop,parent.InverseTransformPoint(_positionCorners[i]).y);
+            y=Mathf.Max(y,actionTop+halfHeight+12);
+        }
+        rect.anchoredPosition=new(Mathf.Clamp(x,parent.rect.xMin+halfWidth+12,parent.rect.xMax-halfWidth-12),
+            Mathf.Clamp(y,parent.rect.yMin+halfHeight+12,parent.rect.yMax-halfHeight-12));
+    }
+
     void Position(MonoBehaviour source,ContextualInfo info)
     {
         var rect=(RectTransform)panel.transform;var parent=(RectTransform)rect.parent;
@@ -111,17 +177,26 @@ public sealed class ContextualTooltipUI : MonoBehaviour
         var layer=panel.GetComponent<Canvas>();if(layer){layer.overrideSorting=true;layer.sortingOrder=Mathf.Max(6,source.GetComponentsInParent<Canvas>().Select(c=>c.sortingOrder).DefaultIfEmpty().Max()+3);}
         bool hand=source.GetComponent<CardView>()?.homeField!=null;
         bool enemy=source.GetComponent<EnemyDisplayUI>()!=null;
+        bool trick=source is ContextualInfoTrigger&&source.GetComponent<Button>()&&source.name.StartsWith("BackpackSlot");
         if (DealbreakUIRuntime.CombatActive && parent.GetComponent<SharedContentStageUI>() &&
-            (hand || enemy || source.GetComponent<GearIconSlotUI>() || source.GetComponent<DrawDeckStackUI>() ||
-                source is ContextualInfoTrigger && source.GetComponent<Button>()))
+            (hand || enemy || source.GetComponent<DrawDeckStackUI>() ||
+                source is ContextualInfoTrigger && source.GetComponent<Button>() && !trick))
         {
-            // The stage ends before this right-hand inspect rail; portraits and targets stay clear.
+            // Combat inspection stays in the dedicated side rail; Gear/Trick use slot-adjacent placement below.
             DealbreakUIStyle.Place(rect, .889f, .525f, .992f, .89f);
             return;
         }
-        float width=Mathf.Min(390,parent.rect.width*.38f);
-        float height=Mathf.Min(parent.rect.height*.65f,Mathf.Clamp(body.GetPreferredValues(info.Body,width-44,0).y+140,220,440));
-        if(DealbreakUIRuntime.CombatActive&&(hand||enemy||source.GetComponent<GearIconSlotUI>()||source.GetComponent<DrawDeckStackUI>()||source is ContextualInfoTrigger&&source.GetComponent<Button>()))
+        bool slotDetail=trick||source.GetComponent<GearIconSlotUI>()!=null;
+        if(trick&&!_trickActionsPanel)
+        {
+            var actionCanvas=source.GetComponentInParent<Canvas>();
+            if(actionCanvas)_trickActionsPanel=actionCanvas.transform.Find("Selected Consumable Actions") as RectTransform;
+        }
+        bool trickActionsOpen=trick&&_trickActionsPanel&&_trickActionsPanel.gameObject.activeInHierarchy;
+        float width=slotDetail?Mathf.Min(220,parent.rect.width*.22f):Mathf.Min(390,parent.rect.width*.38f);
+        float height=Mathf.Min(parent.rect.height*.65f,Mathf.Clamp(body.GetPreferredValues(info.Body,width-44,0).y+140,220,slotDetail?(trick?(trickActionsOpen?360:260):360):440));
+        if(trick){PositionTrickTooltip(source,rect,parent,width,height);return;}
+        if(DealbreakUIRuntime.CombatActive&&(hand||enemy||source.GetComponent<DrawDeckStackUI>()||source is ContextualInfoTrigger&&source.GetComponent<Button>()&&!trick))
         {height=Mathf.Min(height,parent.rect.height*.38f);DealbreakUIStyle.Place(rect,.795f,.86f-height/parent.rect.height,.985f,.86f);return;}
         if(source.name.StartsWith("ShopOffer_")||source.name.StartsWith("DeckInspect_"))
         {
@@ -131,11 +206,14 @@ public sealed class ContextualTooltipUI : MonoBehaviour
         }
         rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.pivot=new(.5f,.5f);rect.sizeDelta=new(width,height);
         var anchor=(RectTransform)source.transform;
-        var corners=new Vector3[4];anchor.GetWorldCorners(corners);
+        var corners=_positionCorners;anchor.GetWorldCorners(corners);
         RectTransformUtility.ScreenPointToLocalPointInRectangle(parent,RectTransformUtility.WorldToScreenPoint(null,corners[3]),null,out var point);
         float x=point.x+width*.5f+16;
         if(x+width*.5f>parent.rect.xMax-16)x=point.x-anchor.rect.width-width*.5f-16;
         float y=point.y-height*.5f;
+        if(source.GetComponent<GearIconSlotUI>()&&GetHandBounds(parent,out float handLeft,out float handRight,out float handBottom,out float handTop)&&
+            x+width*.5f>handLeft&&x-width*.5f<handRight&&y+height*.5f>handBottom&&y-height*.5f<handTop)
+            y=handTop+height*.5f+12;
         rect.anchoredPosition=new(Mathf.Clamp(x,parent.rect.xMin+width*.5f+12,parent.rect.xMax-width*.5f-12),
             Mathf.Clamp(y,parent.rect.yMin+height*.5f+12,parent.rect.yMax-height*.5f-12));
         var canvas=panel.GetComponent<Canvas>();

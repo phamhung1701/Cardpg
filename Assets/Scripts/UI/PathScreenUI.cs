@@ -292,11 +292,8 @@ public class PathScreenUI : MonoBehaviour
             if (nodeButtonUI == null) nodeButtonUI = buttonObject.AddComponent<PathNodeButtonUI>();
             nodeButtonUI.SetNode(node, run);
             MapNodePresentation.Apply(buttonObject,node);
-            var inspect=buttonObject.GetComponent<ContextualInfoTrigger>()??buttonObject.AddComponent<ContextualInfoTrigger>();
-            inspect.describe=()=>!node.revealed&&!node.completed
-                ? new ContextualInfo("District route","Unrevealed route","Hidden route. Use Intel or reach the node to learn more.")
-                : new ContextualInfo("District route",node.kind==MapNodeType.Headliner&&run.CurrentHeadliner?run.CurrentHeadliner.enemyName:run.GetNodeLabel(node),run.GetNodeDesc(node)+
-                    (node.kind==MapNodeType.Headliner?$"\n\n{run.CurrentHeadlinerDescription}":string.Empty));
+            // Node labels are intentionally the only hover-free route identity presentation.
+            // Hidden nodes stay "?" and are never given a contextual description.
             DealbreakUIStyle.ApplyHierarchy(buttonObject.transform);
             PlaceNode(buttonObject.GetComponent<RectTransform>(), _nodePositions[node.id], nodeSize);
 
