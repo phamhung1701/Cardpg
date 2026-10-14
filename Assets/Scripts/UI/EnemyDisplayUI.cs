@@ -201,7 +201,7 @@ public class EnemyDisplayUI : MonoBehaviour, IPointerEnterHandler, IPointerExitH
         var enemy = DisplayedEnemy;
         bool hasEnemy = enemy != null;
 
-        if (nameText) nameText.text = hasEnemy ? enemy.DisplayName.ToUpperInvariant() : "AWAITING ENCOUNTER";
+        if (nameText) nameText.text = hasEnemy ? (combatPortraits?combatPortraits.DisplayName(enemy):enemy.DisplayName).ToUpperInvariant() : "AWAITING ENCOUNTER";
         if (hpText) hpText.text = hasEnemy ? $"HP  {enemy.currentHp}/{enemy.maxHp}" : "HP  —";
         if (atkText) atkText.text = hasEnemy ? $"ATTACK  {enemy.EffectiveAttack}" : "ATTACK  —";
         if (healthBar)

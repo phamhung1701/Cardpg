@@ -11,6 +11,7 @@ public class ShopUI : MonoBehaviour
     public Transform itemsContainer;
     public GameObject itemButtonPrefab;
     public Button continueButton;
+    [UnityEngine.Serialization.FormerlySerializedAs("goldText")]
     public TMP_Text creditsText;
     public TMP_Text selectedOfferText;
     public Button buyButton;
@@ -32,6 +33,7 @@ public class ShopUI : MonoBehaviour
     int _selectedSaleAuthoredPrice = -1;
     public string SelectedOfferId => _selectedOfferId;
     public bool SellingMode => _sellingMode;
+    public void RefreshPresentation() => RefreshItems();
 
     void OnEnable()
     {
@@ -167,7 +169,22 @@ public class ShopUI : MonoBehaviour
     void OnBuyOrConfirmSale()
     {
         if (_sellingMode) OnConfirmSale();
-        else OnBuy();
+        else
+        {
+            var offer=FindOffer(_selectedOfferId);
+            var dialog=Object.FindFirstObjectByType<ConfirmationDialogUI>();
+            var coordinator=Object.FindFirstObjectByType<GameplayMenuCoordinator>();
+            if(ContextualTooltipUI.Instance&&dialog&&coordinator&&offer!=null&&offer.kind!=ShopOfferKind.Enhancement&&
+                RunManager.Instance.CanPurchaseShopOffer(offer.StableId)&&!GameplayInputGate.IsBlocked)
+            {
+                string id=offer.StableId;
+                dialog.Open(coordinator,"Confirm purchase",selectedOfferText?selectedOfferText.text:offer.DisplayName,"BUY",()=>
+                {
+                    if(_selectedOfferId==id)OnBuy();
+                });
+            }
+            else OnBuy();
+        }
     }
 
     void ToggleSellingMode()
@@ -213,7 +230,7 @@ public class ShopUI : MonoBehaviour
             SetButtonLabel(buyButton, "Confirm Sale");
             buyButton.interactable = true;
         }
-        if (selectedOfferText) selectedOfferText.text = $"Sell {itemName} for {payout}g? Confirm to complete sale.";
+        if (selectedOfferText) selectedOfferText.text = $"Sell {itemName} for {payout} Credits? Confirm to complete sale.";
     }
 
     void OnConfirmSale()
@@ -429,17 +446,30 @@ public class ShopUI : MonoBehaviour
             {
                 string status = string.IsNullOrEmpty(unavailableReason) ? string.Empty : $"\n<color=#DFA0A0>{unavailableReason}</color>";
                 string priceLabel = offer.kind == ShopOfferKind.Investment
-                    ? (offer.investmentStake > 0 ? $"{offer.investmentStake}g stake" : "Set stake")
-                    : offer.kind == ShopOfferKind.Supply ? "3g / card" : $"{offer.price}g";
-                text.text = $"<b>{offer.Icon} {offer.DisplayName}</b>\n{offer.Description(cm)}\n<align=right><color=#F2CC75><b>{priceLabel}</b></color></align>{status}";
+                    ? (offer.investmentStake > 0 ? $"{offer.investmentStake} Credits at risk" : "Set stake")
+                    : offer.kind == ShopOfferKind.Supply ? "3 Credits / card" : $"{offer.price} Credits";
+                text.text = $"<b>{offer.DisplayName}</b>\n{priceLabel}{status}";
                 text.overflowMode = TextOverflowModes.Overflow;
                 var row = btn.GetComponent<LayoutElement>() ?? btn.AddComponent<LayoutElement>();
                 float textWidth = Mathf.Max(1f, ((RectTransform)container).rect.width - 32f);
-                row.minHeight = Mathf.Max(104f, text.GetPreferredValues(text.text, textWidth, 0f).y + 20f);
+                row.minHeight = Mathf.Max(84f, text.GetPreferredValues(text.text, textWidth, 0f).y + 20f);
                 row.preferredHeight = row.minHeight;
             }
 
             var button = btn.GetComponent<Button>();
+            var inspect=btn.GetComponent<ContextualInfoTrigger>()??btn.AddComponent<ContextualInfoTrigger>();
+            inspect.pinOnClick=true;
+            string inspectedId=offer.StableId;
+            inspect.describe=()=>
+            {
+                var live=FindOffer(inspectedId);if(live==null)return null;
+                string price=live.kind==ShopOfferKind.Investment?$"Stake {live.investmentStake} Credits":
+                    live.kind==ShopOfferKind.Supply?$"Total {live.supplyQuantity*3} Credits • {live.supplyQuantity} card(s)":$"Price {live.price} Credits";
+                return new ContextualInfo(live.IsService?"Service":"Goods",live.DisplayName,
+                    live.Description(CardManager.Instance)+$"\n\n{price}\n"+RunManager.Instance.GetShopOfferUnavailableReason(inspectedId));
+            };
+            DealbreakUIStyle.ApplyHierarchy(btn.transform);
+            (btn.GetComponent<ShopOfferUI>()??btn.AddComponent<ShopOfferUI>()).Bind(offer,unavailableReason);
             if (button)
             {
                 // Unavailable offers remain inspectable; Buy always revalidates in RunManager.
@@ -479,7 +509,7 @@ public class ShopUI : MonoBehaviour
         var go = Instantiate(itemButtonPrefab, itemsContainer);
         go.name = "RefreshGoods";
         var label = go.GetComponentInChildren<TMP_Text>();
-        if (label) label.text = $"Refresh Goods — {run.GoodsRefreshPrice}g (Services unchanged)";
+        if (label) label.text = $"Refresh Goods • {run.GoodsRefreshPrice} Credits";
         var layout = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
         layout.minHeight = layout.preferredHeight = 42;
         var button = go.GetComponent<Button>();
@@ -514,7 +544,7 @@ public class ShopUI : MonoBehaviour
         var label = row.GetComponentInChildren<TMP_Text>();
         if (label)
         {
-            label.text = $"{icon} {itemName} — Sell for {payout}g";
+            label.text = $"{icon} {itemName} — Sell for {payout} Credits";
             var layout = row.GetComponent<LayoutElement>() ?? row.AddComponent<LayoutElement>();
             layout.minHeight = 58f;
             layout.preferredHeight = 58f;
@@ -572,6 +602,7 @@ public class ShopUI : MonoBehaviour
             if (!button) continue;
             var colors = button.colors;
             bool selected = child.name == $"ShopOffer_{stableId.Replace(':', '_')}";
+            var style=button.GetComponent<EditorialButton>();if(style)style.selected=selected;
             // Persistent outline remains visible even while the button is hovered/focused.
             colors.normalColor = selected ? new Color(0.83f, 0.88f, 0.91f) : Color.white;
             button.colors = colors;
@@ -662,9 +693,9 @@ public class ShopUI : MonoBehaviour
             ? $"{selected.investmentStake} Credits at risk"
             : selected.kind == ShopOfferKind.Supply
                 ? $"{selected.supplyQuantity} cards — total {selected.supplyQuantity * 3} Credits (3 each; max {RunManager.Instance.GetSupplyMaximumQuantity()})"
-                : $"{selected.price}g";
-        selectedOfferText.text = $"SELECTED: {selected.Icon} {selected.DisplayName} — {displayedPrice}\n" +
-            $"{selected.Description(CardManager.Instance)}\n{status}";
+                : $"{selected.price} Credits";
+        selectedOfferText.text = $"{selected.DisplayName} — {displayedPrice}\n" +
+            (ContextualTooltipUI.Instance ? status : $"{selected.Description(CardManager.Instance)}\n{status}");
     }
 
     void OnBuy()

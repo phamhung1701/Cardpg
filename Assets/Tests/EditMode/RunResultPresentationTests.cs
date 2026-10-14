@@ -70,6 +70,8 @@ public sealed class RunResultPresentationTests
         resultsHost.resultBodyLabel = _body;
         _results = resultsHost;
         host.SetActive(true);
+        // EditMode does not dispatch the runtime lifecycle callback that resets static presentation state.
+        Invoke(_results, "HideAll");
 
         var presentationObject = MakeObject("Results Presentation", typeof(RectTransform));
         presentationObject.SetActive(false);
@@ -126,7 +128,7 @@ public sealed class RunResultPresentationTests
     }
 
     [Test]
-    public void LongSeedAndMaximumTimingSummaryRemainInScrollableRichText()
+    public void LongSeedAndBuildSummaryRemainScrollableWithoutVisibleTimers()
     {
         string longSeed = new string('S', 180) + "-END";
         _run.StartRunWithSeed(longSeed);
@@ -154,7 +156,8 @@ public sealed class RunResultPresentationTests
         Assert.That(_body.text, Does.Contain("RUN TOTALS"));
         Assert.That(_body.text, Does.Contain("Long Gear Name 7"));
         Assert.That(_body.text, Does.Contain("Final Headliner Reward"));
-        Assert.That(_body.text, Does.Contain("District 12"));
+        Assert.That(_body.text, Does.Not.Contain("Total Run Time"));
+        Assert.That(_run.Timing.CompletedSplits.Count, Is.EqualTo(12));
         Assert.That(_body.overflowMode, Is.EqualTo(TextOverflowModes.Overflow));
         var scroll = _body.GetComponentInParent<ScrollRect>();
         Assert.That(scroll, Is.Not.Null);

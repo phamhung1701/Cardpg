@@ -141,7 +141,7 @@ public class CardView : MonoBehaviour,
 
         bool hasData = data != null;
         bool hasEnhancement = hasData && data.Enhancement != null;
-        bool compactCombat = homeField != null && CombatDetailPanelUI.IsCombatActive && sprite != null;
+        bool compactCombat = homeField != null && (CombatDetailPanelUI.IsCombatActive || ContextualTooltipUI.Instance) && sprite != null;
         _compactPresentation = compactCombat;
         if (statsPlate) statsPlate.SetActive(hasData && !compactCombat);
         if (nameLabel) nameLabel.enabled = !compactCombat;
@@ -239,7 +239,7 @@ public class CardView : MonoBehaviour,
         {
             if (_isHandTargeting)
                 face.color = _isHandTargetEligible
-                    ? new Color(0.88f, 1f, 0.9f, 1f)
+                    ? (ContextualTooltipUI.Instance ? new Color(0.94f, 0.89f, 0.77f, 1f) : new Color(0.88f, 1f, 0.9f, 1f))
                     : new Color(0.48f, 0.48f, 0.48f, 0.58f);
             else
                 face.color = state == State.Idle ? new Color(0.97f, 0.97f, 0.97f, 1f) : Color.white;
@@ -248,7 +248,7 @@ public class CardView : MonoBehaviour,
         {
             bool selected = state == State.Click || state == State.Drag;
             selectionOutline.enabled = selected || IsHandTargetEligible || _isFocused;
-            selectionOutline.effectColor = CombatDetailPanelUI.IsCombatActive
+            selectionOutline.effectColor = CombatDetailPanelUI.IsCombatActive || ContextualTooltipUI.Instance
                 ? selected && state != State.Drag ? new Color(0.87f, 0.67f, 0.28f) : new Color(0.94f, 0.89f, 0.77f)
                 : state == State.Drag ? _dragColor : selected ? _selectedColor : new Color(0.28f, 1f, 0.52f);
         }
@@ -276,7 +276,7 @@ public class CardView : MonoBehaviour,
     // One owner follows the base root target and layers artwork state on top.
     public void TickPresentation(float deltaTime)
     {
-        if (_compactPresentation != (homeField != null && CombatDetailPanelUI.IsCombatActive && ResolveCardSprite(data) != null))
+        if (_compactPresentation != (homeField != null && (CombatDetailPanelUI.IsCombatActive || ContextualTooltipUI.Instance) && ResolveCardSprite(data) != null))
             RefreshContent();
         if (deltaTime <= 0f) return;
         if (_hasLayoutTarget && !_isDragging && homeField != null && transform.parent == homeField.cardsHolder)

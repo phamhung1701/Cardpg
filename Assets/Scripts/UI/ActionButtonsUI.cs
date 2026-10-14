@@ -678,6 +678,7 @@ public class ActionButtonsUI : MonoBehaviour
         _consumableUseButton.onClick.AddListener(UseSelectedConsumable);
         _consumableSellButton.onClick.AddListener(SellOrCancelSelectedConsumable);
         _consumableDiscardButton.onClick.AddListener(DiscardSelectedConsumable);
+        DealbreakUIStyle.Frame(_consumableContextPanel.transform);
         _consumableContextPanel.SetActive(false);
     }
 
@@ -747,7 +748,7 @@ public class ActionButtonsUI : MonoBehaviour
         {
             int stackCount = cards.GetConsumableStackCountAtSlot(_selectedConsumableSlot);
             string details = $"<size=115%><b>{definition.displayName}</b></size>" +
-                (stackCount > 1 ? $" — {stackCount} copies" : string.Empty) + $"\n{definition.description}";
+                (stackCount > 1 ? $" — {stackCount} copies" : string.Empty) + (ContextualTooltipUI.Instance?string.Empty:$"\n{definition.description}");
             if (definition.effectType == ConsumableEffectType.ApplyEnhancement)
                 details += selectedCards.Count == 1
                     ? validEnhancementTarget
@@ -766,7 +767,7 @@ public class ActionButtonsUI : MonoBehaviour
         if (_consumableUseButton)
         {
             bool canUse = definition.effectType == ConsumableEffectType.ApplyEnhancement
-                ? validEnhancementTarget
+                ? validEnhancementTarget || selectedCards.Count!=1&&ContextualTooltipUI.Instance&&_enhancementTargetUI&&_enhancementTargetUI.CanOpenConsumableTarget&&cards.CanUseConsumableAtSlot(_selectedConsumableSlot,CombatManager.Instance)
                 : cards.CanUseConsumableAtSlot(_selectedConsumableSlot, CombatManager.Instance);
             _consumableUseButton.interactable = !_discardConfirmationArmed && canUse && !GameplayInputGate.IsBlocked;
         }
@@ -846,7 +847,13 @@ public class ActionButtonsUI : MonoBehaviour
         var definition = _selectedConsumable.Definition;
         if (definition.effectType == ConsumableEffectType.ApplyEnhancement)
         {
-            if (cards.SelectedCards.Count != 1) { RefreshAll(); return; }
+            if (cards.SelectedCards.Count != 1)
+            {
+                if(ContextualTooltipUI.Instance&&_enhancementTargetUI&&_enhancementTargetUI.CanOpenConsumableTarget&&cards.CanUseConsumableAtSlot(_selectedConsumableSlot,combat))
+                {int slot=_selectedConsumableSlot;ClearSelectedConsumable();_enhancementTargetUI.OpenConsumableTarget(slot);}
+                else RefreshAll();
+                return;
+            }
             var target = cards.SelectedCards[0]?.data;
             if (target == null || !ReferenceEquals(cards.FindOwnedCard(target.Id), target) ||
                 !cards.CanTargetConsumableAtSlot(_selectedConsumableSlot, target.Id))
@@ -906,7 +913,18 @@ public class ActionButtonsUI : MonoBehaviour
             RefreshAll();
             return;
         }
-        SellSelectedConsumable();
+        var dialog=Object.FindFirstObjectByType<ConfirmationDialogUI>();
+        var coordinator=Object.FindFirstObjectByType<GameplayMenuCoordinator>();
+        if(ContextualTooltipUI.Instance&&dialog&&coordinator&&RunManager.Instance?.CanSellItems==true&&_selectedConsumable!=null&&!GameplayInputGate.IsBlocked)
+        {
+            int slot=_selectedConsumableSlot;var item=_selectedConsumable;int price=item.Definition.price;
+            dialog.Open(coordinator,"Sell Trick?",$"Sell {item.Definition.displayName} for {price/2} Credits? This removes this copy and its remaining charges.","SELL",()=>
+            {
+                if(CardManager.Instance.GetConsumableInstanceAtSlot(slot)==item&&item.Definition.price==price&&
+                    RunManager.Instance.SellConsumable(slot,item,price)){ClearSelectedConsumable();RefreshAll();}
+            });
+        }
+        else SellSelectedConsumable();
     }
 
     void DiscardSelectedConsumable()
@@ -976,6 +994,7 @@ public class ActionButtonsUI : MonoBehaviour
             var consumable = cards.GetConsumableAtSlot(i);
             bool isSelected = _selectedConsumableSlot == i && ReferenceEquals(_selectedConsumable, cards.GetConsumableInstanceAtSlot(i)) &&
                 !cards.IsEnemyTargeting && !cards.IsHandEnhancementTargeting;
+            var style=button.GetComponent<EditorialButton>();if(style)style.selected=isSelected;
             if (button.targetGraphic) button.targetGraphic.color = consumable == null
                 ? new Color(0.14f, 0.22f, 0.23f, 0.3f)
                 : isSelected ? new Color(0.32f, 0.58f, 0.78f, 1f) : new Color(0.25f, 0.34f, 0.30f, 0.85f);
@@ -985,10 +1004,10 @@ public class ActionButtonsUI : MonoBehaviour
                 var activeItem = cards.GetConsumableInstanceAtSlot(i);
                 label.text = consumable == null
                     ? string.Empty
-                    : $"{consumable.icon} {consumable.displayName}" +
+                    : (DealbreakUIStyle.Theme?$"{consumable.icon}":$"{consumable.icon} {consumable.displayName}") +
                         (stackCount > 1 ? $" ×{stackCount}" : string.Empty) +
                         (consumable.uses > 1 && activeItem != null
-                            ? $" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
+                            ? DealbreakUIStyle.Theme?$" {activeItem.RemainingCharges}/{consumable.uses}":$" ({activeItem.RemainingCharges}/{consumable.uses} first)" : string.Empty);
                 label.gameObject.SetActive(consumable != null);
             }
             // Keep slots raycastable for drag/reorder even when use is currently unavailable;

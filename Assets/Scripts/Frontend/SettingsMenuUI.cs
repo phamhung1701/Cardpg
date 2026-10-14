@@ -103,6 +103,6 @@ public sealed class SettingsMenuUI : MonoBehaviour
         }
 
         if (vSyncToggle) vSyncToggle.SetIsOnWithoutNotify(current.VSyncCount > 0);
-        if (statusLabel) statusLabel.text = "Only functional display settings are exposed in this prototype.";
+        if (statusLabel) statusLabel.text = "Choose your display settings, then Apply.";
     }
 }

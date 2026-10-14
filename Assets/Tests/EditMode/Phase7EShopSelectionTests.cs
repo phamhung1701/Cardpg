@@ -95,7 +95,7 @@ public sealed class Phase7EShopSelectionTests
         Click(first);
         Assert.That(_ui.SelectedOfferId, Is.EqualTo(first.StableId));
         Assert.That(_ui.selectedOfferText.text, Does.Contain(first.DisplayName));
-        Assert.That(_ui.selectedOfferText.text, Does.Contain($"{first.price}g"));
+        Assert.That(_ui.selectedOfferText.text, Does.Contain($"{first.price} Credits"));
         Assert.That(ButtonFor(first).GetComponentInChildren<TMP_Text>().text, Does.Not.StartWith("SELECTED"));
         Assert.That(ButtonFor(first).GetComponent<Outline>().enabled, Is.True);
         Click(second);
@@ -279,7 +279,7 @@ public sealed class Phase7EShopSelectionTests
         Click(offer);
         Assert.That(_ui.SelectedOfferId, Is.EqualTo(stableId));
         Assert.That(_ui.selectedOfferText.text, Does.Contain("Gear Capacity Full"));
-        Assert.That(ButtonFor(offer).GetComponentInChildren<TMP_Text>().text, Does.Contain("Gear Capacity Full"));
+        Assert.That(ButtonFor(offer).GetComponent<ContextualInfoTrigger>().Info.Value.Body, Does.Contain("Gear Capacity Full"));
         _ui.buyButton.onClick.Invoke();
         Assert.That(_ui.selectedOfferText.text, Does.Contain("Gear Capacity Full"));
         Assert.That(_cards.credits, Is.EqualTo(credits));
@@ -305,7 +305,7 @@ public sealed class Phase7EShopSelectionTests
         row.GetComponent<Button>().onClick.Invoke();
         Assert.That(_cards.credits, Is.EqualTo(creditsBefore), "Selection must not commit a sale.");
         Assert.That(_cards.GetGearInstanceById(instanceId), Is.Not.Null);
-        Assert.That(_ui.selectedOfferText.text, Does.Contain($"{gear.price / 2}g"));
+        Assert.That(_ui.selectedOfferText.text, Does.Contain($"{gear.price / 2} Credits"));
 
         _ui.buyButton.onClick.Invoke();
         Assert.That(_cards.credits, Is.EqualTo(creditsBefore + gear.price / 2));

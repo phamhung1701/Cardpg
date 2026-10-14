@@ -8,7 +8,7 @@ using UnityEngine.UI;
 public sealed class CombatDetailPanelUI : MonoBehaviour
 {
     public static CombatDetailPanelUI Instance { get; private set; }
-    public static bool IsCombatActive => Instance != null && Instance.InCombat;
+    public static bool IsCombatActive => Instance != null && Instance.InCombat || ContextualTooltipUI.Instance && DealbreakUIRuntime.CombatActive;
     public GameObject panel;
     public TMP_Text title, body;
     public ScrollRect scroll;
@@ -32,7 +32,7 @@ public sealed class CombatDetailPanelUI : MonoBehaviour
     void SetSecondaryVisible(bool visible)
     {
         if (runStatus == null) return;
-        if (runStatus.timingLabel) runStatus.timingLabel.enabled = visible;
+        if (runStatus.timingLabel) runStatus.timingLabel.gameObject.SetActive(false);
         if (runStatus.pileSummaryLabel) runStatus.pileSummaryLabel.enabled = visible;
         if (actions && actions.combatLogLabel) actions.combatLogLabel.gameObject.SetActive(visible);
         if (visible && actions)

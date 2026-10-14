@@ -112,7 +112,7 @@ public sealed class GearIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPoint
             _authoredIcon.gameObject.SetActive(false);
         if (iconLabel)
         {
-            iconLabel.color = _mergeSelected ? new Color(0.11f, 0.13f, 0.2f) : new Color(0.96f, 0.92f, 0.78f);
+            iconLabel.color = _mergeSelected||_detailSelected ? new Color(0.11f, 0.13f, 0.2f) : new Color(0.96f, 0.92f, 0.78f);
             iconLabel.text = gear != null && !string.IsNullOrWhiteSpace(gear.icon)
                 ? gear.icon : "?";
             iconLabel.gameObject.SetActive(!hasAuthoredIcon);
@@ -137,6 +137,13 @@ public sealed class GearIconSlotUI : MonoBehaviour, IPointerEnterHandler, IPoint
     {
         var image = GetComponent<Image>();
         if (image == null) return;
+        if(DealbreakUIStyle.Theme)
+        {
+            var frame=DealbreakUIStyle.Frame(transform,false,true);
+            frame.fill=_detailSelected||_mergeSelected?DealbreakUIStyle.Theme.ochre:_gear?DealbreakUIStyle.Theme.slate:DealbreakUIStyle.Theme.charcoal;
+            frame.rim=_detailSelected||_mergeSelected?DealbreakUIStyle.Theme.paper:DealbreakUIStyle.Theme.slate;
+            frame.Refresh();return;
+        }
         if (CombatDetailPanelUI.IsCombatActive)
         {
             image.sprite = null;

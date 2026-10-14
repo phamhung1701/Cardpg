@@ -77,7 +77,10 @@ public sealed class PauseMenuUI : MonoBehaviour
             return;
         }
         if (coordinator != null && !coordinator.HasBlockingMenu)
+        {
+            if (ContextualTooltipUI.Instance && ContextualTooltipUI.Instance.DismissPinned()) return;
             OpenPause();
+        }
     }
 
     public void OpenPause()

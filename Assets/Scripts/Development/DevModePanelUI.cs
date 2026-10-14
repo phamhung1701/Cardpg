@@ -39,6 +39,7 @@ public sealed class DevModePanelUI : MonoBehaviour
         _canvas = canvas;
         var parent = menu.newRunButton.transform.parent;
         _openButton = MakeButton(parent, "Dev Mode", new Vector2(0, -290), OpenSetup);
+        if(DealbreakUIStyle.Theme){var rect=(RectTransform)_openButton.transform;rect.anchorMin=rect.anchorMax=new Vector2(.46f,.06f);rect.anchoredPosition=Vector2.zero;rect.sizeDelta=new Vector2(190,42);}
         _setupPanel = MakePanel("Dev Mode Setup", canvas.transform, new Vector2(620, 450));
         AddText(_setupPanel.transform, "DEV MODE", new Vector2(0, 180), 34, TextAlignmentOptions.Center);
         _seed = MakeInput(_setupPanel.transform, "Optional seed (blank = random)", new Vector2(0, 115));
@@ -113,7 +114,7 @@ public sealed class DevModePanelUI : MonoBehaviour
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image)); go.transform.SetParent(parent, false);
         var rt = (RectTransform)go.transform; rt.anchorMin = rt.anchorMax = new Vector2(.5f, .5f); rt.anchoredPosition = Vector2.zero; rt.sizeDelta = size;
-        go.GetComponent<Image>().color = PanelColor; return go;
+        go.GetComponent<Image>().color = PanelColor;DealbreakUIStyle.Frame(go.transform);return go;
     }
     static Button MakeButton(Transform parent, string label, Vector2 position, UnityEngine.Events.UnityAction action, Vector2? size = null)
     {

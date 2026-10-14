@@ -75,7 +75,9 @@ public sealed class ConsumableRewardUI : MonoBehaviour
             instance.name = $"RewardChoice_{i}_{item.id}";
             var label = instance.GetComponentInChildren<TMP_Text>(true);
             if (label) label.text = (_selectedChoice == i ? "SELECTED  " : string.Empty) +
-                $"{item.icon} {item.displayName}\n{item.description}";
+                $"{item.icon} {item.displayName}"+(ContextualTooltipUI.Instance?string.Empty:$"\n{item.description}");
+            var detail=instance.GetComponent<ContextualInfoTrigger>()??instance.AddComponent<ContextualInfoTrigger>();
+            detail.category="Trick reward";detail.title=item.displayName;detail.description=item.description;detail.allowWhileBlocked=true;
             var button = instance.GetComponent<Button>();
             if (button) button.onClick.AddListener(() => SelectChoice(choiceIndex));
         }
@@ -114,11 +116,11 @@ public sealed class ConsumableRewardUI : MonoBehaviour
         if (detailsLabel)
         {
             if (!selected)
-                detailsLabel.text = "Inspect the choices, then select one to claim or replace a backpack slot. Decline grants nothing.";
+                detailsLabel.text = "Inspect the choices, then select one to claim or replace a Trick slot. Decline grants nothing.";
             else if (cards != null && cards.CanAddConsumable(item))
-                detailsLabel.text = $"{item.displayName}\n{item.description}\nA compatible backpack slot is available.";
+                detailsLabel.text = $"{item.displayName}\n"+(ContextualTooltipUI.Instance?string.Empty:$"{item.description}\n")+"A compatible Trick slot is available.";
             else
-                detailsLabel.text = $"{item.displayName}\n{item.description}\nBackpack full: explicitly replace a shown slot or decline.";
+                detailsLabel.text = $"{item.displayName}\n"+(ContextualTooltipUI.Instance?string.Empty:$"{item.description}\n")+"Trick slots full: explicitly replace a shown slot or decline.";
         }
         if (claimButton) claimButton.interactable = selected && cards != null && cards.CanAddConsumable(item);
         if (declineButton) declineButton.interactable = true;

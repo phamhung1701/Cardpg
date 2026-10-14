@@ -26,11 +26,13 @@ public sealed class RunSaveMenuUI : MonoBehaviour
         {
             if (!buttons[i]) continue;
             var rect = buttons[i].GetComponent<RectTransform>();
+            if(DealbreakUIStyle.Theme) rect.anchorMin=rect.anchorMax=new Vector2(.22f,.32f);
             rect.anchoredPosition = new Vector2(0, 110 - i * 65); rect.sizeDelta = new Vector2(430, 54);
         }
         var go = new GameObject("RunSaveStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
         go.transform.SetParent(menu.newRunButton.transform.parent, false);
         var sr = (RectTransform)go.transform; sr.anchorMin = sr.anchorMax = new Vector2(.5f, .5f);
+        if(DealbreakUIStyle.Theme)sr.anchorMin=sr.anchorMax=new Vector2(.22f,.32f);
         sr.anchoredPosition = new Vector2(0, -225); sr.sizeDelta = new Vector2(570, 70);
         _status = go.GetComponent<TMP_Text>(); _status.fontSize = 18; _status.alignment = TextAlignmentOptions.Center; _status.raycastTarget = false;
     }

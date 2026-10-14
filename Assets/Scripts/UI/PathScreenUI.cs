@@ -153,10 +153,7 @@ public class PathScreenUI : MonoBehaviour
     void HandleCycleStarted(string header)
     {
         var run = RunManager.Instance;
-        string headlinerDescription = run != null ? run.CurrentHeadlinerDescription : string.Empty;
-        if (headerText) headerText.text = string.IsNullOrEmpty(headlinerDescription)
-            ? header
-            : $"{header}\n<size=80%>{headlinerDescription}</size>";
+        if (headerText) headerText.text = header;
         BuildMap();
     }
 
@@ -228,7 +225,7 @@ public class PathScreenUI : MonoBehaviour
         var run = RunManager.Instance;
         if (run == null || run.currentPath == null || run.currentPath.Count == 0) return;
 
-        Vector2 nodeSize = new Vector2(Mathf.Clamp(bounds.rect.width / 12f, 62f, 88f), 62f);
+        Vector2 nodeSize = new Vector2(Mathf.Clamp(bounds.rect.width / 12f, 62f, DealbreakUIStyle.Theme?108f:88f), 62f);
         float halfH = nodeSize.y * 0.5f;
         float usableWidth = Mathf.Max(0f, bounds.rect.width - nodeSize.x - 2f * horizontalInset);
         var displayColumns = run.currentPath.Select(node => node.col).Distinct().OrderBy(value => value).ToList();
@@ -286,6 +283,12 @@ public class PathScreenUI : MonoBehaviour
             var nodeButtonUI = buttonObject.GetComponent<PathNodeButtonUI>();
             if (nodeButtonUI == null) nodeButtonUI = buttonObject.AddComponent<PathNodeButtonUI>();
             nodeButtonUI.SetNode(node, run);
+            var inspect=buttonObject.GetComponent<ContextualInfoTrigger>()??buttonObject.AddComponent<ContextualInfoTrigger>();
+            inspect.describe=()=>!node.revealed&&!node.completed
+                ? new ContextualInfo("District route","Unrevealed route","Hidden route. Use Intel or reach the node to learn more.")
+                : new ContextualInfo("District route",node.kind==MapNodeType.Headliner&&run.CurrentHeadliner?run.CurrentHeadliner.enemyName:run.GetNodeLabel(node),run.GetNodeDesc(node)+
+                    (node.kind==MapNodeType.Headliner?$"\n\n{run.CurrentHeadlinerDescription}":string.Empty));
+            DealbreakUIStyle.ApplyHierarchy(buttonObject.transform);
             PlaceNode(buttonObject.GetComponent<RectTransform>(), _nodePositions[node.id], nodeSize);
 
             var button = buttonObject.GetComponent<Button>();
@@ -340,8 +343,8 @@ public class PathScreenUI : MonoBehaviour
 
     void CreateConnection(RouteEdge edge, Vector2 nodeSize)
     {
-        CreateLineSegment(edge.from, edge.to, 2f,
-            new Color(0.43f, 0.57f, 0.59f, 0.42f), "RouteConnection");
+        CreateLineSegment(edge.from, edge.to, 3.5f,
+            new Color(0.71f, 0.68f, 0.57f, 0.65f), "RouteConnection");
     }
 
     void DrawCrossingBridges(IReadOnlyList<RouteEdge> edges, RectTransform bounds, Vector2 nodeSize)

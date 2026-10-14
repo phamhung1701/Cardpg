@@ -89,7 +89,9 @@ public class RunEventUI : MonoBehaviour
                     description = description.Replace("owned cards", "cards in your hand")
                         .Replace("owned card", "card in your hand")
                         .Replace("then a card.", "then click a card in your hand.");
-                label.text = $"<b>{choice.label}</b>\n{description}{status}";
+                label.text = ContextualTooltipUI.Instance?$"<b>{choice.label}</b>{status}":$"<b>{choice.label}</b>\n{description}{status}";
+                var detail=buttonObject.GetComponent<ContextualInfoTrigger>()??buttonObject.AddComponent<ContextualInfoTrigger>();
+                detail.category="Incident choice";detail.title=choice.label;detail.description=description+"\n"+unavailableReason;
             }
 
             var button = buttonObject.GetComponent<Button>();
@@ -101,6 +103,7 @@ public class RunEventUI : MonoBehaviour
         }
 
         BoardPanelTransition.Show(panel);
+        DealbreakUIStyle.ApplyHierarchy(panel.transform);
         FinalizeChoiceList();
         panel.transform.SetAsLastSibling();
     }

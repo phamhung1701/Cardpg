@@ -434,7 +434,7 @@ public sealed class GearRailUI : MonoBehaviour
     void ShowTooltip(GearData gear)
     {
         _hovered = gear;
-        if (CombatDetailPanelUI.IsCombatActive) return;
+        if (ContextualTooltipUI.Instance || CombatDetailPanelUI.IsCombatActive) return;
         if (_selectedInstanceId != 0 && detailPanel && detailPanel.activeSelf) HideTooltip();
         else
         {
@@ -451,7 +451,7 @@ public sealed class GearRailUI : MonoBehaviour
     void HideTooltip()
     {
         _hovered = null;
-        if (CombatDetailPanelUI.IsCombatActive) return;
+        if (ContextualTooltipUI.Instance || CombatDetailPanelUI.IsCombatActive) return;
         if (tooltipPanel) tooltipPanel.SetActive(false);
     }
 
@@ -469,7 +469,7 @@ public sealed class GearRailUI : MonoBehaviour
         FindFirstObjectByType<ActionButtonsUI>()?.ClearSelectedConsumable();
         _selectedInstanceId = instanceId;
         HideTooltip();
-        if (CombatDetailPanelUI.IsCombatActive) { Refresh(); return; }
+        if (ContextualTooltipUI.Instance || CombatDetailPanelUI.IsCombatActive) { Refresh(); return; }
         if (detailText) detailText.text = $"<size=22><b>{gear.displayName}</b></size>\n{gear.description}";
         PositionDetailBesideSlot(instanceId);
         if (detailPanel)

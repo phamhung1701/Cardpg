@@ -27,12 +27,12 @@ public sealed class PathNodeButtonUI : MonoBehaviour
         label.text = node.kind switch
         {
             MapNodeType.Combat => "COMBAT",
-            MapNodeType.Elite => "ELITE",
-            MapNodeType.Shop => "SHOP",
-            MapNodeType.Event => "?",
+            MapNodeType.Elite => "ENFORCER",
+            MapNodeType.Shop => "BLACK\nMARKET",
+            MapNodeType.Event => "INCIDENT",
             MapNodeType.Upgrade => "UPGRADE",
             MapNodeType.Risk => "?",
-            MapNodeType.Headliner => run.GetNodeLabel(node).ToUpperInvariant(),
+            MapNodeType.Headliner => "HEADLINER",
             _ => "?"
         };
     }

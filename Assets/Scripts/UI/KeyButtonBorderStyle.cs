@@ -10,6 +10,11 @@ public static class KeyButtonBorderStyle
     public static void Apply(Button button)
     {
         if (button == null || button.targetGraphic == null) return;
+        if (button.GetComponent<EditorialButton>() != null)
+        {
+            foreach (var oldOutline in button.GetComponents<Outline>()) oldOutline.enabled = false;
+            return;
+        }
         var outline = button.targetGraphic.GetComponent<Outline>();
         if (outline == null) outline = button.targetGraphic.gameObject.AddComponent<Outline>();
         outline.effectColor = BorderColor;
